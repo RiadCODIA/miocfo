@@ -12,6 +12,8 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
+  Landmark,
+  FileText,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import finexaLogo from "@/assets/finexa-logo.png";
@@ -19,6 +21,8 @@ import finexaLogo from "@/assets/finexa-logo.png";
 const sidebarSections = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/" },
   { id: "transazioni", label: "Transazioni", icon: ArrowLeftRight, path: "/transazioni" },
+  { id: "conti_bancari", label: "Conti Bancari", icon: Landmark, path: "/conti-bancari" },
+  { id: "fatture", label: "Fatture", icon: FileText, path: "/fatture" },
   { id: "flussi_cassa", label: "Flussi di Cassa", icon: TrendingUp, path: "/flussi-cassa" },
   { id: "marginalita", label: "Marginalità", icon: PieChart, path: "/marginalita" },
   { id: "budget_previsioni", label: "Budget & Previsioni", icon: CalendarRange, path: "/budget" },

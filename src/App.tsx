@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { MainLayout } from "@/components/layout/MainLayout";
 import Index from "./pages/Index";
 import Transazioni from "./pages/Transazioni";
+import ContiBancari from "./pages/ContiBancari";
+import Fatture from "./pages/Fatture";
 import FlussiCassa from "./pages/FlussiCassa";
 import Marginalita from "./pages/Marginalita";
 import BudgetPrevisioni from "./pages/BudgetPrevisioni";
@@ -27,6 +29,8 @@ const App = () => (
           <Routes>
             <Route path="/" element={<Index />} />
             <Route path="/transazioni" element={<Transazioni />} />
+            <Route path="/conti-bancari" element={<ContiBancari />} />
+            <Route path="/fatture" element={<Fatture />} />
             <Route path="/flussi-cassa" element={<FlussiCassa />} />
             <Route path="/marginalita" element={<Marginalita />} />
             <Route path="/budget" element={<BudgetPrevisioni />} />
