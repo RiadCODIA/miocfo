@@ -15,6 +15,7 @@ import Scadenzario from "./pages/Scadenzario";
 import KPIReport from "./pages/KPIReport";
 import AlertNotifiche from "./pages/AlertNotifiche";
 import Impostazioni from "./pages/Impostazioni";
+import Configurazione from "./pages/Configurazione";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -38,6 +39,7 @@ const App = () => (
             <Route path="/kpi-report" element={<KPIReport />} />
             <Route path="/alert" element={<AlertNotifiche />} />
             <Route path="/impostazioni" element={<Impostazioni />} />
+            <Route path="/configurazione" element={<Configurazione />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </MainLayout>
