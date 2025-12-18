@@ -55,7 +55,7 @@ export function Sidebar() {
               alt="Finexa" 
               className={cn(
                 "object-contain transition-all duration-300",
-                collapsed ? "h-8 w-8" : "h-8 w-auto max-w-[140px]"
+                collapsed ? "h-10 w-10" : "h-8 w-auto max-w-[140px]"
               )}
             />
           </div>
