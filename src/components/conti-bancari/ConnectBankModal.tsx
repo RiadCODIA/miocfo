@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -6,73 +6,95 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Search, Building2, ExternalLink, CheckCircle2, Loader2 } from "lucide-react";
-import { cn } from "@/lib/utils";
-
-interface Bank {
-  id: string;
-  name: string;
-  country: string;
-}
-
-const mockBanks: Bank[] = [
-  { id: "unicredit", name: "UniCredit", country: "Italia" },
-  { id: "intesa", name: "Intesa Sanpaolo", country: "Italia" },
-  { id: "bnl", name: "BNL - BNP Paribas", country: "Italia" },
-  { id: "mps", name: "Monte dei Paschi di Siena", country: "Italia" },
-  { id: "credem", name: "Credem", country: "Italia" },
-  { id: "bper", name: "BPER Banca", country: "Italia" },
-  { id: "fineco", name: "Fineco Bank", country: "Italia" },
-  { id: "ing", name: "ING", country: "Italia" },
-];
+import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { usePlaidLink } from "react-plaid-link";
+import { usePlaid, BankAccount } from "@/hooks/usePlaid";
 
 interface ConnectBankModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onConnect: (bankId: string, bankName: string) => void;
+  onConnect: (accounts: BankAccount[]) => void;
 }
 
 export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankModalProps) {
-  const [step, setStep] = useState<"search" | "authorize" | "success">("search");
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedBank, setSelectedBank] = useState<Bank | null>(null);
-  const [isConnecting, setIsConnecting] = useState(false);
+  const [step, setStep] = useState<"init" | "ready" | "connecting" | "success" | "error">("init");
+  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [connectedAccounts, setConnectedAccounts] = useState<BankAccount[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string>("");
+  
+  const { createLinkToken, exchangePublicToken, isLoading } = usePlaid();
 
-  const filteredBanks = mockBanks.filter((bank) =>
-    bank.name.toLowerCase().includes(searchQuery.toLowerCase())
+  // Get link token when modal opens
+  useEffect(() => {
+    if (open && !linkToken) {
+      setStep("init");
+      createLinkToken()
+        .then((token) => {
+          setLinkToken(token);
+          setStep("ready");
+        })
+        .catch((error) => {
+          console.error("Failed to get link token:", error);
+          setErrorMessage(error.message || "Impossibile inizializzare Plaid");
+          setStep("error");
+        });
+    }
+  }, [open, linkToken, createLinkToken]);
+
+  const onSuccess = useCallback(
+    async (publicToken: string) => {
+      setStep("connecting");
+      try {
+        const accounts = await exchangePublicToken(publicToken);
+        setConnectedAccounts(accounts);
+        setStep("success");
+      } catch (error) {
+        console.error("Failed to exchange token:", error);
+        setErrorMessage(error instanceof Error ? error.message : "Errore nel collegamento");
+        setStep("error");
+      }
+    },
+    [exchangePublicToken]
   );
 
-  const handleSelectBank = (bank: Bank) => {
-    setSelectedBank(bank);
-    setStep("authorize");
-  };
+  const onExit = useCallback(() => {
+    // User exited Plaid Link without completing
+    console.log("User exited Plaid Link");
+  }, []);
 
-  const handleAuthorize = async () => {
-    setIsConnecting(true);
-    // Simulate GoCardless authorization flow
-    await new Promise((resolve) => setTimeout(resolve, 2000));
-    setIsConnecting(false);
-    setStep("success");
-  };
+  const { open: openPlaidLink, ready } = usePlaidLink({
+    token: linkToken,
+    onSuccess,
+    onExit,
+  });
 
   const handleComplete = () => {
-    if (selectedBank) {
-      onConnect(selectedBank.id, selectedBank.name);
-    }
-    // Reset state
-    setStep("search");
-    setSearchQuery("");
-    setSelectedBank(null);
-    onOpenChange(false);
+    onConnect(connectedAccounts);
+    handleClose();
   };
 
   const handleClose = () => {
-    setStep("search");
-    setSearchQuery("");
-    setSelectedBank(null);
+    setStep("init");
+    setLinkToken(null);
+    setConnectedAccounts([]);
+    setErrorMessage("");
     onOpenChange(false);
+  };
+
+  const handleRetry = () => {
+    setLinkToken(null);
+    setErrorMessage("");
+    setStep("init");
+    createLinkToken()
+      .then((token) => {
+        setLinkToken(token);
+        setStep("ready");
+      })
+      .catch((error) => {
+        setErrorMessage(error.message || "Impossibile inizializzare Plaid");
+        setStep("error");
+      });
   };
 
   return (
@@ -80,54 +102,31 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
-            {step === "search" && "Collega un conto bancario"}
-            {step === "authorize" && "Autorizza l'accesso"}
+            {step === "init" && "Preparazione..."}
+            {step === "ready" && "Collega un conto bancario"}
+            {step === "connecting" && "Collegamento in corso..."}
             {step === "success" && "Connessione riuscita!"}
+            {step === "error" && "Errore di connessione"}
           </DialogTitle>
           <DialogDescription>
-            {step === "search" && "Cerca la tua banca per collegare il conto tramite GoCardless"}
-            {step === "authorize" && `Autorizza Finexa ad accedere ai dati di ${selectedBank?.name}`}
-            {step === "success" && "Il tuo conto è stato collegato con successo"}
+            {step === "init" && "Stiamo preparando la connessione sicura con Plaid"}
+            {step === "ready" && "Clicca per aprire Plaid Link e collegare il tuo conto"}
+            {step === "connecting" && "Stiamo salvando i tuoi dati..."}
+            {step === "success" && `${connectedAccounts.length} conto/i collegati con successo`}
+            {step === "error" && "Si è verificato un errore durante il collegamento"}
           </DialogDescription>
         </DialogHeader>
 
-        {step === "search" && (
-          <div className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Cerca la tua banca..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
-            </div>
-            <div className="max-h-[300px] overflow-y-auto space-y-2">
-              {filteredBanks.map((bank) => (
-                <button
-                  key={bank.id}
-                  onClick={() => handleSelectBank(bank)}
-                  className="w-full flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-accent/50 transition-colors text-left"
-                >
-                  <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                    <Building2 className="h-5 w-5 text-primary" />
-                  </div>
-                  <div>
-                    <p className="font-medium text-foreground">{bank.name}</p>
-                    <p className="text-sm text-muted-foreground">{bank.country}</p>
-                  </div>
-                </button>
-              ))}
-              {filteredBanks.length === 0 && (
-                <p className="text-center text-muted-foreground py-8">
-                  Nessuna banca trovata
-                </p>
-              )}
-            </div>
+        {/* Loading State */}
+        {step === "init" && (
+          <div className="flex flex-col items-center justify-center py-12 space-y-4">
+            <Loader2 className="h-12 w-12 text-primary animate-spin" />
+            <p className="text-muted-foreground">Inizializzazione Plaid...</p>
           </div>
         )}
 
-        {step === "authorize" && (
+        {/* Ready State */}
+        {step === "ready" && (
           <div className="space-y-6 py-4">
             <div className="flex items-center justify-center">
               <div className="h-16 w-16 rounded-xl bg-primary/10 flex items-center justify-center">
@@ -136,42 +135,41 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
             </div>
             <div className="text-center space-y-2">
               <p className="text-foreground">
-                Verrai reindirizzato alla pagina di login di <strong>{selectedBank?.name}</strong> per autorizzare l'accesso.
+                Clicca il pulsante qui sotto per aprire Plaid Link e selezionare la tua banca.
               </p>
               <p className="text-sm text-muted-foreground">
-                Powered by GoCardless - i tuoi dati sono al sicuro
+                Powered by Plaid - i tuoi dati sono criptati e al sicuro
               </p>
             </div>
             <div className="space-y-3">
               <Button
-                onClick={handleAuthorize}
-                disabled={isConnecting}
+                onClick={() => openPlaidLink()}
+                disabled={!ready || isLoading}
                 className="w-full"
               >
-                {isConnecting ? (
-                  <>
-                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                    Connessione in corso...
-                  </>
-                ) : (
-                  <>
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    Autorizza accesso
-                  </>
-                )}
+                <ExternalLink className="h-4 w-4 mr-2" />
+                Apri Plaid Link
               </Button>
               <Button
                 variant="outline"
-                onClick={() => setStep("search")}
+                onClick={handleClose}
                 className="w-full"
-                disabled={isConnecting}
               >
-                Indietro
+                Annulla
               </Button>
             </div>
           </div>
         )}
 
+        {/* Connecting State */}
+        {step === "connecting" && (
+          <div className="flex flex-col items-center justify-center py-12 space-y-4">
+            <Loader2 className="h-12 w-12 text-primary animate-spin" />
+            <p className="text-muted-foreground">Stiamo collegando i tuoi conti...</p>
+          </div>
+        )}
+
+        {/* Success State */}
         {step === "success" && (
           <div className="space-y-6 py-4">
             <div className="flex items-center justify-center">
@@ -181,15 +179,59 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
             </div>
             <div className="text-center space-y-2">
               <p className="text-foreground">
-                Il conto <strong>{selectedBank?.name}</strong> è stato collegato con successo!
+                {connectedAccounts.length === 1 
+                  ? `Il conto ${connectedAccounts[0].bank_name} è stato collegato!`
+                  : `${connectedAccounts.length} conti sono stati collegati!`
+                }
               </p>
               <p className="text-sm text-muted-foreground">
                 Le transazioni verranno sincronizzate automaticamente
               </p>
             </div>
+            {connectedAccounts.length > 0 && (
+              <div className="space-y-2">
+                {connectedAccounts.map((account) => (
+                  <div
+                    key={account.id}
+                    className="flex items-center gap-3 p-3 rounded-lg bg-muted/50"
+                  >
+                    <Building2 className="h-5 w-5 text-primary" />
+                    <div className="flex-1">
+                      <p className="font-medium text-foreground">{account.bank_name}</p>
+                      <p className="text-sm text-muted-foreground">
+                        {account.account_name || account.account_type} •••• {account.mask}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
             <Button onClick={handleComplete} className="w-full">
               Chiudi
             </Button>
+          </div>
+        )}
+
+        {/* Error State */}
+        {step === "error" && (
+          <div className="space-y-6 py-4">
+            <div className="flex items-center justify-center">
+              <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center">
+                <AlertCircle className="h-10 w-10 text-destructive" />
+              </div>
+            </div>
+            <div className="text-center space-y-2">
+              <p className="text-foreground">Si è verificato un errore</p>
+              <p className="text-sm text-muted-foreground">{errorMessage}</p>
+            </div>
+            <div className="space-y-3">
+              <Button onClick={handleRetry} className="w-full">
+                Riprova
+              </Button>
+              <Button variant="outline" onClick={handleClose} className="w-full">
+                Chiudi
+              </Button>
+            </div>
           </div>
         )}
       </DialogContent>

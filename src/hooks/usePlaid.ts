@@ -1,0 +1,235 @@
+import { useState, useCallback } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+
+export interface BankAccount {
+  id: string;
+  plaid_item_id: string;
+  plaid_account_id: string;
+  bank_name: string;
+  account_name: string | null;
+  account_type: string | null;
+  account_subtype: string | null;
+  mask: string | null;
+  iban: string | null;
+  currency: string;
+  current_balance: number;
+  available_balance: number;
+  status: "active" | "pending" | "error" | "disconnected";
+  last_sync_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface BankTransaction {
+  id: string;
+  bank_account_id: string;
+  plaid_transaction_id: string;
+  amount: number;
+  currency: string;
+  date: string;
+  name: string;
+  merchant_name: string | null;
+  category: string[] | null;
+  pending: boolean;
+  transaction_type: string | null;
+  payment_channel: string | null;
+  created_at: string;
+}
+
+export function usePlaid() {
+  const [isLoading, setIsLoading] = useState(false);
+  const [accounts, setAccounts] = useState<BankAccount[]>([]);
+  const [transactions, setTransactions] = useState<BankTransaction[]>([]);
+  const { toast } = useToast();
+
+  const callPlaidFunction = useCallback(
+    async (action: string, params: Record<string, unknown> = {}) => {
+      const { data, error } = await supabase.functions.invoke("plaid", {
+        body: { action, ...params },
+      });
+
+      if (error) {
+        console.error("[usePlaid] Function error:", error);
+        throw new Error(error.message || "Errore nella chiamata Plaid");
+      }
+
+      if (data?.error) {
+        console.error("[usePlaid] API error:", data.error);
+        throw new Error(data.error);
+      }
+
+      return data;
+    },
+    []
+  );
+
+  const createLinkToken = useCallback(async (): Promise<string> => {
+    setIsLoading(true);
+    try {
+      const data = await callPlaidFunction("create_link_token");
+      return data.link_token;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [callPlaidFunction]);
+
+  const exchangePublicToken = useCallback(
+    async (publicToken: string): Promise<BankAccount[]> => {
+      setIsLoading(true);
+      try {
+        const data = await callPlaidFunction("exchange_public_token", {
+          public_token: publicToken,
+        });
+
+        const newAccounts = data.accounts as BankAccount[];
+        setAccounts((prev) => [...prev, ...newAccounts]);
+
+        toast({
+          title: "Conto collegato",
+          description: `${newAccounts.length} conto/i collegati con successo`,
+        });
+
+        return newAccounts;
+      } catch (error) {
+        toast({
+          title: "Errore",
+          description:
+            error instanceof Error ? error.message : "Errore nel collegamento",
+          variant: "destructive",
+        });
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [callPlaidFunction, toast]
+  );
+
+  const fetchAccounts = useCallback(async (): Promise<BankAccount[]> => {
+    setIsLoading(true);
+    try {
+      const data = await callPlaidFunction("get_accounts");
+      const fetchedAccounts = data.accounts as BankAccount[];
+      setAccounts(fetchedAccounts);
+      return fetchedAccounts;
+    } catch (error) {
+      toast({
+        title: "Errore",
+        description: "Impossibile caricare i conti bancari",
+        variant: "destructive",
+      });
+      throw error;
+    } finally {
+      setIsLoading(false);
+    }
+  }, [callPlaidFunction, toast]);
+
+  const syncAccount = useCallback(
+    async (
+      accountId: string
+    ): Promise<{ account: BankAccount; transactions_synced: number }> => {
+      setIsLoading(true);
+      try {
+        const data = await callPlaidFunction("sync_account", {
+          account_id: accountId,
+        });
+
+        // Update local state
+        setAccounts((prev) =>
+          prev.map((acc) =>
+            acc.id === accountId ? (data.account as BankAccount) : acc
+          )
+        );
+
+        toast({
+          title: "Sincronizzazione completata",
+          description: `${data.transactions_synced} transazioni sincronizzate`,
+        });
+
+        return data;
+      } catch (error) {
+        toast({
+          title: "Errore sincronizzazione",
+          description:
+            error instanceof Error ? error.message : "Errore nella sincronizzazione",
+          variant: "destructive",
+        });
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [callPlaidFunction, toast]
+  );
+
+  const fetchTransactions = useCallback(
+    async (
+      accountId: string,
+      startDate?: string,
+      endDate?: string
+    ): Promise<BankTransaction[]> => {
+      setIsLoading(true);
+      try {
+        const data = await callPlaidFunction("get_transactions", {
+          account_id: accountId,
+          start_date: startDate,
+          end_date: endDate,
+        });
+
+        const fetchedTransactions = data.transactions as BankTransaction[];
+        setTransactions(fetchedTransactions);
+        return fetchedTransactions;
+      } catch (error) {
+        toast({
+          title: "Errore",
+          description: "Impossibile caricare le transazioni",
+          variant: "destructive",
+        });
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [callPlaidFunction, toast]
+  );
+
+  const removeAccount = useCallback(
+    async (accountId: string): Promise<void> => {
+      setIsLoading(true);
+      try {
+        await callPlaidFunction("remove_item", { account_id: accountId });
+
+        setAccounts((prev) => prev.filter((acc) => acc.id !== accountId));
+
+        toast({
+          title: "Conto rimosso",
+          description: "Il conto è stato scollegato con successo",
+        });
+      } catch (error) {
+        toast({
+          title: "Errore",
+          description:
+            error instanceof Error ? error.message : "Errore nella rimozione",
+          variant: "destructive",
+        });
+        throw error;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [callPlaidFunction, toast]
+  );
+
+  return {
+    isLoading,
+    accounts,
+    transactions,
+    createLinkToken,
+    exchangePublicToken,
+    fetchAccounts,
+    syncAccount,
+    fetchTransactions,
+    removeAccount,
+  };
+}
