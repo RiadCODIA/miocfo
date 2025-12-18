@@ -14,6 +14,7 @@ import {
   ChevronRight,
   Landmark,
   FileText,
+  Cog,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import finexaLogo from "@/assets/finexa-logo.png";
@@ -29,6 +30,7 @@ const sidebarSections = [
   { id: "scadenzario", label: "Scadenzario", icon: Calendar, path: "/scadenzario" },
   { id: "kpi_report", label: "KPI & Report", icon: BarChart3, path: "/kpi-report" },
   { id: "alert_notifiche", label: "Alert & Notifiche", icon: Bell, path: "/alert" },
+  { id: "configurazione", label: "Configurazione", icon: Cog, path: "/configurazione" },
   { id: "impostazioni_personali", label: "Impostazioni", icon: Settings, path: "/impostazioni" },
 ];
 
