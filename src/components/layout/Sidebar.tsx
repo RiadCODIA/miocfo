@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import finexaLogo from "@/assets/finexa-logo.png";
+import finexaLogoIcon from "@/assets/finexa-logo-icon.png";
 
 const sidebarSections = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/" },
@@ -50,11 +51,11 @@ export function Sidebar() {
         <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border">
           <div className="flex items-center gap-2 overflow-hidden">
             <img 
-              src={finexaLogo} 
+              src={collapsed ? finexaLogoIcon : finexaLogo} 
               alt="Finexa" 
               className={cn(
-                "h-8 object-contain transition-all duration-300",
-                collapsed ? "w-8" : "w-auto max-w-[140px]"
+                "object-contain transition-all duration-300",
+                collapsed ? "h-8 w-8" : "h-8 w-auto max-w-[140px]"
               )}
             />
           </div>
