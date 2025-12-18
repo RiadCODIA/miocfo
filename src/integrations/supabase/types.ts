@@ -14,7 +14,149 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      cost_categories: {
+        Row: {
+          cashflow_type: Database["public"]["Enums"]["cashflow_type"] | null
+          cost_type: Database["public"]["Enums"]["cost_type"]
+          created_at: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          parent_id: string | null
+          sort_order: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          cashflow_type?: Database["public"]["Enums"]["cashflow_type"] | null
+          cost_type: Database["public"]["Enums"]["cost_type"]
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          parent_id?: string | null
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          cashflow_type?: Database["public"]["Enums"]["cashflow_type"] | null
+          cost_type?: Database["public"]["Enums"]["cost_type"]
+          created_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          parent_id?: string | null
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cost_categories_parent_id_fkey"
+            columns: ["parent_id"]
+            isOneToOne: false
+            referencedRelation: "cost_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      employees: {
+        Row: {
+          annual_cost: number
+          created_at: string | null
+          end_date: string | null
+          id: string
+          is_active: boolean | null
+          monthly_cost: number | null
+          name: string
+          notes: string | null
+          role: string | null
+          start_date: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          annual_cost: number
+          created_at?: string | null
+          end_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          monthly_cost?: number | null
+          name: string
+          notes?: string | null
+          role?: string | null
+          start_date?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          annual_cost?: number
+          created_at?: string | null
+          end_date?: string | null
+          id?: string
+          is_active?: boolean | null
+          monthly_cost?: number | null
+          name?: string
+          notes?: string | null
+          role?: string | null
+          start_date?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      revenue_centers: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          sort_order: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          sort_order?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      vat_rates: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_default: boolean | null
+          name: string
+          rate: number
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          name: string
+          rate: number
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          rate?: number
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -23,7 +165,8 @@ export type Database = {
       [_ in never]: never
     }
     Enums: {
-      [_ in never]: never
+      cashflow_type: "operational" | "investment" | "financing"
+      cost_type: "fixed" | "variable"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +293,9 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      cashflow_type: ["operational", "investment", "financing"],
+      cost_type: ["fixed", "variable"],
+    },
   },
 } as const
