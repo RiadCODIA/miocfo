@@ -14,6 +14,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import finexaLogo from "@/assets/finexa-logo.png";
 
 const sidebarSections = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/" },
@@ -41,14 +42,16 @@ export function Sidebar() {
       <div className="flex h-full flex-col">
         {/* Logo */}
         <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border">
-          {!collapsed && (
-            <div className="flex items-center gap-2">
-              <div className="h-8 w-8 rounded-lg bg-primary flex items-center justify-center">
-                <TrendingUp className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <span className="font-semibold text-lg text-sidebar-foreground">FinFlow</span>
-            </div>
-          )}
+          <div className="flex items-center gap-2 overflow-hidden">
+            <img 
+              src={finexaLogo} 
+              alt="Finexa" 
+              className={cn(
+                "h-8 object-contain transition-all duration-300",
+                collapsed ? "w-8" : "w-auto max-w-[140px]"
+              )}
+            />
+          </div>
           <button
             onClick={() => setCollapsed(!collapsed)}
             className="p-1.5 rounded-lg hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors"
