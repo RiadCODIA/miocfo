@@ -1,98 +1,50 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Landmark, AlertCircle } from "lucide-react";
-import { BankAccountCard, BankAccount } from "@/components/conti-bancari/BankAccountCard";
+import { Plus, Landmark, AlertCircle, RefreshCw } from "lucide-react";
+import { BankAccountCard } from "@/components/conti-bancari/BankAccountCard";
 import { ConnectBankModal } from "@/components/conti-bancari/ConnectBankModal";
 import { ConnectionTestPanel } from "@/components/conti-bancari/ConnectionTestPanel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useToast } from "@/hooks/use-toast";
-
-const mockAccounts: BankAccount[] = [
-  {
-    id: "1",
-    bankName: "UniCredit",
-    iban: "IT60X0542811101000000123456",
-    balance: 45230.50,
-    currency: "EUR",
-    status: "active",
-    lastSync: new Date(Date.now() - 1800000),
-  },
-  {
-    id: "2",
-    bankName: "Intesa Sanpaolo",
-    iban: "IT60X0306911101000000654321",
-    balance: 12890.00,
-    currency: "EUR",
-    status: "active",
-    lastSync: new Date(Date.now() - 3600000),
-  },
-  {
-    id: "3",
-    bankName: "Fineco Bank",
-    iban: "IT60X0301503200000003567890",
-    balance: 8450.75,
-    currency: "EUR",
-    status: "pending",
-    lastSync: new Date(Date.now() - 86400000),
-  },
-];
+import { usePlaid, BankAccount } from "@/hooks/usePlaid";
 
 export default function ContiBancari() {
-  const [accounts, setAccounts] = useState<BankAccount[]>(mockAccounts);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const { toast } = useToast();
+  const { accounts, isLoading, fetchAccounts, syncAccount, removeAccount } = usePlaid();
+
+  useEffect(() => {
+    fetchAccounts();
+  }, [fetchAccounts]);
 
   const handleSync = async (id: string) => {
-    toast({
-      title: "Sincronizzazione avviata",
-      description: "Le transazioni verranno aggiornate a breve.",
-    });
-    // Simulate sync
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setAccounts((prev) =>
-      prev.map((acc) =>
-        acc.id === id ? { ...acc, lastSync: new Date(), status: "active" } : acc
-      )
-    );
-    toast({
-      title: "Sincronizzazione completata",
-      description: "Le transazioni sono state aggiornate.",
-    });
+    await syncAccount(id);
   };
 
   const handleTest = async (id: string) => {
-    toast({
-      title: "Test connessione",
-      description: "Verifica della connessione in corso...",
-    });
+    // Test connection by syncing
+    await syncAccount(id);
   };
 
-  const handleRemove = (id: string) => {
-    setAccounts((prev) => prev.filter((acc) => acc.id !== id));
-    toast({
-      title: "Conto rimosso",
-      description: "Il conto è stato scollegato con successo.",
-    });
+  const handleRemove = async (id: string) => {
+    await removeAccount(id);
   };
 
-  const handleConnect = (bankId: string, bankName: string) => {
-    const newAccount: BankAccount = {
-      id: Date.now().toString(),
-      bankName,
-      iban: `IT60X${Math.random().toString().slice(2, 25)}`,
-      balance: Math.random() * 50000,
-      currency: "EUR",
-      status: "pending",
-      lastSync: new Date(),
-    };
-    setAccounts((prev) => [...prev, newAccount]);
-    toast({
-      title: "Conto collegato",
-      description: `Il conto ${bankName} è stato aggiunto con successo.`,
-    });
+  const handleConnect = (newAccounts: BankAccount[]) => {
+    // Accounts are already added by the hook
+    console.log("Connected accounts:", newAccounts);
   };
 
-  const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0);
+  const totalBalance = accounts.reduce((sum, acc) => sum + (acc.current_balance || 0), 0);
+
+  // Map the Plaid account format to the card format
+  const mapAccountToCard = (account: BankAccount) => ({
+    id: account.id,
+    bankName: account.bank_name,
+    iban: account.iban || `•••• ${account.mask || "****"}`,
+    balance: account.current_balance || 0,
+    currency: account.currency || "EUR",
+    status: account.status as "active" | "pending" | "error",
+    lastSync: account.last_sync_at ? new Date(account.last_sync_at) : new Date(),
+  });
 
   return (
     <div className="space-y-6">
@@ -101,22 +53,28 @@ export default function ContiBancari() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Conti Bancari</h1>
           <p className="text-muted-foreground mt-1">
-            Gestisci i tuoi conti collegati tramite GoCardless
+            Gestisci i tuoi conti collegati tramite Plaid
           </p>
         </div>
-        <Button onClick={() => setIsModalOpen(true)}>
-          <Plus className="h-4 w-4 mr-2" />
-          Collega nuovo conto
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => fetchAccounts()} disabled={isLoading}>
+            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+            Aggiorna
+          </Button>
+          <Button onClick={() => setIsModalOpen(true)}>
+            <Plus className="h-4 w-4 mr-2" />
+            Collega nuovo conto
+          </Button>
+        </div>
       </div>
 
       {/* Info Alert */}
       <Alert>
         <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Integrazione GoCardless</AlertTitle>
+        <AlertTitle>Integrazione Plaid</AlertTitle>
         <AlertDescription>
-          Per attivare l'integrazione reale con GoCardless, è necessario configurare le API keys 
-          nel backend. Contatta l'amministratore per abilitare questa funzionalità.
+          I tuoi conti bancari sono collegati in modo sicuro tramite Plaid. 
+          Le transazioni vengono sincronizzate automaticamente ogni giorno.
         </AlertDescription>
       </Alert>
 
@@ -164,20 +122,31 @@ export default function ContiBancari() {
         </div>
       </div>
 
-      {/* Accounts Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        {accounts.map((account) => (
-          <BankAccountCard
-            key={account.id}
-            account={account}
-            onSync={handleSync}
-            onTest={handleTest}
-            onRemove={handleRemove}
-          />
-        ))}
-      </div>
+      {/* Loading State */}
+      {isLoading && accounts.length === 0 && (
+        <div className="text-center py-12 bg-card rounded-xl border border-border">
+          <RefreshCw className="h-12 w-12 text-muted-foreground mx-auto mb-4 animate-spin" />
+          <h3 className="text-lg font-semibold text-foreground">Caricamento conti...</h3>
+        </div>
+      )}
 
-      {accounts.length === 0 && (
+      {/* Accounts Grid */}
+      {accounts.length > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {accounts.map((account) => (
+            <BankAccountCard
+              key={account.id}
+              account={mapAccountToCard(account)}
+              onSync={handleSync}
+              onTest={handleTest}
+              onRemove={handleRemove}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!isLoading && accounts.length === 0 && (
         <div className="text-center py-12 bg-card rounded-xl border border-border">
           <Landmark className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-foreground">Nessun conto collegato</h3>

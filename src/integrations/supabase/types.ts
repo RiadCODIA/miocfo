@@ -14,6 +14,122 @@ export type Database = {
   }
   public: {
     Tables: {
+      bank_accounts: {
+        Row: {
+          account_name: string | null
+          account_subtype: string | null
+          account_type: string | null
+          available_balance: number | null
+          bank_name: string
+          created_at: string
+          currency: string | null
+          current_balance: number | null
+          iban: string | null
+          id: string
+          last_sync_at: string | null
+          mask: string | null
+          plaid_access_token: string
+          plaid_account_id: string
+          plaid_item_id: string
+          status: string | null
+          updated_at: string
+        }
+        Insert: {
+          account_name?: string | null
+          account_subtype?: string | null
+          account_type?: string | null
+          available_balance?: number | null
+          bank_name: string
+          created_at?: string
+          currency?: string | null
+          current_balance?: number | null
+          iban?: string | null
+          id?: string
+          last_sync_at?: string | null
+          mask?: string | null
+          plaid_access_token: string
+          plaid_account_id: string
+          plaid_item_id: string
+          status?: string | null
+          updated_at?: string
+        }
+        Update: {
+          account_name?: string | null
+          account_subtype?: string | null
+          account_type?: string | null
+          available_balance?: number | null
+          bank_name?: string
+          created_at?: string
+          currency?: string | null
+          current_balance?: number | null
+          iban?: string | null
+          id?: string
+          last_sync_at?: string | null
+          mask?: string | null
+          plaid_access_token?: string
+          plaid_account_id?: string
+          plaid_item_id?: string
+          status?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      bank_transactions: {
+        Row: {
+          amount: number
+          bank_account_id: string
+          category: string[] | null
+          created_at: string
+          currency: string | null
+          date: string
+          id: string
+          merchant_name: string | null
+          name: string
+          payment_channel: string | null
+          pending: boolean | null
+          plaid_transaction_id: string
+          transaction_type: string | null
+        }
+        Insert: {
+          amount: number
+          bank_account_id: string
+          category?: string[] | null
+          created_at?: string
+          currency?: string | null
+          date: string
+          id?: string
+          merchant_name?: string | null
+          name: string
+          payment_channel?: string | null
+          pending?: boolean | null
+          plaid_transaction_id: string
+          transaction_type?: string | null
+        }
+        Update: {
+          amount?: number
+          bank_account_id?: string
+          category?: string[] | null
+          created_at?: string
+          currency?: string | null
+          date?: string
+          id?: string
+          merchant_name?: string | null
+          name?: string
+          payment_channel?: string | null
+          pending?: boolean | null
+          plaid_transaction_id?: string
+          transaction_type?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "bank_transactions_bank_account_id_fkey"
+            columns: ["bank_account_id"]
+            isOneToOne: false
+            referencedRelation: "bank_accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cost_categories: {
         Row: {
           cashflow_type: Database["public"]["Enums"]["cashflow_type"] | null
