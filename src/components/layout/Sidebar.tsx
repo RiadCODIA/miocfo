@@ -15,10 +15,18 @@ import {
   Landmark,
   FileText,
   Cog,
+  LogOut,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import finexaLogo from "@/assets/finexa-logo.png";
 import finexaLogoIcon from "@/assets/finexa-logo-icon.png";
+import { useAuth } from "@/contexts/AuthContext";
+import { Button } from "@/components/ui/button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 const sidebarSections = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/" },
@@ -38,6 +46,32 @@ const sidebarSections = [
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
+  const { user, profile, signOut } = useAuth();
+
+  const getInitials = () => {
+    if (profile?.first_name && profile?.last_name) {
+      return `${profile.first_name[0]}${profile.last_name[0]}`.toUpperCase();
+    }
+    if (user?.email) {
+      return user.email.substring(0, 2).toUpperCase();
+    }
+    return "UN";
+  };
+
+  const getDisplayName = () => {
+    if (profile?.first_name && profile?.last_name) {
+      return `${profile.first_name} ${profile.last_name}`;
+    }
+    return user?.email?.split("@")[0] || "Utente";
+  };
+
+  const getDisplayEmail = () => {
+    return user?.email || "";
+  };
+
+  const handleSignOut = async () => {
+    await signOut();
+  };
 
   return (
     <aside
@@ -98,14 +132,40 @@ export function Sidebar() {
         {/* User section */}
         <div className="p-4 border-t border-sidebar-border">
           <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
-            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-primary-foreground font-medium text-sm">
-              UN
+            <div className="h-9 w-9 rounded-full bg-gradient-to-br from-primary to-primary/60 flex items-center justify-center text-primary-foreground font-medium text-sm shrink-0">
+              {getInitials()}
             </div>
             {!collapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">Utente Normale</p>
-                <p className="text-xs text-sidebar-foreground/60 truncate">utente@azienda.it</p>
+                <p className="text-sm font-medium text-sidebar-foreground truncate">{getDisplayName()}</p>
+                <p className="text-xs text-sidebar-foreground/60 truncate">{getDisplayEmail()}</p>
               </div>
+            )}
+            {collapsed ? (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleSignOut}
+                    className="h-8 w-8 text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10"
+                  >
+                    <LogOut className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="right">
+                  <p>Esci</p>
+                </TooltipContent>
+              </Tooltip>
+            ) : (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={handleSignOut}
+                className="h-8 w-8 text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10 shrink-0"
+              >
+                <LogOut className="h-4 w-4" />
+              </Button>
             )}
           </div>
         </div>
