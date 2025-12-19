@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -11,18 +12,42 @@ import {
   Clock,
   FileText,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Plus,
+  Trash2,
+  Globe
 } from "lucide-react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { toast } from "sonner";
 
 // Mock data
 const gdprRequests = [
-  { id: "GDPR-001", company: "Acme S.r.l.", type: "data_export", status: "pending", createdAt: "2024-01-10", dueDate: "2024-02-10" },
-  { id: "GDPR-002", company: "Local Business", type: "data_deletion", status: "completed", createdAt: "2024-01-05", dueDate: "2024-02-05" },
-  { id: "GDPR-003", company: "TechCorp S.p.A.", type: "data_export", status: "in_progress", createdAt: "2024-01-12", dueDate: "2024-02-12" },
+  { id: "GDPR-001", company: "Acme S.r.l.", companyId: "1", type: "data_export", status: "pending", createdAt: "2024-01-10", dueDate: "2024-02-10" },
+  { id: "GDPR-002", company: "Local Business", companyId: "5", type: "data_deletion", status: "completed", createdAt: "2024-01-05", dueDate: "2024-02-05" },
+  { id: "GDPR-003", company: "TechCorp S.p.A.", companyId: "2", type: "data_export", status: "in_progress", createdAt: "2024-01-12", dueDate: "2024-02-12" },
+];
+
+const initialIpAllowlist = [
+  { ip: "192.168.1.0/24", description: "Ufficio principale Milano", addedAt: "2024-01-01" },
+  { ip: "10.0.0.0/8", description: "VPN aziendale", addedAt: "2024-01-05" },
+  { ip: "203.0.113.50", description: "Server backup", addedAt: "2024-01-10" },
 ];
 
 export default function SicurezzaCompliance() {
+  const [ipAllowlist, setIpAllowlist] = useState(initialIpAllowlist);
+  const [newIp, setNewIp] = useState("");
+  const [newIpDescription, setNewIpDescription] = useState("");
+  const [exportDialogOpen, setExportDialogOpen] = useState(false);
+  const [selectedGdprRequest, setSelectedGdprRequest] = useState<typeof gdprRequests[0] | null>(null);
+
   const getStatusBadge = (status: string) => {
     switch (status) {
       case "completed":
@@ -47,6 +72,57 @@ export default function SicurezzaCompliance() {
     }
   };
 
+  const handleAddIp = () => {
+    if (!newIp.trim()) {
+      toast.error("Inserisci un indirizzo IP valido");
+      return;
+    }
+    // Simple IP validation
+    const ipRegex = /^(\d{1,3}\.){3}\d{1,3}(\/\d{1,2})?$/;
+    if (!ipRegex.test(newIp)) {
+      toast.error("Formato IP non valido", {
+        description: "Usa formato IPv4 (es: 192.168.1.1 o 192.168.1.0/24)"
+      });
+      return;
+    }
+    setIpAllowlist([
+      ...ipAllowlist,
+      { 
+        ip: newIp, 
+        description: newIpDescription || "Nessuna descrizione",
+        addedAt: new Date().toISOString().split('T')[0]
+      }
+    ]);
+    setNewIp("");
+    setNewIpDescription("");
+    toast.success("IP aggiunto alla allowlist");
+  };
+
+  const handleRemoveIp = (ip: string) => {
+    setIpAllowlist(ipAllowlist.filter(item => item.ip !== ip));
+    toast.success("IP rimosso dalla allowlist");
+  };
+
+  const handleExportData = (request: typeof gdprRequests[0]) => {
+    setSelectedGdprRequest(request);
+    setExportDialogOpen(true);
+  };
+
+  const handleConfirmExport = () => {
+    toast.success("Export dati avviato", {
+      description: `Export per ${selectedGdprRequest?.company} in corso...`
+    });
+    setExportDialogOpen(false);
+  };
+
+  const handleSaveSecurityPolicy = () => {
+    toast.success("Policy di sicurezza salvate");
+  };
+
+  const handleSaveRetentionPolicy = () => {
+    toast.success("Policy di retention salvate");
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -60,6 +136,7 @@ export default function SicurezzaCompliance() {
       <Tabs defaultValue="security" className="space-y-6">
         <TabsList>
           <TabsTrigger value="security">Policy Sicurezza</TabsTrigger>
+          <TabsTrigger value="ip">IP Allowlist</TabsTrigger>
           <TabsTrigger value="gdpr">Strumenti GDPR</TabsTrigger>
         </TabsList>
 
@@ -129,9 +206,95 @@ export default function SicurezzaCompliance() {
                 <Label>Timeout Sessione (minuti)</Label>
                 <Input type="number" defaultValue={30} />
               </div>
-              <Button className="bg-violet-600 hover:bg-violet-700">
+              <Button className="bg-violet-600 hover:bg-violet-700" onClick={handleSaveSecurityPolicy}>
                 Salva Policy Sicurezza
               </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="ip" className="space-y-6">
+          {/* IP Allowlist */}
+          <Card>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Globe className="h-5 w-5 text-violet-600" />
+                <CardTitle>IP Allowlist</CardTitle>
+              </div>
+              <CardDescription>
+                Limita l'accesso alla piattaforma a indirizzi IP specifici
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Add new IP */}
+              <div className="flex gap-4">
+                <div className="flex-1 space-y-2">
+                  <Label>Indirizzo IP (IPv4 o CIDR)</Label>
+                  <Input 
+                    placeholder="es: 192.168.1.1 o 192.168.1.0/24"
+                    value={newIp}
+                    onChange={(e) => setNewIp(e.target.value)}
+                  />
+                </div>
+                <div className="flex-1 space-y-2">
+                  <Label>Descrizione (opzionale)</Label>
+                  <Input 
+                    placeholder="es: Ufficio Milano"
+                    value={newIpDescription}
+                    onChange={(e) => setNewIpDescription(e.target.value)}
+                  />
+                </div>
+                <div className="flex items-end">
+                  <Button className="bg-violet-600 hover:bg-violet-700" onClick={handleAddIp}>
+                    <Plus className="mr-2 h-4 w-4" />
+                    Aggiungi
+                  </Button>
+                </div>
+              </div>
+
+              {/* IP List */}
+              <div className="space-y-2">
+                <Label className="text-muted-foreground">IP Autorizzati ({ipAllowlist.length})</Label>
+                <div className="space-y-2">
+                  {ipAllowlist.map((item) => (
+                    <div 
+                      key={item.ip}
+                      className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border"
+                    >
+                      <div className="flex items-center gap-4">
+                        <code className="text-sm font-mono bg-muted px-2 py-1 rounded">
+                          {item.ip}
+                        </code>
+                        <span className="text-sm text-muted-foreground">{item.description}</span>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <span className="text-xs text-muted-foreground">
+                          Aggiunto: {item.addedAt}
+                        </span>
+                        <Button 
+                          variant="ghost" 
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => handleRemoveIp(item.ip)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm">
+                <p className="text-amber-600 font-medium flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  Attenzione
+                </p>
+                <p className="text-muted-foreground mt-1">
+                  Se la allowlist è vuota, l'accesso è consentito da qualsiasi IP.
+                  Aggiungendo IP, l'accesso verrà limitato solo agli indirizzi elencati.
+                </p>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -174,10 +337,21 @@ export default function SicurezzaCompliance() {
                         <p className="text-sm text-muted-foreground">Scadenza: {request.dueDate}</p>
                       </div>
                       {getStatusBadge(request.status)}
-                      <Button variant="outline" size="sm">
-                        <Download className="mr-2 h-4 w-4" />
-                        Gestisci
-                      </Button>
+                      <div className="flex gap-2">
+                        {request.type === "data_export" && request.status !== "completed" && (
+                          <Button 
+                            variant="outline" 
+                            size="sm"
+                            onClick={() => handleExportData(request)}
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            Esporta Dati
+                          </Button>
+                        )}
+                        <Button variant="outline" size="sm">
+                          Gestisci
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 ))}
@@ -214,13 +388,51 @@ export default function SicurezzaCompliance() {
                   </p>
                 </div>
               </div>
-              <Button className="bg-violet-600 hover:bg-violet-700">
+              <Button className="bg-violet-600 hover:bg-violet-700" onClick={handleSaveRetentionPolicy}>
                 Salva Policy Retention
               </Button>
             </CardContent>
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Export Data Dialog */}
+      <Dialog open={exportDialogOpen} onOpenChange={setExportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Esporta Dati Azienda</DialogTitle>
+            <DialogDescription>
+              Esporta tutti i dati per {selectedGdprRequest?.company} in conformità GDPR
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="p-4 rounded-lg bg-muted/50 border border-border">
+              <p className="font-medium text-foreground">Dati inclusi nell'export:</p>
+              <ul className="mt-2 text-sm text-muted-foreground space-y-1">
+                <li>• Profilo azienda e configurazioni</li>
+                <li>• Tutti gli utenti e relativi profili</li>
+                <li>• Conti bancari e transazioni</li>
+                <li>• Report e forecast generati</li>
+                <li>• Log di attività e audit trail</li>
+              </ul>
+            </div>
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm">
+              <p className="text-amber-600 font-medium">Questa azione verrà tracciata</p>
+              <p className="text-muted-foreground mt-1">
+                L'export verrà registrato nell'audit trail per conformità.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setExportDialogOpen(false)}>
+              Annulla
+            </Button>
+            <Button className="bg-violet-600 hover:bg-violet-700" onClick={handleConfirmExport}>
+              Conferma Export
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
