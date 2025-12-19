@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import finexaLogo from "@/assets/finexa-logo.png";
-import { Eye, EyeOff, Mail, Lock, User, Building2, FlaskConical, ShieldCheck } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Building2, FlaskConical, ShieldCheck, Crown } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Email non valida"),
@@ -29,7 +29,7 @@ const signupSchema = z.object({
 });
 
 export default function Auth() {
-  const { user, loading, signIn, signUp, signInAsDemo, signInAsDemoAdmin, isDemoMode } = useAuth();
+  const { user, loading, signIn, signUp, signInAsDemo, signInAsDemoAdmin, signInAsDemoSuperAdmin, isDemoMode } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -78,6 +78,11 @@ export default function Auth() {
 
   const handleAdminDemoLogin = () => {
     signInAsDemoAdmin();
+    navigate("/", { replace: true });
+  };
+
+  const handleSuperAdminDemoLogin = () => {
+    signInAsDemoSuperAdmin();
     navigate("/", { replace: true });
   };
 
@@ -262,24 +267,33 @@ export default function Auth() {
                       </div>
                     </div>
                     
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <Button 
                         type="button" 
                         variant="outline" 
-                        className="w-full"
+                        className="w-full text-xs"
                         onClick={handleDemoLogin}
                       >
-                        <FlaskConical className="mr-2 h-4 w-4" />
-                        Demo Utente
+                        <FlaskConical className="mr-1 h-3 w-3" />
+                        Utente
                       </Button>
                       <Button 
                         type="button" 
                         variant="outline" 
-                        className="w-full"
+                        className="w-full text-xs"
                         onClick={handleAdminDemoLogin}
                       >
-                        <ShieldCheck className="mr-2 h-4 w-4" />
-                        Demo Admin
+                        <ShieldCheck className="mr-1 h-3 w-3" />
+                        Admin
+                      </Button>
+                      <Button 
+                        type="button" 
+                        variant="outline" 
+                        className="w-full text-xs bg-violet-500/10 border-violet-500/30 text-violet-600 hover:bg-violet-500/20"
+                        onClick={handleSuperAdminDemoLogin}
+                      >
+                        <Crown className="mr-1 h-3 w-3" />
+                        Super
                       </Button>
                     </div>
                   </>

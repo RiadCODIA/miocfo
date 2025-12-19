@@ -17,6 +17,11 @@ import {
   Cog,
   LogOut,
   Users,
+  Building2,
+  CreditCard,
+  Plug,
+  FileSearch,
+  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import finexaLogo from "@/assets/finexa-logo.png";
@@ -63,17 +68,34 @@ const adminSidebarSections: SidebarSection[] = [
   { id: "alert_notifiche", label: "Alert & Notifiche", icon: Bell, path: "/alert" },
 ];
 
+// Sidebar sections for super_admin (platform administration)
+const superAdminSidebarSections: SidebarSection[] = [
+  { id: "system_dashboard", label: "Dashboard di Sistema", icon: LayoutDashboard, path: "/" },
+  { id: "companies", label: "Aziende", icon: Building2, path: "/aziende" },
+  { id: "global_users", label: "Utenti Globali", icon: Users, path: "/utenti-globali" },
+  { id: "plans_limits", label: "Piani e Limiti", icon: CreditCard, path: "/piani" },
+  { id: "integrations", label: "Integrazioni", icon: Plug, path: "/integrazioni" },
+  { id: "monitoring_logs", label: "Monitoraggio & Log", icon: FileSearch, path: "/log" },
+  { id: "security_compliance", label: "Sicurezza & Compliance", icon: Shield, path: "/sicurezza" },
+  { id: "global_configuration", label: "Configurazioni Globali", icon: Settings, path: "/configurazioni" },
+];
+
 export function Sidebar() {
   const [collapsed, setCollapsed] = useState(false);
   const location = useLocation();
   const { user, profile, signOut, demoRole, isDemoMode } = useAuth();
 
   const isAdmin = demoRole === 'admin_aziendale';
+  const isSuperAdmin = demoRole === 'super_admin';
 
   // Completely different sidebar based on role
-  const sidebarSections: SidebarSection[] = isAdmin 
-    ? adminSidebarSections 
-    : userSidebarSections;
+  const sidebarSections: SidebarSection[] = isSuperAdmin
+    ? superAdminSidebarSections
+    : isAdmin 
+      ? adminSidebarSections 
+      : userSidebarSections;
+
+  // Completely different sidebar based on role - already defined above
 
   const getInitials = () => {
     if (profile?.first_name && profile?.last_name) {
@@ -94,7 +116,9 @@ export function Sidebar() {
 
   const getDisplayEmail = () => {
     if (isDemoMode && demoRole) {
-      return demoRole === 'admin_aziendale' ? 'Admin Aziendale' : 'Utente Standard';
+      if (demoRole === 'super_admin') return 'Super Amministratore';
+      if (demoRole === 'admin_aziendale') return 'Admin Aziendale';
+      return 'Utente Standard';
     }
     return user?.email || "";
   };
@@ -135,13 +159,14 @@ export function Sidebar() {
         {isDemoMode && !collapsed && (
           <div className="px-4 py-2 border-b border-sidebar-border">
             <Badge 
-              variant={isAdmin ? "default" : "secondary"} 
+              variant={isSuperAdmin ? "default" : isAdmin ? "default" : "secondary"} 
               className={cn(
                 "w-full justify-center text-xs",
-                isAdmin && "bg-amber-500/20 text-amber-600 border-amber-500/30"
+                isSuperAdmin && "bg-violet-500/20 text-violet-600 border-violet-500/30",
+                isAdmin && !isSuperAdmin && "bg-amber-500/20 text-amber-600 border-amber-500/30"
               )}
             >
-              {isAdmin ? "🛡️ Admin Aziendale" : "👤 Utente Demo"}
+              {isSuperAdmin ? "👑 Super Admin" : isAdmin ? "🛡️ Admin Aziendale" : "👤 Utente Demo"}
             </Badge>
           </div>
         )}
@@ -188,9 +213,11 @@ export function Sidebar() {
           <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
             <div className={cn(
               "h-9 w-9 rounded-full flex items-center justify-center text-primary-foreground font-medium text-sm shrink-0",
-              isAdmin 
-                ? "bg-gradient-to-br from-amber-500 to-amber-600" 
-                : "bg-gradient-to-br from-primary to-primary/60"
+              isSuperAdmin 
+                ? "bg-gradient-to-br from-violet-500 to-violet-600"
+                : isAdmin 
+                  ? "bg-gradient-to-br from-amber-500 to-amber-600" 
+                  : "bg-gradient-to-br from-primary to-primary/60"
             )}>
               {getInitials()}
             </div>

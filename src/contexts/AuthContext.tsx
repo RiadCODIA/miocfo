@@ -10,7 +10,7 @@ interface Profile {
   avatar_url: string | null;
 }
 
-export type AppRole = 'user' | 'admin_aziendale';
+export type AppRole = 'user' | 'admin_aziendale' | 'super_admin';
 
 interface AdminPermissions {
   can_view_clients: boolean;
@@ -25,6 +25,17 @@ interface AdminPermissions {
   can_manage_budget: boolean;
 }
 
+interface SuperAdminPermissions {
+  can_view_all_companies: boolean;
+  can_manage_all_users: boolean;
+  can_manage_plans: boolean;
+  can_manage_integrations: boolean;
+  can_access_logs: boolean;
+  can_manage_security: boolean;
+  can_manage_global_settings: boolean;
+  can_access_financial_data_operatively: boolean;
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
@@ -33,11 +44,13 @@ interface AuthContextType {
   isDemoMode: boolean;
   demoRole: AppRole | null;
   permissions: AdminPermissions | null;
+  superAdminPermissions: SuperAdminPermissions | null;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, metadata?: { first_name?: string; last_name?: string; company_name?: string }) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   signInAsDemo: () => void;
   signInAsDemoAdmin: () => void;
+  signInAsDemoSuperAdmin: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -66,6 +79,17 @@ const ADMIN_PERMISSIONS: AdminPermissions = {
   can_manage_budget: false,
 };
 
+const SUPER_ADMIN_PERMISSIONS: SuperAdminPermissions = {
+  can_view_all_companies: true,
+  can_manage_all_users: true,
+  can_manage_plans: true,
+  can_manage_integrations: true,
+  can_access_logs: true,
+  can_manage_security: true,
+  can_manage_global_settings: true,
+  can_access_financial_data_operatively: false,
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
@@ -74,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [demoRole, setDemoRole] = useState<AppRole | null>(null);
   const [permissions, setPermissions] = useState<AdminPermissions | null>(null);
+  const [superAdminPermissions, setSuperAdminPermissions] = useState<SuperAdminPermissions | null>(null);
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
@@ -154,11 +179,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setDemoRole(null);
       setProfile(null);
       setPermissions(null);
+      setSuperAdminPermissions(null);
       return;
     }
     await supabase.auth.signOut();
     setProfile(null);
     setPermissions(null);
+    setSuperAdminPermissions(null);
   };
 
   const signInAsDemo = () => {
@@ -186,6 +213,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setProfile(adminDemoProfile);
     setDemoRole('admin_aziendale');
     setPermissions(ADMIN_PERMISSIONS);
+    setSuperAdminPermissions(null);
+    setIsDemoMode(true);
+  };
+
+  const signInAsDemoSuperAdmin = () => {
+    const superAdminDemoProfile: Profile = {
+      id: 'demo-super-admin-id',
+      first_name: 'Super',
+      last_name: 'Admin',
+      company_name: 'Finexa Platform',
+      avatar_url: null,
+    };
+    setProfile(superAdminDemoProfile);
+    setDemoRole('super_admin');
+    setPermissions(null);
+    setSuperAdminPermissions(SUPER_ADMIN_PERMISSIONS);
     setIsDemoMode(true);
   };
 
@@ -199,11 +242,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         isDemoMode,
         demoRole,
         permissions,
+        superAdminPermissions,
         signIn,
         signUp,
         signOut,
         signInAsDemo,
         signInAsDemoAdmin,
+        signInAsDemoSuperAdmin,
       }}
     >
       {children}
