@@ -3,7 +3,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import { AuthProvider } from "@/contexts/AuthContext";
+import { AuthProvider, useAuth } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { MainLayout } from "@/components/layout/MainLayout";
 import Index from "./pages/Index";
@@ -20,8 +20,21 @@ import AlertNotifiche from "./pages/AlertNotifiche";
 import Impostazioni from "./pages/Impostazioni";
 import Configurazione from "./pages/Configurazione";
 import NotFound from "./pages/NotFound";
+// Admin pages
+import DashboardAdmin from "./pages/DashboardAdmin";
+import Clienti from "./pages/Clienti";
+import KpiClienti from "./pages/KpiClienti";
+import FlussiClienti from "./pages/FlussiClienti";
 
 const queryClient = new QueryClient();
+
+// Component to handle conditional dashboard rendering
+function DashboardRouter() {
+  const { demoRole } = useAuth();
+  const isAdmin = demoRole === 'admin_aziendale';
+  
+  return isAdmin ? <DashboardAdmin /> : <Index />;
+}
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -40,11 +53,45 @@ const App = () => (
               element={
                 <ProtectedRoute>
                   <MainLayout>
-                    <Index />
+                    <DashboardRouter />
                   </MainLayout>
                 </ProtectedRoute>
               }
             />
+            
+            {/* Admin-only routes */}
+            <Route
+              path="/clienti"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Clienti />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/kpi-clienti"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <KpiClienti />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/flussi-clienti"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <FlussiClienti />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* User routes */}
             <Route
               path="/transazioni"
               element={
