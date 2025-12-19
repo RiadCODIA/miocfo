@@ -3,8 +3,11 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { AuthProvider } from "@/contexts/AuthContext";
+import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { MainLayout } from "@/components/layout/MainLayout";
 import Index from "./pages/Index";
+import Auth from "./pages/Auth";
 import Transazioni from "./pages/Transazioni";
 import ContiBancari from "./pages/ContiBancari";
 import Fatture from "./pages/Fatture";
@@ -26,23 +29,135 @@ const App = () => (
       <Toaster />
       <Sonner />
       <BrowserRouter>
-        <MainLayout>
+        <AuthProvider>
           <Routes>
-            <Route path="/" element={<Index />} />
-            <Route path="/transazioni" element={<Transazioni />} />
-            <Route path="/conti-bancari" element={<ContiBancari />} />
-            <Route path="/fatture" element={<Fatture />} />
-            <Route path="/flussi-cassa" element={<FlussiCassa />} />
-            <Route path="/marginalita" element={<Marginalita />} />
-            <Route path="/budget" element={<BudgetPrevisioni />} />
-            <Route path="/scadenzario" element={<Scadenzario />} />
-            <Route path="/kpi-report" element={<KPIReport />} />
-            <Route path="/alert" element={<AlertNotifiche />} />
-            <Route path="/impostazioni" element={<Impostazioni />} />
-            <Route path="/configurazione" element={<Configurazione />} />
+            {/* Auth route - no layout */}
+            <Route path="/auth" element={<Auth />} />
+            
+            {/* Protected routes with MainLayout */}
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Index />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/transazioni"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Transazioni />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/conti-bancari"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <ContiBancari />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/fatture"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Fatture />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/flussi-cassa"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <FlussiCassa />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/marginalita"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Marginalita />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/budget"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <BudgetPrevisioni />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/scadenzario"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Scadenzario />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/kpi-report"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <KPIReport />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/alert"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <AlertNotifiche />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/impostazioni"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Impostazioni />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/configurazione"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Configurazione />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
             <Route path="*" element={<NotFound />} />
           </Routes>
-        </MainLayout>
+        </AuthProvider>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
