@@ -10,19 +10,48 @@ interface Profile {
   avatar_url: string | null;
 }
 
+export type AppRole = 'user' | 'admin_aziendale';
+
+interface AdminPermissions {
+  can_manage_users: boolean;
+  can_manage_bank_accounts: boolean;
+  can_manage_company_settings: boolean;
+  can_insert_manual_data: boolean;
+  can_view_other_companies: boolean;
+}
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
   isDemoMode: boolean;
+  demoRole: AppRole | null;
+  permissions: AdminPermissions | null;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, metadata?: { first_name?: string; last_name?: string; company_name?: string }) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   signInAsDemo: () => void;
+  signInAsDemoAdmin: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const USER_PERMISSIONS: AdminPermissions = {
+  can_manage_users: false,
+  can_manage_bank_accounts: false,
+  can_manage_company_settings: false,
+  can_insert_manual_data: false,
+  can_view_other_companies: false,
+};
+
+const ADMIN_PERMISSIONS: AdminPermissions = {
+  can_manage_users: true,
+  can_manage_bank_accounts: true,
+  can_manage_company_settings: true,
+  can_insert_manual_data: true,
+  can_view_other_companies: false,
+};
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
@@ -30,6 +59,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [isDemoMode, setIsDemoMode] = useState(false);
+  const [demoRole, setDemoRole] = useState<AppRole | null>(null);
+  const [permissions, setPermissions] = useState<AdminPermissions | null>(null);
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
@@ -107,11 +138,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = async () => {
     if (isDemoMode) {
       setIsDemoMode(false);
+      setDemoRole(null);
       setProfile(null);
+      setPermissions(null);
       return;
     }
     await supabase.auth.signOut();
     setProfile(null);
+    setPermissions(null);
   };
 
   const signInAsDemo = () => {
@@ -123,6 +157,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       avatar_url: null,
     };
     setProfile(demoProfile);
+    setDemoRole('user');
+    setPermissions(USER_PERMISSIONS);
+    setIsDemoMode(true);
+  };
+
+  const signInAsDemoAdmin = () => {
+    const adminDemoProfile: Profile = {
+      id: 'demo-admin-id',
+      first_name: 'Admin',
+      last_name: 'Aziendale',
+      company_name: 'Azienda Demo S.r.l.',
+      avatar_url: null,
+    };
+    setProfile(adminDemoProfile);
+    setDemoRole('admin_aziendale');
+    setPermissions(ADMIN_PERMISSIONS);
     setIsDemoMode(true);
   };
 
@@ -134,10 +184,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         loading,
         isDemoMode,
+        demoRole,
+        permissions,
         signIn,
         signUp,
         signOut,
         signInAsDemo,
+        signInAsDemoAdmin,
       }}
     >
       {children}
