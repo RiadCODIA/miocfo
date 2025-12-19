@@ -22,6 +22,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   const [linkToken, setLinkToken] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<BankAccount[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [plaidLinkOpen, setPlaidLinkOpen] = useState(false);
   
   const { createLinkToken, exchangePublicToken, isLoading } = usePlaid();
 
@@ -44,6 +45,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   const onSuccess = useCallback(
     async (publicToken: string) => {
+      setPlaidLinkOpen(false);
       setStep("connecting");
       try {
         const accounts = await exchangePublicToken(publicToken);
@@ -59,7 +61,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   );
 
   const onExit = useCallback(() => {
-    // User exited Plaid Link without completing
+    setPlaidLinkOpen(false);
     console.log("User exited Plaid Link");
   }, []);
 
@@ -68,6 +70,11 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     onSuccess,
     onExit,
   });
+
+  const handleOpenPlaidLink = () => {
+    setPlaidLinkOpen(true);
+    openPlaidLink();
+  };
 
   const handleComplete = () => {
     onConnect(connectedAccounts);
@@ -98,7 +105,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   };
 
   return (
-    <Dialog open={open} onOpenChange={handleClose}>
+    <Dialog open={open && !plaidLinkOpen} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
@@ -143,7 +150,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
             </div>
             <div className="space-y-3">
               <Button
-                onClick={() => openPlaidLink()}
+                onClick={handleOpenPlaidLink}
                 disabled={!ready || isLoading}
                 className="w-full"
               >
