@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import finexaLogo from "@/assets/finexa-logo.png";
-import { Eye, EyeOff, Mail, Lock, User, Building2 } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Building2, FlaskConical } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Email non valida"),
@@ -29,7 +29,7 @@ const signupSchema = z.object({
 });
 
 export default function Auth() {
-  const { user, loading, signIn, signUp } = useAuth();
+  const { user, loading, signIn, signUp, signInAsDemo, isDemoMode } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -49,12 +49,12 @@ export default function Auth() {
   const [lastName, setLastName] = useState("");
   const [companyName, setCompanyName] = useState("");
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated or in demo mode
   useEffect(() => {
-    if (user && !loading) {
+    if ((user || isDemoMode) && !loading) {
       navigate("/", { replace: true });
     }
-  }, [user, loading, navigate]);
+  }, [user, isDemoMode, loading, navigate]);
 
   if (loading) {
     return (
@@ -67,9 +67,14 @@ export default function Auth() {
     );
   }
 
-  if (user) {
+  if (user || isDemoMode) {
     return <Navigate to="/" replace />;
   }
+
+  const handleDemoLogin = () => {
+    signInAsDemo();
+    navigate("/", { replace: true });
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -240,6 +245,29 @@ export default function Auth() {
                     "Accedi"
                   )}
                 </Button>
+                
+                {import.meta.env.DEV && (
+                  <>
+                    <div className="relative my-4">
+                      <div className="absolute inset-0 flex items-center">
+                        <span className="w-full border-t border-border" />
+                      </div>
+                      <div className="relative flex justify-center text-xs uppercase">
+                        <span className="bg-card px-2 text-muted-foreground">oppure</span>
+                      </div>
+                    </div>
+                    
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      className="w-full"
+                      onClick={handleDemoLogin}
+                    >
+                      <FlaskConical className="mr-2 h-4 w-4" />
+                      Accedi come Demo
+                    </Button>
+                  </>
+                )}
               </form>
             </TabsContent>
             
