@@ -15,9 +15,11 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
+  isDemoMode: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, metadata?: { first_name?: string; last_name?: string; company_name?: string }) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  signInAsDemo: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -27,6 +29,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
@@ -102,8 +105,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
+    if (isDemoMode) {
+      setIsDemoMode(false);
+      setProfile(null);
+      return;
+    }
     await supabase.auth.signOut();
     setProfile(null);
+  };
+
+  const signInAsDemo = () => {
+    const demoProfile: Profile = {
+      id: 'demo-user-id',
+      first_name: 'Utente',
+      last_name: 'Demo',
+      company_name: 'Azienda Demo S.r.l.',
+      avatar_url: null,
+    };
+    setProfile(demoProfile);
+    setIsDemoMode(true);
   };
 
   return (
@@ -113,9 +133,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         session,
         profile,
         loading,
+        isDemoMode,
         signIn,
         signUp,
         signOut,
+        signInAsDemo,
       }}
     >
       {children}
