@@ -17,7 +17,6 @@ import {
   Cog,
   LogOut,
   Users,
-  Building,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import finexaLogo from "@/assets/finexa-logo.png";
@@ -39,7 +38,8 @@ interface SidebarSection {
   adminOnly?: boolean;
 }
 
-const baseSidebarSections: SidebarSection[] = [
+// Sidebar sections for regular users (clients)
+const userSidebarSections: SidebarSection[] = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/" },
   { id: "transazioni", label: "Transazioni", icon: ArrowLeftRight, path: "/transazioni" },
   { id: "conti_bancari", label: "Conti Bancari", icon: Landmark, path: "/conti-bancari" },
@@ -50,16 +50,17 @@ const baseSidebarSections: SidebarSection[] = [
   { id: "scadenzario", label: "Scadenzario", icon: Calendar, path: "/scadenzario" },
   { id: "kpi_report", label: "KPI & Report", icon: BarChart3, path: "/kpi-report" },
   { id: "alert_notifiche", label: "Alert & Notifiche", icon: Bell, path: "/alert" },
-];
-
-const adminSidebarSections: SidebarSection[] = [
-  { id: "gestione_utenti", label: "Gestione Utenti", icon: Users, path: "/gestione-utenti", adminOnly: true },
-  { id: "configurazioni_aziendali", label: "Config. Aziendali", icon: Building, path: "/configurazioni-aziendali", adminOnly: true },
-];
-
-const settingsSidebarSections: SidebarSection[] = [
   { id: "configurazione", label: "Configurazione", icon: Cog, path: "/configurazione" },
   { id: "impostazioni_personali", label: "Impostazioni", icon: Settings, path: "/impostazioni" },
+];
+
+// Sidebar sections for admin_aziendale (completely different)
+const adminSidebarSections: SidebarSection[] = [
+  { id: "dashboard_admin", label: "Dashboard", icon: LayoutDashboard, path: "/" },
+  { id: "clienti", label: "I Miei Clienti", icon: Users, path: "/clienti" },
+  { id: "kpi_clienti", label: "KPI per Cliente", icon: BarChart3, path: "/kpi-clienti" },
+  { id: "flussi_clienti", label: "Flussi di Cassa", icon: TrendingUp, path: "/flussi-clienti" },
+  { id: "alert_notifiche", label: "Alert & Notifiche", icon: Bell, path: "/alert" },
 ];
 
 export function Sidebar() {
@@ -69,12 +70,10 @@ export function Sidebar() {
 
   const isAdmin = demoRole === 'admin_aziendale';
 
-  // Build sidebar sections based on role
-  const sidebarSections: SidebarSection[] = [
-    ...baseSidebarSections,
-    ...(isAdmin ? adminSidebarSections : []),
-    ...settingsSidebarSections,
-  ];
+  // Completely different sidebar based on role
+  const sidebarSections: SidebarSection[] = isAdmin 
+    ? adminSidebarSections 
+    : userSidebarSections;
 
   const getInitials = () => {
     if (profile?.first_name && profile?.last_name) {

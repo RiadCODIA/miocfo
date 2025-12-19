@@ -13,11 +13,16 @@ interface Profile {
 export type AppRole = 'user' | 'admin_aziendale';
 
 interface AdminPermissions {
-  can_manage_users: boolean;
+  can_view_clients: boolean;
+  can_create_clients: boolean;
+  can_view_client_kpi: boolean;
+  can_view_client_cashflow: boolean;
+  can_view_alerts: boolean;
+  // User permissions
   can_manage_bank_accounts: boolean;
-  can_manage_company_settings: boolean;
-  can_insert_manual_data: boolean;
-  can_view_other_companies: boolean;
+  can_manage_transactions: boolean;
+  can_manage_invoices: boolean;
+  can_manage_budget: boolean;
 }
 
 interface AuthContextType {
@@ -38,19 +43,27 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const USER_PERMISSIONS: AdminPermissions = {
-  can_manage_users: false,
-  can_manage_bank_accounts: false,
-  can_manage_company_settings: false,
-  can_insert_manual_data: false,
-  can_view_other_companies: false,
+  can_view_clients: false,
+  can_create_clients: false,
+  can_view_client_kpi: false,
+  can_view_client_cashflow: false,
+  can_view_alerts: true,
+  can_manage_bank_accounts: true,
+  can_manage_transactions: true,
+  can_manage_invoices: true,
+  can_manage_budget: true,
 };
 
 const ADMIN_PERMISSIONS: AdminPermissions = {
-  can_manage_users: true,
-  can_manage_bank_accounts: true,
-  can_manage_company_settings: true,
-  can_insert_manual_data: true,
-  can_view_other_companies: false,
+  can_view_clients: true,
+  can_create_clients: true,
+  can_view_client_kpi: true,
+  can_view_client_cashflow: true,
+  can_view_alerts: true,
+  can_manage_bank_accounts: false,
+  can_manage_transactions: false,
+  can_manage_invoices: false,
+  can_manage_budget: false,
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
