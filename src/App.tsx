@@ -25,15 +25,25 @@ import DashboardAdmin from "./pages/DashboardAdmin";
 import Clienti from "./pages/Clienti";
 import KpiClienti from "./pages/KpiClienti";
 import FlussiClienti from "./pages/FlussiClienti";
+// Super Admin pages
+import DashboardSuperAdmin from "./pages/DashboardSuperAdmin";
+import Aziende from "./pages/Aziende";
+import UtentiGlobali from "./pages/UtentiGlobali";
+import Piani from "./pages/Piani";
+import Integrazioni from "./pages/Integrazioni";
+import MonitoraggioLog from "./pages/MonitoraggioLog";
+import SicurezzaCompliance from "./pages/SicurezzaCompliance";
+import ConfigurazioniGlobali from "./pages/ConfigurazioniGlobali";
 
 const queryClient = new QueryClient();
 
 // Component to handle conditional dashboard rendering
 function DashboardRouter() {
   const { demoRole } = useAuth();
-  const isAdmin = demoRole === 'admin_aziendale';
   
-  return isAdmin ? <DashboardAdmin /> : <Index />;
+  if (demoRole === 'super_admin') return <DashboardSuperAdmin />;
+  if (demoRole === 'admin_aziendale') return <DashboardAdmin />;
+  return <Index />;
 }
 
 const App = () => (
@@ -86,6 +96,78 @@ const App = () => (
                 <ProtectedRoute>
                   <MainLayout>
                     <FlussiClienti />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            
+            {/* Super Admin routes */}
+            <Route
+              path="/aziende"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Aziende />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/utenti-globali"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <UtentiGlobali />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/piani"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Piani />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/integrazioni"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Integrazioni />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/log"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <MonitoraggioLog />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/sicurezza"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <SicurezzaCompliance />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/configurazioni"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <ConfigurazioniGlobali />
                   </MainLayout>
                 </ProtectedRoute>
               }
