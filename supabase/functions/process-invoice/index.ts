@@ -246,8 +246,73 @@ serve(async (req) => {
     let fileData: Uint8Array;
 
     if (contentType.includes('application/json')) {
-      // New flow: file already uploaded to storage
       const body = await req.json();
+      
+      // REPROCESS MODE: riprocessa una fattura esistente
+      if (body.reprocessInvoiceId) {
+        console.log(`Reprocessing invoice: ${body.reprocessInvoiceId}`);
+        
+        // Fetch existing invoice from database
+        const { data: existingInvoice, error: fetchError } = await supabaseAdmin
+          .from('invoices')
+          .select('*')
+          .eq('id', body.reprocessInvoiceId)
+          .single();
+        
+        if (fetchError || !existingInvoice) {
+          throw new Error(`Fattura non trovata: ${fetchError?.message || 'ID non valido'}`);
+        }
+        
+        storagePath = existingInvoice.file_path;
+        fileName = existingInvoice.file_name;
+        fileType = existingInvoice.file_type || fileName.split('.').pop()?.toLowerCase() || '';
+        userId = existingInvoice.user_id;
+        
+        // Download file from storage
+        const { data: downloadData, error: downloadError } = await supabaseAdmin.storage
+          .from('invoices')
+          .download(storagePath);
+
+        if (downloadError || !downloadData) {
+          throw new Error(`Errore download file: ${downloadError?.message || 'File non trovato'}`);
+        }
+
+        fileData = new Uint8Array(await downloadData.arrayBuffer());
+        
+        // Process with AI
+        console.log(`Reprocessing file: ${fileName}`);
+        const extracted = await extractInvoiceWithAI(fileData, fileName);
+        
+        // Update the existing invoice record
+        const { error: updateError } = await supabaseAdmin
+          .from('invoices')
+          .update({
+            invoice_number: extracted.invoice_number,
+            invoice_date: extracted.invoice_date,
+            supplier_name: extracted.supplier_name,
+            amount: extracted.amount,
+            raw_data: extracted.raw_data,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', body.reprocessInvoiceId);
+        
+        if (updateError) {
+          throw new Error(`Errore aggiornamento: ${updateError.message}`);
+        }
+        
+        console.log(`Reprocessed: ${extracted.supplier_name}, €${extracted.amount}`);
+        
+        return new Response(
+          JSON.stringify({
+            success: true,
+            reprocessed: true,
+            invoice: extracted
+          }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      // NEW UPLOAD flow: file already uploaded to storage
       storagePath = body.storagePath;
       fileName = body.fileName;
       fileType = body.fileType || fileName.split('.').pop()?.toLowerCase() || '';

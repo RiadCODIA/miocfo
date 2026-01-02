@@ -57,6 +57,7 @@ export default function Fatture() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isMatchingOpen, setIsMatchingOpen] = useState(false);
   const [isAutoMatching, setIsAutoMatching] = useState(false);
+  const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -281,6 +282,42 @@ export default function Fatture() {
     }
   };
 
+  const handleReprocess = async (invoice: Invoice) => {
+    setReprocessingId(invoice.id);
+    
+    try {
+      const response = await fetch(
+        'https://ublsnradzhfpqhunfqbn.supabase.co/functions/v1/process-invoice',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reprocessInvoiceId: invoice.id }),
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Errore durante il riprocessamento');
+      }
+
+      const result = await response.json();
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+
+      toast({
+        title: "Fattura riprocessata",
+        description: `${result.invoice?.supplier_name || 'Fattura'} - €${result.invoice?.amount?.toFixed(2) || 0}`,
+      });
+    } catch (error) {
+      toast({
+        title: "Errore",
+        description: error instanceof Error ? error.message : "Errore durante il riprocessamento",
+        variant: "destructive",
+      });
+    } finally {
+      setReprocessingId(null);
+    }
+  };
+
   // Stats
   const totalInvoices = invoices.length;
   const matchedCount = invoices.filter((i) => i.matchStatus === "matched").length;
@@ -435,6 +472,8 @@ export default function Fatture() {
         invoices={invoices}
         onView={handleView}
         onMatch={handleMatch}
+        onReprocess={handleReprocess}
+        reprocessingId={reprocessingId}
         isLoading={isLoading}
       />
 
