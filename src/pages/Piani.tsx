@@ -10,7 +10,8 @@ import {
   Plus,
   Check,
   Edit,
-  Copy
+  Copy,
+  Package
 } from "lucide-react";
 import {
   Sheet,
@@ -27,7 +28,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { toast } from "sonner";
+import { useSubscriptionPlans, useCreatePlan, useUpdatePlan } from "@/hooks/useSubscriptionPlans";
+import { Skeleton } from "@/components/ui/skeleton";
 
 // All available features
 const allFeatures = [
@@ -46,61 +48,13 @@ const allFeatures = [
   { id: "custom_integrations", label: "Integrazioni Custom" },
 ];
 
-// Mock data
-const initialPlans = [
-  {
-    id: "1",
-    name: "Starter",
-    price: 29,
-    billingCycle: "monthly",
-    status: "active",
-    limits: { 
-      max_users: 5, 
-      max_bank_accounts: 2, 
-      max_transactions_month: 1000,
-      ai_features_enabled: false
-    },
-    features: ["dashboard", "transactions", "basic_reports"],
-    subscribers: 45,
-  },
-  {
-    id: "2",
-    name: "Professional",
-    price: 99,
-    billingCycle: "monthly",
-    status: "active",
-    limits: { 
-      max_users: 20, 
-      max_bank_accounts: 10, 
-      max_transactions_month: 10000,
-      ai_features_enabled: true
-    },
-    features: ["dashboard", "transactions", "cash_flow", "budget", "advanced_reports", "ai_categorization"],
-    subscribers: 78,
-  },
-  {
-    id: "3",
-    name: "Enterprise",
-    price: 299,
-    billingCycle: "monthly",
-    status: "active",
-    limits: { 
-      max_users: -1, 
-      max_bank_accounts: -1, 
-      max_transactions_month: -1,
-      ai_features_enabled: true
-    },
-    features: ["dashboard", "transactions", "cash_flow", "budget", "advanced_reports", "ai_categorization", "api_access", "sso", "dedicated_support", "ai_forecast", "multi_currency", "custom_integrations"],
-    subscribers: 33,
-  },
-];
-
-type Plan = typeof initialPlans[0];
-
 export default function Piani() {
-  const [plans, setPlans] = useState(initialPlans);
+  const { data: plans, isLoading } = useSubscriptionPlans();
+  const createPlan = useCreatePlan();
+  const updatePlan = useUpdatePlan();
+  
   const [editSheetOpen, setEditSheetOpen] = useState(false);
-  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
 
   // Form state
@@ -117,26 +71,27 @@ export default function Piani() {
   const [formUnlimitedAccounts, setFormUnlimitedAccounts] = useState(false);
   const [formUnlimitedTransactions, setFormUnlimitedTransactions] = useState(false);
 
-  const handleEditPlan = (plan: Plan) => {
-    setEditingPlan(plan);
+  const handleEditPlan = (plan: typeof plans extends (infer T)[] ? T : never) => {
+    if (!plan) return;
+    setEditingPlanId(plan.id);
     setIsCreating(false);
     setFormName(plan.name);
     setFormPrice(plan.price);
-    setFormBillingCycle(plan.billingCycle);
+    setFormBillingCycle(plan.billing_cycle);
     setFormStatus(plan.status);
-    setFormMaxUsers(plan.limits.max_users === -1 ? 100 : plan.limits.max_users);
-    setFormMaxBankAccounts(plan.limits.max_bank_accounts === -1 ? 50 : plan.limits.max_bank_accounts);
-    setFormMaxTransactions(plan.limits.max_transactions_month === -1 ? 100000 : plan.limits.max_transactions_month);
-    setFormAiEnabled(plan.limits.ai_features_enabled);
-    setFormFeatures(plan.features);
-    setFormUnlimitedUsers(plan.limits.max_users === -1);
-    setFormUnlimitedAccounts(plan.limits.max_bank_accounts === -1);
-    setFormUnlimitedTransactions(plan.limits.max_transactions_month === -1);
+    setFormMaxUsers(plan.max_users === -1 ? 100 : plan.max_users);
+    setFormMaxBankAccounts(plan.max_bank_accounts === -1 ? 50 : plan.max_bank_accounts);
+    setFormMaxTransactions(plan.max_transactions_month === -1 ? 100000 : plan.max_transactions_month);
+    setFormAiEnabled(plan.ai_features_enabled);
+    setFormFeatures(plan.features || []);
+    setFormUnlimitedUsers(plan.max_users === -1);
+    setFormUnlimitedAccounts(plan.max_bank_accounts === -1);
+    setFormUnlimitedTransactions(plan.max_transactions_month === -1);
     setEditSheetOpen(true);
   };
 
   const handleNewPlan = () => {
-    setEditingPlan(null);
+    setEditingPlanId(null);
     setIsCreating(true);
     setFormName("");
     setFormPrice(49);
@@ -153,52 +108,46 @@ export default function Piani() {
     setEditSheetOpen(true);
   };
 
-  const handleCopyPlan = (plan: Plan) => {
-    setEditingPlan(null);
+  const handleCopyPlan = (plan: typeof plans extends (infer T)[] ? T : never) => {
+    if (!plan) return;
+    setEditingPlanId(null);
     setIsCreating(true);
     setFormName(`${plan.name} (Copia)`);
     setFormPrice(plan.price);
-    setFormBillingCycle(plan.billingCycle);
+    setFormBillingCycle(plan.billing_cycle);
     setFormStatus("draft");
-    setFormMaxUsers(plan.limits.max_users === -1 ? 100 : plan.limits.max_users);
-    setFormMaxBankAccounts(plan.limits.max_bank_accounts === -1 ? 50 : plan.limits.max_bank_accounts);
-    setFormMaxTransactions(plan.limits.max_transactions_month === -1 ? 100000 : plan.limits.max_transactions_month);
-    setFormAiEnabled(plan.limits.ai_features_enabled);
-    setFormFeatures([...plan.features]);
-    setFormUnlimitedUsers(plan.limits.max_users === -1);
-    setFormUnlimitedAccounts(plan.limits.max_bank_accounts === -1);
-    setFormUnlimitedTransactions(plan.limits.max_transactions_month === -1);
+    setFormMaxUsers(plan.max_users === -1 ? 100 : plan.max_users);
+    setFormMaxBankAccounts(plan.max_bank_accounts === -1 ? 50 : plan.max_bank_accounts);
+    setFormMaxTransactions(plan.max_transactions_month === -1 ? 100000 : plan.max_transactions_month);
+    setFormAiEnabled(plan.ai_features_enabled);
+    setFormFeatures([...(plan.features || [])]);
+    setFormUnlimitedUsers(plan.max_users === -1);
+    setFormUnlimitedAccounts(plan.max_bank_accounts === -1);
+    setFormUnlimitedTransactions(plan.max_transactions_month === -1);
     setEditSheetOpen(true);
   };
 
-  const handleSavePlan = () => {
+  const handleSavePlan = async () => {
     if (!formName.trim()) {
-      toast.error("Inserisci un nome per il piano");
       return;
     }
 
-    const newPlan: Plan = {
-      id: isCreating ? `${Date.now()}` : editingPlan!.id,
+    const planData = {
       name: formName,
       price: formPrice,
-      billingCycle: formBillingCycle,
+      billing_cycle: formBillingCycle,
       status: formStatus,
-      limits: {
-        max_users: formUnlimitedUsers ? -1 : formMaxUsers,
-        max_bank_accounts: formUnlimitedAccounts ? -1 : formMaxBankAccounts,
-        max_transactions_month: formUnlimitedTransactions ? -1 : formMaxTransactions,
-        ai_features_enabled: formAiEnabled,
-      },
+      max_users: formUnlimitedUsers ? -1 : formMaxUsers,
+      max_bank_accounts: formUnlimitedAccounts ? -1 : formMaxBankAccounts,
+      max_transactions_month: formUnlimitedTransactions ? -1 : formMaxTransactions,
+      ai_features_enabled: formAiEnabled,
       features: formFeatures,
-      subscribers: isCreating ? 0 : editingPlan!.subscribers,
     };
 
     if (isCreating) {
-      setPlans([...plans, newPlan]);
-      toast.success("Piano creato con successo");
-    } else {
-      setPlans(plans.map(p => p.id === editingPlan!.id ? newPlan : p));
-      toast.success("Piano aggiornato con successo");
+      await createPlan.mutateAsync(planData);
+    } else if (editingPlanId) {
+      await updatePlan.mutateAsync({ id: editingPlanId, ...planData });
     }
     setEditSheetOpen(false);
   };
@@ -210,6 +159,25 @@ export default function Piani() {
         : [...prev, featureId]
     );
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-64 mt-2" />
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {[1, 2, 3].map(i => (
+            <Skeleton key={i} className="h-80" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -227,83 +195,95 @@ export default function Piani() {
         </Button>
       </div>
 
+      {/* Empty State */}
+      {(!plans || plans.length === 0) && (
+        <Card className="bg-muted/50">
+          <CardContent className="pt-12 pb-12 text-center">
+            <Package className="h-16 w-16 mx-auto mb-4 text-muted-foreground opacity-50" />
+            <p className="text-lg font-medium text-muted-foreground">Nessun piano configurato</p>
+            <p className="text-sm text-muted-foreground mt-1">Crea il tuo primo piano commerciale</p>
+            <Button className="mt-4 bg-violet-600 hover:bg-violet-700" onClick={handleNewPlan}>
+              <Plus className="mr-2 h-4 w-4" />
+              Crea Piano
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Plans Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {plans.map((plan) => (
-          <Card key={plan.id} className="relative">
-            <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-xl">{plan.name}</CardTitle>
-                <Badge className={plan.status === "active" 
-                  ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/30"
-                  : "bg-amber-500/20 text-amber-600 border-amber-500/30"
-                }>
-                  {plan.status === "active" ? "Attivo" : "Bozza"}
-                </Badge>
-              </div>
-              <CardDescription className="text-2xl font-bold text-foreground">
-                €{plan.price}/{plan.billingCycle === "monthly" ? "mese" : "anno"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              {/* Limits */}
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-foreground">Limiti</p>
-                <div className="grid grid-cols-3 gap-2 text-center">
-                  <div className="p-2 rounded-lg bg-muted/50">
-                    <p className="text-lg font-bold text-foreground">
-                      {plan.limits.max_users === -1 ? "∞" : plan.limits.max_users}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Utenti</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-muted/50">
-                    <p className="text-lg font-bold text-foreground">
-                      {plan.limits.max_bank_accounts === -1 ? "∞" : plan.limits.max_bank_accounts}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Conti</p>
-                  </div>
-                  <div className="p-2 rounded-lg bg-muted/50">
-                    <p className="text-lg font-bold text-foreground">
-                      {plan.limits.max_transactions_month === -1 ? "∞" : `${plan.limits.max_transactions_month / 1000}k`}
-                    </p>
-                    <p className="text-xs text-muted-foreground">Trans./mese</p>
-                  </div>
-                </div>
-                {plan.limits.ai_features_enabled && (
-                  <Badge className="bg-violet-500/20 text-violet-600 border-violet-500/30 mt-2">
-                    AI Features Attive
-                  </Badge>
-                )}
-              </div>
-
-              {/* Features */}
-              <div className="space-y-2">
-                <p className="text-sm font-medium text-foreground">Feature incluse</p>
-                <ul className="space-y-1">
-                  {plan.features.slice(0, 5).map((featureId) => {
-                    const feature = allFeatures.find(f => f.id === featureId);
-                    return feature ? (
-                      <li key={featureId} className="flex items-center gap-2 text-sm text-muted-foreground">
-                        <Check className="h-4 w-4 text-emerald-500" />
-                        {feature.label}
-                      </li>
-                    ) : null;
-                  })}
-                  {plan.features.length > 5 && (
-                    <li className="text-sm text-muted-foreground pl-6">
-                      +{plan.features.length - 5} altre...
-                    </li>
-                  )}
-                </ul>
-              </div>
-
-              {/* Subscribers */}
-              <div className="pt-4 border-t border-border">
+      {plans && plans.length > 0 && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {plans.map((plan) => (
+            <Card key={plan.id} className="relative">
+              <CardHeader>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-muted-foreground">
-                    <span className="font-bold text-foreground">{plan.subscribers}</span> sottoscrittori
-                  </span>
-                  <div className="flex gap-2">
+                  <CardTitle className="text-xl">{plan.name}</CardTitle>
+                  <Badge className={plan.status === "active" 
+                    ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/30"
+                    : "bg-amber-500/20 text-amber-600 border-amber-500/30"
+                  }>
+                    {plan.status === "active" ? "Attivo" : "Bozza"}
+                  </Badge>
+                </div>
+                <CardDescription className="text-2xl font-bold text-foreground">
+                  €{plan.price}/{plan.billing_cycle === "monthly" ? "mese" : "anno"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Limits */}
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-foreground">Limiti</p>
+                  <div className="grid grid-cols-3 gap-2 text-center">
+                    <div className="p-2 rounded-lg bg-muted/50">
+                      <p className="text-lg font-bold text-foreground">
+                        {plan.max_users === -1 ? "∞" : plan.max_users}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Utenti</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-muted/50">
+                      <p className="text-lg font-bold text-foreground">
+                        {plan.max_bank_accounts === -1 ? "∞" : plan.max_bank_accounts}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Conti</p>
+                    </div>
+                    <div className="p-2 rounded-lg bg-muted/50">
+                      <p className="text-lg font-bold text-foreground">
+                        {plan.max_transactions_month === -1 ? "∞" : `${plan.max_transactions_month / 1000}k`}
+                      </p>
+                      <p className="text-xs text-muted-foreground">Trans./mese</p>
+                    </div>
+                  </div>
+                  {plan.ai_features_enabled && (
+                    <Badge className="bg-violet-500/20 text-violet-600 border-violet-500/30 mt-2">
+                      AI Features Attive
+                    </Badge>
+                  )}
+                </div>
+
+                {/* Features */}
+                <div className="space-y-2">
+                  <p className="text-sm font-medium text-foreground">Feature incluse</p>
+                  <ul className="space-y-1">
+                    {(plan.features || []).slice(0, 5).map((featureId) => {
+                      const feature = allFeatures.find(f => f.id === featureId);
+                      return feature ? (
+                        <li key={featureId} className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Check className="h-4 w-4 text-emerald-500" />
+                          {feature.label}
+                        </li>
+                      ) : null;
+                    })}
+                    {(plan.features || []).length > 5 && (
+                      <li className="text-sm text-muted-foreground pl-6">
+                        +{plan.features.length - 5} altre...
+                      </li>
+                    )}
+                  </ul>
+                </div>
+
+                {/* Actions */}
+                <div className="pt-4 border-t border-border">
+                  <div className="flex items-center justify-end gap-2">
                     <Button variant="ghost" size="icon" onClick={() => handleCopyPlan(plan)}>
                       <Copy className="h-4 w-4" />
                     </Button>
@@ -312,18 +292,18 @@ export default function Piani() {
                     </Button>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      )}
 
       {/* Edit/Create Plan Sheet */}
       <Sheet open={editSheetOpen} onOpenChange={setEditSheetOpen}>
         <SheetContent className="w-[600px] sm:max-w-[600px] overflow-y-auto">
           <SheetHeader>
             <SheetTitle>
-              {isCreating ? "Nuovo Piano" : `Modifica ${editingPlan?.name}`}
+              {isCreating ? "Nuovo Piano" : "Modifica Piano"}
             </SheetTitle>
             <SheetDescription>
               {isCreating ? "Crea un nuovo piano commerciale" : "Modifica i dettagli del piano"}
@@ -449,21 +429,26 @@ export default function Piani() {
               </div>
             </div>
 
-            {/* Features Matrix */}
+            {/* Features */}
             <div className="space-y-4">
-              <h4 className="font-medium text-foreground">Features Incluse</h4>
+              <h4 className="font-medium text-foreground">Feature Incluse</h4>
               <div className="grid grid-cols-2 gap-3">
                 {allFeatures.map((feature) => (
                   <div 
                     key={feature.id}
-                    className="flex items-center space-x-2 p-2 rounded-lg hover:bg-muted/50 cursor-pointer"
-                    onClick={() => toggleFeature(feature.id)}
+                    className="flex items-center space-x-2"
                   >
                     <Checkbox 
+                      id={feature.id}
                       checked={formFeatures.includes(feature.id)}
                       onCheckedChange={() => toggleFeature(feature.id)}
                     />
-                    <Label className="cursor-pointer">{feature.label}</Label>
+                    <label 
+                      htmlFor={feature.id}
+                      className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                    >
+                      {feature.label}
+                    </label>
                   </div>
                 ))}
               </div>
@@ -474,8 +459,12 @@ export default function Piani() {
             <Button variant="outline" onClick={() => setEditSheetOpen(false)}>
               Annulla
             </Button>
-            <Button className="bg-violet-600 hover:bg-violet-700" onClick={handleSavePlan}>
-              {isCreating ? "Crea Piano" : "Salva Modifiche"}
+            <Button 
+              className="bg-violet-600 hover:bg-violet-700" 
+              onClick={handleSavePlan}
+              disabled={createPlan.isPending || updatePlan.isPending}
+            >
+              {createPlan.isPending || updatePlan.isPending ? "Salvataggio..." : "Salva Piano"}
             </Button>
           </SheetFooter>
         </SheetContent>
