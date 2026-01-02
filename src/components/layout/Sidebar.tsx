@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
@@ -34,6 +33,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
+import { useSidebarState } from "./MainLayout";
 
 interface SidebarSection {
   id: string;
@@ -81,7 +81,7 @@ const superAdminSidebarSections: SidebarSection[] = [
 ];
 
 export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+  const { collapsed, setCollapsed } = useSidebarState();
   const location = useLocation();
   const { user, profile, signOut, demoRole, isDemoMode } = useAuth();
 
