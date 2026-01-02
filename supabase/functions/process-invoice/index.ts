@@ -1,6 +1,6 @@
+import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { decode as base64Decode } from "https://deno.land/std@0.168.0/encoding/base64.ts";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -65,126 +65,111 @@ function parseCSV(content: string): ExtractedInvoice[] {
   return invoices;
 }
 
-// Extract invoice data from PDF text using regex patterns
-function extractFromPDFText(text: string, fileName: string): ExtractedInvoice {
-  // Common patterns for Italian invoices
-  const invoiceNumberPatterns = [
-    /(?:fattura|invoice|n[°.]?)\s*(?:n[°.]?)?\s*[:.]?\s*([A-Z0-9\-\/]+)/i,
-    /(?:numero|nr|num)\s*[:.]?\s*([A-Z0-9\-\/]+)/i,
-    /([A-Z]{2,3}[\-\/]?\d{4}[\-\/]?\d{2,6})/i,
-  ];
-
-  const amountPatterns = [
-    /(?:totale|total|importo|amount)\s*(?:fattura|invoice|dovuto|due)?\s*[:.]?\s*[€$]?\s*([\d.,]+)/i,
-    /[€$]\s*([\d.,]+)\s*(?:eur|euro)?/i,
-    /(?:eur|euro)\s*([\d.,]+)/i,
-  ];
-
-  const datePatterns = [
-    /(?:data|date)\s*[:.]?\s*(\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4})/i,
-    /(\d{1,2}[\/.]\d{1,2}[\/.]\d{2,4})/,
-  ];
-
-  const supplierPatterns = [
-    /(?:ragione\s*sociale|company|supplier|fornitore)\s*[:.]?\s*([A-Za-z0-9\s&.,]+?)(?:\n|$)/i,
-    /^([A-Z][A-Za-z0-9\s&.,]{5,50}(?:S\.?[rp]\.?[la]\.?|S\.?a\.?s\.?|S\.?n\.?c\.?))/m,
-  ];
-
-  let invoiceNumber = '';
-  let amount = 0;
-  let invoiceDate = new Date().toISOString().split('T')[0];
-  let supplierName = 'Fornitore Sconosciuto';
-
-  // Extract invoice number
-  for (const pattern of invoiceNumberPatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      invoiceNumber = match[1].trim();
-      break;
-    }
+// Extract invoice data using OpenAI Vision API
+async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string): Promise<ExtractedInvoice> {
+  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+  
+  if (!openaiApiKey) {
+    console.warn('OPENAI_API_KEY non configurata, usando fallback');
+    return {
+      invoice_number: `PDF-${Date.now()}`,
+      invoice_date: new Date().toISOString().split('T')[0],
+      supplier_name: 'Fornitore Sconosciuto',
+      amount: 0,
+      currency: 'EUR',
+      raw_data: { note: 'Estrazione AI non disponibile - chiave API mancante', file_name: fileName }
+    };
   }
 
-  // Extract amount
-  for (const pattern of amountPatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      const amountStr = match[1].replace(/\./g, '').replace(',', '.');
-      amount = parseFloat(amountStr);
-      if (!isNaN(amount) && amount > 0) break;
-    }
-  }
+  try {
+    // Convert PDF to base64
+    const base64Data = btoa(String.fromCharCode(...fileData));
+    
+    console.log(`Calling OpenAI Vision API for: ${fileName}`);
 
-  // Extract date
-  for (const pattern of datePatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      const parts = match[1].split(/[\/.]/);
-      if (parts.length === 3) {
-        const day = parts[0].padStart(2, '0');
-        const month = parts[1].padStart(2, '0');
-        let year = parts[2];
-        if (year.length === 2) year = '20' + year;
-        invoiceDate = `${year}-${month}-${day}`;
-        break;
-      }
-    }
-  }
-
-  // Extract supplier
-  for (const pattern of supplierPatterns) {
-    const match = text.match(pattern);
-    if (match) {
-      supplierName = match[1].trim().substring(0, 100);
-      break;
-    }
-  }
-
-  // Fallback: use filename for invoice number
-  if (!invoiceNumber) {
-    invoiceNumber = fileName.replace(/\.[^.]+$/, '').replace(/[^A-Za-z0-9]/g, '-').toUpperCase();
-  }
-
-  return {
-    invoice_number: invoiceNumber,
-    invoice_date: invoiceDate,
-    supplier_name: supplierName,
-    amount: amount || 0,
-    currency: 'EUR',
-    raw_data: { extracted_text_preview: text.substring(0, 500) }
-  };
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${openaiApiKey}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{
+          role: 'user',
+          content: [
+            {
+              type: 'text',
+              text: `Analizza questa fattura italiana ed estrai i seguenti dati in formato JSON:
+{
+  "invoice_number": "numero fattura (es. 94/2025)",
+  "supplier_name": "nome completo fornitore/azienda emittente (es. Horeca Consulting Srl)",
+  "amount": numero importo totale IVA inclusa (solo il numero, es. 1250.50),
+  "invoice_date": "data fattura formato YYYY-MM-DD (es. 2025-01-15)"
 }
 
-// Basic PDF text extraction (simplified - extracts readable text)
-function extractPDFText(data: Uint8Array): string {
-  const decoder = new TextDecoder('utf-8', { fatal: false });
-  const content = decoder.decode(data);
-  
-  // Extract text between stream and endstream (simplified extraction)
-  const textParts: string[] = [];
-  const streamRegex = /stream[\r\n]+([\s\S]*?)[\r\n]+endstream/g;
-  let match;
-  
-  while ((match = streamRegex.exec(content)) !== null) {
-    // Try to find readable text in the stream
-    const streamContent = match[1];
-    // Extract text from Tj/TJ operators
-    const tjRegex = /\(([^)]+)\)\s*Tj/g;
-    let tjMatch;
-    while ((tjMatch = tjRegex.exec(streamContent)) !== null) {
-      textParts.push(tjMatch[1]);
-    }
-  }
+IMPORTANTE:
+- Estrai l'importo TOTALE della fattura (totale fattura o totale documento), non l'imponibile
+- Il fornitore è chi EMETTE la fattura, non chi la riceve
+- Rispondi SOLO con il JSON, nessun altro testo`
+            },
+            {
+              type: 'image_url',
+              image_url: { url: `data:application/pdf;base64,${base64Data}` }
+            }
+          ]
+        }],
+        max_tokens: 500
+      })
+    });
 
-  // Also try to find readable text directly
-  const readableRegex = /[\w\s€$.,\-\/]{10,}/g;
-  let readable;
-  while ((readable = readableRegex.exec(content)) !== null) {
-    if (!readable[0].includes('stream') && !readable[0].includes('obj')) {
-      textParts.push(readable[0]);
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error('OpenAI API error:', response.status, errorText);
+      throw new Error(`OpenAI API error: ${response.status}`);
     }
-  }
 
-  return textParts.join(' ').substring(0, 10000);
+    const result = await response.json();
+    console.log('OpenAI response:', JSON.stringify(result.choices?.[0]?.message?.content));
+    
+    const content = result.choices?.[0]?.message?.content || '';
+    
+    // Parse JSON from response (handle markdown code blocks)
+    let jsonStr = content.trim();
+    if (jsonStr.startsWith('```json')) {
+      jsonStr = jsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+    } else if (jsonStr.startsWith('```')) {
+      jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
+    }
+    
+    const extracted = JSON.parse(jsonStr);
+    
+    console.log('Extracted data:', JSON.stringify(extracted));
+
+    return {
+      invoice_number: extracted.invoice_number || `PDF-${Date.now()}`,
+      invoice_date: extracted.invoice_date || new Date().toISOString().split('T')[0],
+      supplier_name: extracted.supplier_name || 'Fornitore Sconosciuto',
+      amount: typeof extracted.amount === 'number' ? extracted.amount : parseFloat(String(extracted.amount).replace(',', '.')) || 0,
+      currency: 'EUR',
+      raw_data: { ai_extracted: true, original_filename: fileName, ai_response: extracted }
+    };
+
+  } catch (error) {
+    console.error('AI extraction error:', error);
+    return {
+      invoice_number: `PDF-${Date.now()}`,
+      invoice_date: new Date().toISOString().split('T')[0],
+      supplier_name: 'Fornitore Sconosciuto',
+      amount: 0,
+      currency: 'EUR',
+      raw_data: { 
+        error: error instanceof Error ? error.message : 'Unknown error', 
+        file_name: fileName,
+        note: 'Estrazione AI fallita'
+      }
+    };
+  }
 }
 
 serve(async (req) => {
@@ -286,7 +271,7 @@ serve(async (req) => {
       console.log(`Extracted ${extractedInvoices.length} invoices from CSV`);
 
     } else if (fileType === 'application/zip' || fileName.endsWith('.zip')) {
-      // ZIP file - process as container
+      // ZIP file - process as container (AI extraction not available for ZIP)
       extractedInvoices = [{
         invoice_number: `ZIP-${Date.now()}`,
         invoice_date: new Date().toISOString().split('T')[0],
@@ -298,22 +283,17 @@ serve(async (req) => {
       console.log('ZIP file detected - basic processing');
 
     } else if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
-      // PDF file
-      const pdfText = extractPDFText(fileData);
-      console.log(`Extracted PDF text length: ${pdfText.length}`);
-      const invoice = extractFromPDFText(pdfText, fileName);
+      // PDF file - use AI extraction
+      console.log('Using AI extraction for PDF');
+      const invoice = await extractInvoiceWithAI(fileData, fileName);
       extractedInvoices = [invoice];
+      console.log(`AI extracted: ${invoice.supplier_name}, €${invoice.amount}`);
 
     } else if (fileType?.startsWith('image/') || /\.(jpg|jpeg|png|gif)$/i.test(fileName)) {
-      // Image file - would need OCR
-      extractedInvoices = [{
-        invoice_number: `IMG-${Date.now()}`,
-        invoice_date: new Date().toISOString().split('T')[0],
-        supplier_name: 'Immagine Fattura',
-        amount: 0,
-        currency: 'EUR',
-        raw_data: { note: 'Immagine - inserimento manuale richiesto', file_name: fileName }
-      }];
+      // Image file - use AI extraction
+      console.log('Using AI extraction for image');
+      const invoice = await extractInvoiceWithAI(fileData, fileName);
+      extractedInvoices = [invoice];
 
     } else {
       throw new Error(`Tipo file non supportato: ${fileType}`);
