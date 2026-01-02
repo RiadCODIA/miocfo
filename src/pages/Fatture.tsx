@@ -80,16 +80,16 @@ export default function Fatture() {
       const formData = new FormData();
       files.forEach(file => formData.append('files', file));
 
+      // Auth opzionale per demo mode
       const { data: { session } } = await supabase.auth.getSession();
-      if (!session) throw new Error('Devi effettuare il login');
 
       const response = await fetch(
         'https://ublsnradzhfpqhunfqbn.supabase.co/functions/v1/process-invoice',
         {
           method: 'POST',
-          headers: {
-            'Authorization': `Bearer ${session.access_token}`,
-          },
+          headers: session?.access_token 
+            ? { 'Authorization': `Bearer ${session.access_token}` }
+            : {},
           body: formData,
         }
       );
