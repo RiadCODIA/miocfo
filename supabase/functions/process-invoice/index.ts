@@ -65,12 +65,12 @@ function parseCSV(content: string): ExtractedInvoice[] {
   return invoices;
 }
 
-// Extract invoice data using OpenAI Vision API
+// Extract invoice data using Lovable AI Gateway (Google Gemini)
 async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string): Promise<ExtractedInvoice> {
-  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
   
-  if (!openaiApiKey) {
-    console.warn('OPENAI_API_KEY non configurata, usando fallback');
+  if (!lovableApiKey) {
+    console.warn('LOVABLE_API_KEY non configurata, usando fallback');
     return {
       invoice_number: `PDF-${Date.now()}`,
       invoice_date: new Date().toISOString().split('T')[0],
@@ -82,57 +82,72 @@ async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string): Pro
   }
 
   try {
-    // Convert PDF to base64
+    // Convert file to base64
     const base64Data = btoa(String.fromCharCode(...fileData));
     
-    console.log(`Calling OpenAI Vision API for: ${fileName}`);
+    // Determine MIME type
+    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
+    const mimeType = isImage 
+      ? `image/${fileName.split('.').pop()?.toLowerCase().replace('jpg', 'jpeg')}`
+      : 'application/pdf';
+    
+    console.log(`Calling Lovable AI Gateway for: ${fileName} (${mimeType})`);
 
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${openaiApiKey}`,
+        'Authorization': `Bearer ${lovableApiKey}`,
         'Content-Type': 'application/json'
       },
       body: JSON.stringify({
-        model: 'gpt-4o-mini',
+        model: 'google/gemini-2.5-flash',
         messages: [{
           role: 'user',
           content: [
             {
               type: 'text',
-              text: `Analizza questa fattura italiana ed estrai i seguenti dati in formato JSON:
+              text: `Sei un esperto di contabilità italiana. Analizza questa fattura ed estrai i seguenti dati in formato JSON:
+
 {
-  "invoice_number": "numero fattura (es. 94/2025)",
-  "supplier_name": "nome completo fornitore/azienda emittente (es. Horeca Consulting Srl)",
-  "amount": numero importo totale IVA inclusa (solo il numero, es. 1250.50),
-  "invoice_date": "data fattura formato YYYY-MM-DD (es. 2025-01-15)"
+  "invoice_number": "numero fattura completo (es. 94/2025, FA-123, etc.)",
+  "supplier_name": "ragione sociale completa del fornitore che EMETTE la fattura",
+  "amount": importo totale documento IVA INCLUSA (solo numero decimale, es. 1250.50),
+  "invoice_date": "data fattura in formato YYYY-MM-DD"
 }
 
-IMPORTANTE:
-- Estrai l'importo TOTALE della fattura (totale fattura o totale documento), non l'imponibile
-- Il fornitore è chi EMETTE la fattura, non chi la riceve
-- Rispondi SOLO con il JSON, nessun altro testo`
+ISTRUZIONI CRITICHE:
+1. Il FORNITORE è chi EMETTE la fattura (cerca "Da:", intestazione, logo azienda in alto)
+2. L'IMPORTO deve essere il TOTALE DOCUMENTO o TOTALE FATTURA (inclusa IVA), NON l'imponibile
+3. Se vedi "Totale documento", "Totale fattura", "Importo totale" usa quello
+4. La DATA è la data di emissione della fattura
+5. Rispondi SOLO con il JSON valido, nessun altro testo o spiegazione`
             },
             {
               type: 'image_url',
-              image_url: { url: `data:application/pdf;base64,${base64Data}` }
+              image_url: { url: `data:${mimeType};base64,${base64Data}` }
             }
           ]
-        }],
-        max_tokens: 500
+        }]
       })
     });
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('OpenAI API error:', response.status, errorText);
-      throw new Error(`OpenAI API error: ${response.status}`);
+      console.error('Lovable AI error:', response.status, errorText);
+      
+      if (response.status === 429) {
+        throw new Error('Rate limit superato - riprova tra qualche secondo');
+      }
+      if (response.status === 402) {
+        throw new Error('Quota Lovable AI esaurita');
+      }
+      throw new Error(`Lovable AI error: ${response.status}`);
     }
 
     const result = await response.json();
-    console.log('OpenAI response:', JSON.stringify(result.choices?.[0]?.message?.content));
-    
     const content = result.choices?.[0]?.message?.content || '';
+    
+    console.log('Lovable AI raw response:', content);
     
     // Parse JSON from response (handle markdown code blocks)
     let jsonStr = content.trim();
@@ -142,15 +157,37 @@ IMPORTANTE:
       jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
     
+    // Try to extract JSON from response if it contains other text
+    const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      jsonStr = jsonMatch[0];
+    }
+    
     const extracted = JSON.parse(jsonStr);
     
     console.log('Extracted data:', JSON.stringify(extracted));
 
+    // Validate and clean extracted data
+    const invoiceNumber = extracted.invoice_number || `PDF-${Date.now()}`;
+    const supplierName = extracted.supplier_name || 'Fornitore Sconosciuto';
+    let amount = 0;
+    
+    if (typeof extracted.amount === 'number') {
+      amount = extracted.amount;
+    } else if (typeof extracted.amount === 'string') {
+      // Handle Italian number format (1.234,56)
+      amount = parseFloat(extracted.amount.replace(/\./g, '').replace(',', '.')) || 0;
+    }
+    
+    const invoiceDate = extracted.invoice_date || new Date().toISOString().split('T')[0];
+
+    console.log(`Successfully extracted: ${supplierName}, €${amount}, ${invoiceNumber}, ${invoiceDate}`);
+
     return {
-      invoice_number: extracted.invoice_number || `PDF-${Date.now()}`,
-      invoice_date: extracted.invoice_date || new Date().toISOString().split('T')[0],
-      supplier_name: extracted.supplier_name || 'Fornitore Sconosciuto',
-      amount: typeof extracted.amount === 'number' ? extracted.amount : parseFloat(String(extracted.amount).replace(',', '.')) || 0,
+      invoice_number: invoiceNumber,
+      invoice_date: invoiceDate,
+      supplier_name: supplierName,
+      amount: amount,
       currency: 'EUR',
       raw_data: { ai_extracted: true, original_filename: fileName, ai_response: extracted }
     };
