@@ -60,6 +60,7 @@ export default function Fatture() {
   const [isMatchingOpen, setIsMatchingOpen] = useState(false);
   const [isAutoMatching, setIsAutoMatching] = useState(false);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -320,6 +321,48 @@ export default function Fatture() {
     }
   };
 
+  const handleDelete = async (invoice: Invoice) => {
+    if (!confirm(`Sei sicuro di voler eliminare la fattura ${invoice.invoiceNumber}?`)) {
+      return;
+    }
+
+    setDeletingId(invoice.id);
+    
+    try {
+      // Delete from storage first
+      const { error: storageError } = await supabase.storage
+        .from('invoices')
+        .remove([invoice.filePath]);
+
+      if (storageError) {
+        console.warn('Errore eliminazione file:', storageError);
+      }
+
+      // Delete from database
+      const { error: dbError } = await supabase
+        .from('invoices')
+        .delete()
+        .eq('id', invoice.id);
+
+      if (dbError) throw dbError;
+
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+
+      toast({
+        title: "Fattura eliminata",
+        description: `La fattura ${invoice.invoiceNumber} è stata eliminata.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Errore",
+        description: error instanceof Error ? error.message : "Errore durante l'eliminazione",
+        variant: "destructive",
+      });
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   // Stats
   const totalInvoices = invoices.length;
   const matchedCount = invoices.filter((i) => i.matchStatus === "matched").length;
@@ -475,7 +518,9 @@ export default function Fatture() {
         onView={handleView}
         onMatch={handleMatch}
         onReprocess={handleReprocess}
+        onDelete={handleDelete}
         reprocessingId={reprocessingId}
+        deletingId={deletingId}
         isLoading={isLoading}
       />
 

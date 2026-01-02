@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Eye, Link2, CheckCircle2, Clock, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
+import { Search, Eye, Link2, CheckCircle2, Clock, AlertTriangle, RefreshCw, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Invoice {
@@ -39,11 +39,13 @@ interface InvoiceTableProps {
   onView: (invoice: Invoice) => void;
   onMatch: (invoice: Invoice) => void;
   onReprocess?: (invoice: Invoice) => void;
+  onDelete?: (invoice: Invoice) => void;
   reprocessingId?: string | null;
+  deletingId?: string | null;
   isLoading?: boolean;
 }
 
-export function InvoiceTable({ invoices, onView, onMatch, onReprocess, reprocessingId, isLoading }: InvoiceTableProps) {
+export function InvoiceTable({ invoices, onView, onMatch, onReprocess, onDelete, reprocessingId, deletingId, isLoading }: InvoiceTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
@@ -190,6 +192,22 @@ export function InvoiceTable({ invoices, onView, onMatch, onReprocess, reprocess
                               <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
                               <RefreshCw className="h-4 w-4" />
+                            )}
+                          </Button>
+                        )}
+                        {onDelete && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onDelete(invoice)}
+                            disabled={deletingId === invoice.id}
+                            title="Elimina fattura"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                          >
+                            {deletingId === invoice.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <Trash2 className="h-4 w-4" />
                             )}
                           </Button>
                         )}
