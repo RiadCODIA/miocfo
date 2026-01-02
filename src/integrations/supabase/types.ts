@@ -35,6 +35,45 @@ export type Database = {
         }
         Relationships: []
       }
+      alerts: {
+        Row: {
+          alert_type: string
+          created_at: string | null
+          description: string | null
+          id: string
+          priority: string | null
+          resolved_at: string | null
+          status: string | null
+          title: string
+          type: string
+          updated_at: string | null
+        }
+        Insert: {
+          alert_type: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          priority?: string | null
+          resolved_at?: string | null
+          status?: string | null
+          title: string
+          type: string
+          updated_at?: string | null
+        }
+        Update: {
+          alert_type?: string
+          created_at?: string | null
+          description?: string | null
+          id?: string
+          priority?: string | null
+          resolved_at?: string | null
+          status?: string | null
+          title?: string
+          type?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       bank_accounts: {
         Row: {
           account_name: string | null
@@ -151,6 +190,42 @@ export type Database = {
           },
         ]
       }
+      budgets: {
+        Row: {
+          actual_expenses: number | null
+          actual_income: number | null
+          created_at: string | null
+          id: string
+          month: string
+          notes: string | null
+          predicted_expenses: number | null
+          predicted_income: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          actual_expenses?: number | null
+          actual_income?: number | null
+          created_at?: string | null
+          id?: string
+          month: string
+          notes?: string | null
+          predicted_expenses?: number | null
+          predicted_income?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          actual_expenses?: number | null
+          actual_income?: number | null
+          created_at?: string | null
+          id?: string
+          month?: string
+          notes?: string | null
+          predicted_expenses?: number | null
+          predicted_income?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       cost_categories: {
         Row: {
           cashflow_type: Database["public"]["Enums"]["cashflow_type"] | null
@@ -191,6 +266,50 @@ export type Database = {
             columns: ["parent_id"]
             isOneToOne: false
             referencedRelation: "cost_categories"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      deadlines: {
+        Row: {
+          amount: number
+          created_at: string | null
+          description: string
+          due_date: string
+          id: string
+          invoice_id: string | null
+          status: string | null
+          type: string
+          updated_at: string | null
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          description: string
+          due_date: string
+          id?: string
+          invoice_id?: string | null
+          status?: string | null
+          type: string
+          updated_at?: string | null
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          description?: string
+          due_date?: string
+          id?: string
+          invoice_id?: string | null
+          status?: string | null
+          type?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "deadlines_invoice_id_fkey"
+            columns: ["invoice_id"]
+            isOneToOne: false
+            referencedRelation: "invoices"
             referencedColumns: ["id"]
           },
         ]
