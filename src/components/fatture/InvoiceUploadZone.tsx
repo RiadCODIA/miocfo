@@ -1,7 +1,10 @@
 import { useCallback, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
-import { Upload, FileText, X, Loader2 } from "lucide-react";
+import { Upload, FileText, X, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useToast } from "@/hooks/use-toast";
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit per Edge Functions
 
 export interface UploadedInvoice {
   id: string;
@@ -15,6 +18,7 @@ export interface UploadedInvoice {
     supplier: string;
   };
   status: "uploading" | "processing" | "ready" | "error";
+  errorMessage?: string;
 }
 
 interface InvoiceUploadZoneProps {
@@ -25,6 +29,30 @@ interface InvoiceUploadZoneProps {
 
 export function InvoiceUploadZone({ onUpload, uploadingFiles, onRemoveFile }: InvoiceUploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
+  const { toast } = useToast();
+
+  const validateFiles = (files: File[]): File[] => {
+    const validFiles: File[] = [];
+    const invalidFiles: { name: string; size: number }[] = [];
+
+    files.forEach(file => {
+      if (file.size > MAX_FILE_SIZE) {
+        invalidFiles.push({ name: file.name, size: file.size });
+      } else {
+        validFiles.push(file);
+      }
+    });
+
+    if (invalidFiles.length > 0) {
+      toast({
+        title: "File troppo grandi",
+        description: `${invalidFiles.map(f => f.name).join(", ")} supera il limite di 5MB. Riduci la dimensione del file.`,
+        variant: "destructive",
+      });
+    }
+
+    return validFiles;
+  };
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -40,15 +68,21 @@ export function InvoiceUploadZone({ onUpload, uploadingFiles, onRemoveFile }: In
     e.preventDefault();
     setIsDragging(false);
     const files = Array.from(e.dataTransfer.files);
-    onUpload(files);
-  }, [onUpload]);
+    const validFiles = validateFiles(files);
+    if (validFiles.length > 0) {
+      onUpload(validFiles);
+    }
+  }, [onUpload, toast]);
 
   const handleFileInput = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files) {
       const files = Array.from(e.target.files);
-      onUpload(files);
+      const validFiles = validateFiles(files);
+      if (validFiles.length > 0) {
+        onUpload(validFiles);
+      }
     }
-  }, [onUpload]);
+  }, [onUpload, toast]);
 
   const formatFileSize = (bytes: number) => {
     if (bytes < 1024) return `${bytes} B`;
@@ -99,7 +133,7 @@ export function InvoiceUploadZone({ onUpload, uploadingFiles, onRemoveFile }: In
               </p>
             </div>
             <p className="text-xs text-muted-foreground">
-              PDF, CSV, ZIP, PNG, JPG fino a 10MB
+            PDF, CSV, ZIP, PNG, JPG fino a 5MB
             </p>
           </div>
         </label>
