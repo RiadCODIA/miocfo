@@ -1,6 +1,8 @@
-import { AlertTriangle, TrendingDown, Clock, CheckCircle, Bell, Filter } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, TrendingDown, Clock, CheckCircle, Bell, X, Check } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
   TableBody,
@@ -17,65 +19,86 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
+import { useAlerts, useActiveAlertsCount, useResolveAlert, useDismissAlert, Alert } from "@/hooks/useAlerts";
+import { format } from "date-fns";
+import { it } from "date-fns/locale";
+import { toast } from "sonner";
 
-const alerts = [
-  { id: 1, tipo: "Liquidità", descrizione: "Il saldo previsto per il 15/02 scende sotto la soglia di €10.000", livello: "alto", stato: "attivo", data: "18/12/2024" },
-  { id: 2, tipo: "Scadenza", descrizione: "3 fatture in scadenza nei prossimi 5 giorni per un totale di €21.500", livello: "medio", stato: "attivo", data: "17/12/2024" },
-  { id: 3, tipo: "Budget", descrizione: "Superamento budget marketing del 15% nel mese corrente", livello: "medio", stato: "attivo", data: "16/12/2024" },
-  { id: 4, tipo: "Cashflow", descrizione: "Cashflow positivo per il terzo mese consecutivo", livello: "info", stato: "risolto", data: "15/12/2024" },
-  { id: 5, tipo: "Incasso", descrizione: "Fattura #1234 non incassata dopo 60 giorni dalla scadenza", livello: "alto", stato: "attivo", data: "14/12/2024" },
-  { id: 6, tipo: "Fornitore", descrizione: "Pagamento fornitore XYZ in ritardo di 15 giorni", livello: "medio", stato: "risolto", data: "10/12/2024" },
-  { id: 7, tipo: "KPI", descrizione: "DSO aumentato del 20% rispetto al trimestre precedente", livello: "medio", stato: "monitorato", data: "08/12/2024" },
-  { id: 8, tipo: "Anomalia", descrizione: "Movimento bancario non categorizzato superiore a €5.000", livello: "basso", stato: "attivo", data: "05/12/2024" },
-];
-
-const getAlertIcon = (tipo: string) => {
-  switch (tipo) {
-    case "Liquidità":
-    case "Budget":
+const getAlertIcon = (alertType: string) => {
+  switch (alertType.toLowerCase()) {
+    case "liquidità":
+    case "liquidity":
+    case "budget":
       return TrendingDown;
-    case "Scadenza":
-    case "Incasso":
+    case "scadenza":
+    case "deadline":
+    case "incasso":
       return Clock;
-    case "Cashflow":
-    case "KPI":
+    case "cashflow":
+    case "kpi":
       return CheckCircle;
     default:
       return AlertTriangle;
   }
 };
 
-const getLevelBadge = (livello: string) => {
-  switch (livello) {
-    case "alto":
+const getLevelBadge = (priority: string) => {
+  switch (priority) {
+    case "high":
       return <Badge className="bg-destructive/10 text-destructive border-destructive/20">Alto</Badge>;
-    case "medio":
+    case "medium":
       return <Badge className="bg-warning/10 text-warning border-warning/20">Medio</Badge>;
-    case "basso":
+    case "low":
       return <Badge className="bg-primary/10 text-primary border-primary/20">Basso</Badge>;
-    case "info":
-      return <Badge className="bg-success/10 text-success border-success/20">Info</Badge>;
     default:
-      return <Badge variant="outline">{livello}</Badge>;
+      return <Badge variant="outline">{priority}</Badge>;
   }
 };
 
-const getStatoBadge = (stato: string) => {
-  switch (stato) {
-    case "attivo":
+const getStatoBadge = (status: string) => {
+  switch (status) {
+    case "active":
       return <Badge className="bg-destructive/10 text-destructive border-destructive/20">Attivo</Badge>;
-    case "risolto":
+    case "resolved":
       return <Badge className="bg-success/10 text-success border-success/20">Risolto</Badge>;
-    case "monitorato":
-      return <Badge className="bg-warning/10 text-warning border-warning/20">Monitorato</Badge>;
+    case "dismissed":
+      return <Badge className="bg-muted/10 text-muted-foreground border-muted/20">Ignorato</Badge>;
     default:
-      return <Badge variant="outline">{stato}</Badge>;
+      return <Badge variant="outline">{status}</Badge>;
   }
 };
 
 export default function AlertNotifiche() {
-  const alertAttivi = alerts.filter(a => a.stato === "attivo").length;
-  const alertAlti = alerts.filter(a => a.livello === "alto" && a.stato === "attivo").length;
+  const [statusFilter, setStatusFilter] = useState<"all" | "active" | "resolved" | "dismissed">("active");
+  const [priorityFilter, setPriorityFilter] = useState<"all" | "high" | "medium" | "low">("all");
+  const [typeFilter, setTypeFilter] = useState("all");
+
+  const { data: alerts, isLoading } = useAlerts({ 
+    status: statusFilter,
+    priority: priorityFilter,
+    alertType: typeFilter !== "all" ? typeFilter : undefined 
+  });
+  const { data: counts } = useActiveAlertsCount();
+  const resolveAlert = useResolveAlert();
+  const dismissAlert = useDismissAlert();
+
+  const handleResolve = async (alertId: string) => {
+    try {
+      await resolveAlert.mutateAsync(alertId);
+      toast.success("Alert risolto");
+    } catch {
+      toast.error("Errore durante la risoluzione");
+    }
+  };
+
+  const handleDismiss = async (alertId: string) => {
+    try {
+      await dismissAlert.mutateAsync(alertId);
+      toast.success("Alert ignorato");
+    } catch {
+      toast.error("Errore durante l'operazione");
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -96,7 +119,7 @@ export default function AlertNotifiche() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Alert Attivi</p>
-              <p className="text-2xl font-bold text-foreground">{alertAttivi}</p>
+              <p className="text-2xl font-bold text-foreground">{counts?.total || 0}</p>
             </div>
           </div>
         </div>
@@ -107,7 +130,7 @@ export default function AlertNotifiche() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Priorità Alta</p>
-              <p className="text-2xl font-bold text-destructive">{alertAlti}</p>
+              <p className="text-2xl font-bold text-destructive">{counts?.highPriority || 0}</p>
             </div>
           </div>
         </div>
@@ -118,7 +141,7 @@ export default function AlertNotifiche() {
             </div>
             <div>
               <p className="text-sm text-muted-foreground">Risolti Questo Mese</p>
-              <p className="text-2xl font-bold text-success">12</p>
+              <p className="text-2xl font-bold text-success">-</p>
             </div>
           </div>
         </div>
@@ -126,40 +149,40 @@ export default function AlertNotifiche() {
 
       {/* Filters */}
       <div className="flex flex-wrap gap-3 opacity-0 animate-fade-in" style={{ animationDelay: "150ms" }}>
-        <Select defaultValue="all">
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-[160px] bg-card border-border">
             <SelectValue placeholder="Tipo" />
           </SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Tutti i tipi</SelectItem>
-            <SelectItem value="liquidita">Liquidità</SelectItem>
+            <SelectItem value="liquidità">Liquidità</SelectItem>
             <SelectItem value="scadenza">Scadenza</SelectItem>
             <SelectItem value="budget">Budget</SelectItem>
             <SelectItem value="cashflow">Cashflow</SelectItem>
           </SelectContent>
         </Select>
 
-        <Select defaultValue="all">
+        <Select value={priorityFilter} onValueChange={(v) => setPriorityFilter(v as typeof priorityFilter)}>
           <SelectTrigger className="w-[160px] bg-card border-border">
             <SelectValue placeholder="Livello" />
           </SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Tutti i livelli</SelectItem>
-            <SelectItem value="alto">Alto</SelectItem>
-            <SelectItem value="medio">Medio</SelectItem>
-            <SelectItem value="basso">Basso</SelectItem>
+            <SelectItem value="high">Alto</SelectItem>
+            <SelectItem value="medium">Medio</SelectItem>
+            <SelectItem value="low">Basso</SelectItem>
           </SelectContent>
         </Select>
 
-        <Select defaultValue="attivo">
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
           <SelectTrigger className="w-[160px] bg-card border-border">
             <SelectValue placeholder="Stato" />
           </SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Tutti gli stati</SelectItem>
-            <SelectItem value="attivo">Attivo</SelectItem>
-            <SelectItem value="monitorato">Monitorato</SelectItem>
-            <SelectItem value="risolto">Risolto</SelectItem>
+            <SelectItem value="active">Attivo</SelectItem>
+            <SelectItem value="resolved">Risolto</SelectItem>
+            <SelectItem value="dismissed">Ignorato</SelectItem>
           </SelectContent>
         </Select>
       </div>
@@ -174,38 +197,91 @@ export default function AlertNotifiche() {
               <TableHead className="text-muted-foreground">Livello Rischio</TableHead>
               <TableHead className="text-muted-foreground">Stato</TableHead>
               <TableHead className="text-muted-foreground">Data</TableHead>
+              <TableHead className="text-muted-foreground w-[120px]">Azioni</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {alerts.map((alert, index) => {
-              const Icon = getAlertIcon(alert.tipo);
-              return (
-                <TableRow
-                  key={alert.id}
-                  className="border-border hover:bg-secondary/50 opacity-0 animate-fade-in"
-                  style={{ animationDelay: `${300 + index * 50}ms` }}
-                >
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Icon className={cn(
-                        "h-4 w-4",
-                        alert.livello === "alto" && "text-destructive",
-                        alert.livello === "medio" && "text-warning",
-                        alert.livello === "basso" && "text-primary",
-                        alert.livello === "info" && "text-success"
-                      )} />
-                      <span className="font-medium">{alert.tipo}</span>
-                    </div>
-                  </TableCell>
-                  <TableCell className="max-w-[400px]">
-                    <p className="text-sm text-muted-foreground truncate">{alert.descrizione}</p>
-                  </TableCell>
-                  <TableCell>{getLevelBadge(alert.livello)}</TableCell>
-                  <TableCell>{getStatoBadge(alert.stato)}</TableCell>
-                  <TableCell className="text-muted-foreground">{alert.data}</TableCell>
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i} className="border-border">
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-64" /></TableCell>
+                  <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                  <TableCell><Skeleton className="h-6 w-16" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-8 w-16" /></TableCell>
                 </TableRow>
-              );
-            })}
+              ))
+            ) : alerts?.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={6} className="h-32 text-center">
+                  <div className="text-muted-foreground">
+                    <CheckCircle className="h-8 w-8 mx-auto mb-2 text-success" />
+                    <p>Nessun alert trovato</p>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : (
+              alerts?.map((alert, index) => {
+                const Icon = getAlertIcon(alert.alertType);
+                return (
+                  <TableRow
+                    key={alert.id}
+                    className="border-border hover:bg-secondary/50 opacity-0 animate-fade-in"
+                    style={{ animationDelay: `${300 + index * 50}ms` }}
+                  >
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Icon className={cn(
+                          "h-4 w-4",
+                          alert.priority === "high" && "text-destructive",
+                          alert.priority === "medium" && "text-warning",
+                          alert.priority === "low" && "text-primary"
+                        )} />
+                        <span className="font-medium capitalize">{alert.alertType}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-[400px]">
+                      <div>
+                        <p className="text-sm font-medium text-foreground">{alert.title}</p>
+                        {alert.description && (
+                          <p className="text-xs text-muted-foreground truncate">{alert.description}</p>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>{getLevelBadge(alert.priority)}</TableCell>
+                    <TableCell>{getStatoBadge(alert.status)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {format(new Date(alert.createdAt), "dd/MM/yyyy", { locale: it })}
+                    </TableCell>
+                    <TableCell>
+                      {alert.status === "active" && (
+                        <div className="flex gap-1">
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 hover:bg-success/20"
+                            onClick={() => handleResolve(alert.id)}
+                            disabled={resolveAlert.isPending}
+                          >
+                            <Check className="h-4 w-4 text-success" />
+                          </Button>
+                          <Button 
+                            variant="ghost" 
+                            size="icon" 
+                            className="h-8 w-8 hover:bg-destructive/20"
+                            onClick={() => handleDismiss(alert.id)}
+                            disabled={dismissAlert.isPending}
+                          >
+                            <X className="h-4 w-4 text-muted-foreground" />
+                          </Button>
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                );
+              })
+            )}
           </TableBody>
         </Table>
       </div>

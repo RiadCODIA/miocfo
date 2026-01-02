@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Filter, Download, Edit2, Check, X } from "lucide-react";
+import { Search, Filter, Download, Edit2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,33 +18,32 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-
-const transactions = [
-  { id: 1, data: "18/12/2024", descrizione: "Fattura Cliente ABC Srl", importo: 12500, conto: "Conto Principale", categoria: "Vendite", stato: "automatica" },
-  { id: 2, data: "17/12/2024", descrizione: "Pagamento fornitore XYZ", importo: -3200, conto: "Conto Operativo", categoria: "Fornitori", stato: "automatica" },
-  { id: 3, data: "16/12/2024", descrizione: "Bonifico stipendi dicembre", importo: -15800, conto: "Conto Principale", categoria: "Personale", stato: "automatica" },
-  { id: 4, data: "15/12/2024", descrizione: "Incasso fattura #1234", importo: 8750, conto: "Conto Principale", categoria: "Vendite", stato: "manuale" },
-  { id: 5, data: "14/12/2024", descrizione: "Canone hosting annuale", importo: -480, conto: "Conto Operativo", categoria: "Servizi IT", stato: "automatica" },
-  { id: 6, data: "13/12/2024", descrizione: "Rimborso spese viaggio", importo: -320, conto: "Conto Operativo", categoria: "Trasferte", stato: "da verificare" },
-  { id: 7, data: "12/12/2024", descrizione: "Acconto cliente DEF SpA", importo: 5000, conto: "Conto Principale", categoria: "Vendite", stato: "automatica" },
-  { id: 8, data: "11/12/2024", descrizione: "Utenze ufficio novembre", importo: -890, conto: "Conto Operativo", categoria: "Utenze", stato: "automatica" },
-];
+import { useTransactions, useBankAccounts } from "@/hooks/useTransactions";
+import { format } from "date-fns";
+import { it } from "date-fns/locale";
 
 export default function Transazioni() {
   const [searchTerm, setSearchTerm] = useState("");
+  const [period, setPeriod] = useState<"all" | "today" | "week" | "month">("all");
+  const [accountId, setAccountId] = useState("all");
+  const [category, setCategory] = useState("all");
 
-  const getStatoBadge = (stato: string) => {
-    switch (stato) {
-      case "automatica":
-        return <Badge className="bg-success/10 text-success border-success/20 hover:bg-success/20">Automatica</Badge>;
-      case "manuale":
-        return <Badge className="bg-primary/10 text-primary border-primary/20 hover:bg-primary/20">Manuale</Badge>;
-      case "da verificare":
-        return <Badge className="bg-warning/10 text-warning border-warning/20 hover:bg-warning/20">Da verificare</Badge>;
-      default:
-        return <Badge variant="outline">{stato}</Badge>;
+  const { data: transactions, isLoading } = useTransactions({
+    searchTerm,
+    period,
+    accountId,
+    category,
+  });
+
+  const { data: accounts } = useBankAccounts();
+
+  const getStatoBadge = (pending: boolean) => {
+    if (pending) {
+      return <Badge className="bg-warning/10 text-warning border-warning/20 hover:bg-warning/20">In attesa</Badge>;
     }
+    return <Badge className="bg-success/10 text-success border-success/20 hover:bg-success/20">Completata</Badge>;
   };
 
   return (
@@ -69,7 +68,7 @@ export default function Transazioni() {
           />
         </div>
 
-        <Select defaultValue="all">
+        <Select value={period} onValueChange={(v) => setPeriod(v as typeof period)}>
           <SelectTrigger className="w-[160px] bg-card border-border">
             <SelectValue placeholder="Periodo" />
           </SelectTrigger>
@@ -81,27 +80,30 @@ export default function Transazioni() {
           </SelectContent>
         </Select>
 
-        <Select defaultValue="all">
+        <Select value={accountId} onValueChange={setAccountId}>
           <SelectTrigger className="w-[180px] bg-card border-border">
             <SelectValue placeholder="Conto" />
           </SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Tutti i conti</SelectItem>
-            <SelectItem value="principale">Conto Principale</SelectItem>
-            <SelectItem value="operativo">Conto Operativo</SelectItem>
+            {accounts?.map((account) => (
+              <SelectItem key={account.id} value={account.id}>
+                {account.account_name || account.bank_name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 
-        <Select defaultValue="all">
+        <Select value={category} onValueChange={setCategory}>
           <SelectTrigger className="w-[160px] bg-card border-border">
             <SelectValue placeholder="Categoria" />
           </SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Tutte</SelectItem>
-            <SelectItem value="vendite">Vendite</SelectItem>
-            <SelectItem value="fornitori">Fornitori</SelectItem>
-            <SelectItem value="personale">Personale</SelectItem>
-            <SelectItem value="utenze">Utenze</SelectItem>
+            <SelectItem value="transfer">Trasferimenti</SelectItem>
+            <SelectItem value="payment">Pagamenti</SelectItem>
+            <SelectItem value="food">Alimentari</SelectItem>
+            <SelectItem value="travel">Viaggi</SelectItem>
           </SelectContent>
         </Select>
 
@@ -131,34 +133,61 @@ export default function Transazioni() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {transactions.map((tx, index) => (
-              <TableRow
-                key={tx.id}
-                className="border-border hover:bg-secondary/50 opacity-0 animate-fade-in"
-                style={{ animationDelay: `${300 + index * 50}ms` }}
-              >
-                <TableCell className="font-medium">{tx.data}</TableCell>
-                <TableCell className="max-w-[300px] truncate">{tx.descrizione}</TableCell>
-                <TableCell className={cn(
-                  "text-right font-semibold",
-                  tx.importo > 0 ? "text-success" : "text-destructive"
-                )}>
-                  {tx.importo > 0 ? "+" : ""}€{Math.abs(tx.importo).toLocaleString("it-IT")}
-                </TableCell>
-                <TableCell className="text-muted-foreground">{tx.conto}</TableCell>
-                <TableCell>
-                  <Badge variant="outline" className="border-border">
-                    {tx.categoria}
-                  </Badge>
-                </TableCell>
-                <TableCell>{getStatoBadge(tx.stato)}</TableCell>
-                <TableCell>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary">
-                    <Edit2 className="h-4 w-4 text-muted-foreground" />
-                  </Button>
+            {isLoading ? (
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i} className="border-border">
+                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-48" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-8 w-8" /></TableCell>
+                </TableRow>
+              ))
+            ) : transactions?.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={7} className="h-32 text-center">
+                  <div className="text-muted-foreground">
+                    <p>Nessuna transazione trovata</p>
+                    <p className="text-xs mt-1">Collega un conto bancario per visualizzare le transazioni</p>
+                  </div>
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              transactions?.map((tx, index) => (
+                <TableRow
+                  key={tx.id}
+                  className="border-border hover:bg-secondary/50 opacity-0 animate-fade-in"
+                  style={{ animationDelay: `${300 + index * 50}ms` }}
+                >
+                  <TableCell className="font-medium">
+                    {format(new Date(tx.date), "dd/MM/yyyy", { locale: it })}
+                  </TableCell>
+                  <TableCell className="max-w-[300px] truncate">
+                    {tx.merchantName || tx.name}
+                  </TableCell>
+                  <TableCell className={cn(
+                    "text-right font-semibold",
+                    tx.amount > 0 ? "text-success" : "text-destructive"
+                  )}>
+                    {tx.amount > 0 ? "+" : ""}€{Math.abs(tx.amount).toLocaleString("it-IT")}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{tx.bankName}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="border-border">
+                      {tx.category?.[0] || "N/A"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell>{getStatoBadge(tx.pending)}</TableCell>
+                  <TableCell>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary">
+                      <Edit2 className="h-4 w-4 text-muted-foreground" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
