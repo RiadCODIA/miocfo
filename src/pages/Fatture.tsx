@@ -74,32 +74,61 @@ export default function Fatture() {
     },
   });
 
-  // Upload mutation
+  // Upload mutation - upload diretto a Storage poi process
   const uploadMutation = useMutation({
     mutationFn: async (files: File[]) => {
-      const formData = new FormData();
-      files.forEach(file => formData.append('files', file));
-
-      // Auth opzionale per demo mode
       const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id || `demo-user-${Date.now()}`;
+      
+      const uploadResults = [];
+      
+      for (const file of files) {
+        // 1. Upload diretto a Supabase Storage
+        const storagePath = `${userId}/${Date.now()}-${file.name}`;
+        const { error: uploadError } = await supabase.storage
+          .from('invoices')
+          .upload(storagePath, file, {
+            contentType: file.type || 'application/octet-stream'
+          });
 
-      const response = await fetch(
-        'https://ublsnradzhfpqhunfqbn.supabase.co/functions/v1/process-invoice',
-        {
-          method: 'POST',
-          headers: session?.access_token 
-            ? { 'Authorization': `Bearer ${session.access_token}` }
-            : {},
-          body: formData,
+        if (uploadError) {
+          throw new Error(`Errore upload ${file.name}: ${uploadError.message}`);
         }
-      );
 
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || 'Errore durante l\'elaborazione');
+        // 2. Chiama edge function per processare il file già caricato
+        const response = await fetch(
+          'https://ublsnradzhfpqhunfqbn.supabase.co/functions/v1/process-invoice',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              ...(session?.access_token 
+                ? { 'Authorization': `Bearer ${session.access_token}` }
+                : {}),
+            },
+            body: JSON.stringify({
+              storagePath,
+              fileName: file.name,
+              fileType: file.type,
+              userId
+            }),
+          }
+        );
+
+        if (!response.ok) {
+          const errorData = await response.json();
+          throw new Error(errorData.error || 'Errore durante l\'elaborazione');
+        }
+
+        const result = await response.json();
+        uploadResults.push(result);
       }
 
-      return response.json();
+      return {
+        processed: uploadResults.length,
+        total_invoices: uploadResults.reduce((sum, r) => sum + (r.invoices_count || 1), 0),
+        results: uploadResults
+      };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
