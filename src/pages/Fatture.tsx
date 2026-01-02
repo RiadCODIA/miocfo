@@ -3,76 +3,119 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import {
   FileText,
-  Upload,
   CheckCircle2,
   Clock,
   AlertTriangle,
   Euro,
   Sparkles,
+  Loader2,
+  Users,
 } from "lucide-react";
 import { InvoiceUploadZone, UploadedInvoice } from "@/components/fatture/InvoiceUploadZone";
 import { InvoiceTable, Invoice } from "@/components/fatture/InvoiceTable";
 import { InvoiceMatchingModal } from "@/components/fatture/InvoiceMatchingModal";
 import { InvoicePreview } from "@/components/fatture/InvoicePreview";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
 
-const mockInvoices: Invoice[] = [
-  {
-    id: "1",
-    invoiceNumber: "FT-2024-001",
-    date: new Date("2024-01-15"),
-    supplier: "ABC Forniture Srl",
-    amount: 1250.00,
-    matchStatus: "matched",
-    matchedTransactionId: "TRX-001",
-    fileName: "fattura_abc_001.pdf",
-  },
-  {
-    id: "2",
-    invoiceNumber: "FT-2024-002",
-    date: new Date("2024-01-18"),
-    supplier: "XYZ Servizi SpA",
-    amount: 3450.00,
-    matchStatus: "pending",
-    fileName: "fattura_xyz_002.pdf",
-  },
-  {
-    id: "3",
-    invoiceNumber: "FT-2024-003",
-    date: new Date("2024-01-20"),
-    supplier: "Tech Solutions",
-    amount: 890.50,
-    matchStatus: "discrepancy",
-    fileName: "fattura_tech_003.pdf",
-  },
-  {
-    id: "4",
-    invoiceNumber: "FT-2024-004",
-    date: new Date("2024-01-22"),
-    supplier: "Office Pro",
-    amount: 567.00,
-    matchStatus: "pending",
-    fileName: "fattura_office_004.pdf",
-  },
-  {
-    id: "5",
-    invoiceNumber: "FT-2024-005",
-    date: new Date("2024-01-25"),
-    supplier: "Marketing Agency",
-    amount: 2100.00,
-    matchStatus: "matched",
-    matchedTransactionId: "TRX-005",
-    fileName: "fattura_marketing_005.pdf",
-  },
-];
+interface DbInvoice {
+  id: string;
+  invoice_number: string;
+  invoice_date: string;
+  supplier_name: string;
+  amount: number;
+  currency: string;
+  match_status: string;
+  matched_transaction_id: string | null;
+  file_name: string;
+  file_path: string;
+  file_type: string | null;
+  raw_data: Record<string, unknown> | null;
+  created_at: string;
+  updated_at: string;
+  user_id: string;
+}
+
+// Transform database invoice to frontend format
+function transformInvoice(dbInvoice: DbInvoice): Invoice {
+  return {
+    id: dbInvoice.id,
+    invoiceNumber: dbInvoice.invoice_number,
+    date: new Date(dbInvoice.invoice_date),
+    supplier: dbInvoice.supplier_name,
+    amount: Number(dbInvoice.amount),
+    matchStatus: dbInvoice.match_status as "matched" | "pending" | "discrepancy",
+    matchedTransactionId: dbInvoice.matched_transaction_id || undefined,
+    fileName: dbInvoice.file_name,
+  };
+}
 
 export default function Fatture() {
-  const [invoices, setInvoices] = useState<Invoice[]>(mockInvoices);
   const [uploadingFiles, setUploadingFiles] = useState<UploadedInvoice[]>([]);
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [isMatchingOpen, setIsMatchingOpen] = useState(false);
+  const [isAutoMatching, setIsAutoMatching] = useState(false);
   const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  // Fetch invoices from database
+  const { data: invoices = [], isLoading } = useQuery({
+    queryKey: ['invoices'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('invoices')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      return (data as DbInvoice[]).map(transformInvoice);
+    },
+  });
+
+  // Upload mutation
+  const uploadMutation = useMutation({
+    mutationFn: async (files: File[]) => {
+      const formData = new FormData();
+      files.forEach(file => formData.append('files', file));
+
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) throw new Error('Devi effettuare il login');
+
+      const response = await fetch(
+        'https://ublsnradzhfpqhunfqbn.supabase.co/functions/v1/process-invoice',
+        {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${session.access_token}`,
+          },
+          body: formData,
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Errore durante l\'elaborazione');
+      }
+
+      return response.json();
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      toast({
+        title: "Fatture elaborate",
+        description: `${data.total_invoices} fatture estratte da ${data.processed} file.`,
+      });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Errore",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   const handleUpload = async (files: File[]) => {
     const newUploads: UploadedInvoice[] = files.map((file) => ({
@@ -85,36 +128,27 @@ export default function Fatture() {
 
     setUploadingFiles((prev) => [...prev, ...newUploads]);
 
-    // Simulate upload and processing
-    for (const upload of newUploads) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      
+    try {
+      // Update status to processing
       setUploadingFiles((prev) =>
         prev.map((f) =>
-          f.id === upload.id ? { ...f, status: "processing" as const } : f
+          newUploads.some(u => u.id === f.id) ? { ...f, status: "processing" as const } : f
         )
       );
 
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      await uploadMutation.mutateAsync(files);
 
-      // Create extracted invoice
-      const extractedInvoice: Invoice = {
-        id: `inv-${Date.now()}`,
-        invoiceNumber: `FT-2024-${String(invoices.length + 1).padStart(3, "0")}`,
-        date: new Date(),
-        supplier: "Nuovo Fornitore",
-        amount: Math.random() * 5000 + 100,
-        matchStatus: "pending",
-        fileName: upload.fileName,
-      };
-
-      setInvoices((prev) => [extractedInvoice, ...prev]);
-      setUploadingFiles((prev) => prev.filter((f) => f.id !== upload.id));
-
-      toast({
-        title: "Fattura elaborata",
-        description: `${upload.fileName} è stata caricata e i dati sono stati estratti.`,
-      });
+      // Clear upload queue on success
+      setUploadingFiles((prev) =>
+        prev.filter((f) => !newUploads.some(u => u.id === f.id))
+      );
+    } catch (error) {
+      // Mark as error
+      setUploadingFiles((prev) =>
+        prev.map((f) =>
+          newUploads.some(u => u.id === f.id) ? { ...f, status: "error" as const } : f
+        )
+      );
     }
   };
 
@@ -132,41 +166,89 @@ export default function Fatture() {
     setIsMatchingOpen(true);
   };
 
-  const handleConfirmMatch = (invoiceId: string, transactionId: string) => {
-    setInvoices((prev) =>
-      prev.map((inv) =>
-        inv.id === invoiceId
-          ? { ...inv, matchStatus: "matched" as const, matchedTransactionId: transactionId }
-          : inv
-      )
-    );
-    toast({
-      title: "Abbinamento confermato",
-      description: "La fattura è stata abbinata alla transazione.",
-    });
+  const handleConfirmMatch = async (invoiceId: string, transactionId: string) => {
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ 
+          match_status: 'matched',
+          matched_transaction_id: transactionId 
+        })
+        .eq('id', invoiceId);
+
+      if (error) throw error;
+
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      
+      toast({
+        title: "Abbinamento confermato",
+        description: "La fattura è stata abbinata alla transazione.",
+      });
+    } catch (error) {
+      toast({
+        title: "Errore",
+        description: "Impossibile salvare l'abbinamento.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleAutoMatch = async () => {
+    setIsAutoMatching(true);
+    
     toast({
       title: "Abbinamento automatico",
       description: "Analisi delle fatture in corso...",
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    try {
+      // Fetch bank transactions for matching
+      const { data: transactions } = await supabase
+        .from('bank_transactions')
+        .select('*')
+        .order('date', { ascending: false });
 
-    // Simulate auto-matching some invoices
-    setInvoices((prev) =>
-      prev.map((inv) =>
-        inv.matchStatus === "pending" && Math.random() > 0.5
-          ? { ...inv, matchStatus: "matched" as const, matchedTransactionId: `TRX-AUTO-${Date.now()}` }
-          : inv
-      )
-    );
+      const pendingInvoices = invoices.filter(i => i.matchStatus === 'pending');
+      let matchedCount = 0;
 
-    toast({
-      title: "Abbinamento completato",
-      description: "Le fatture compatibili sono state abbinate automaticamente.",
-    });
+      for (const invoice of pendingInvoices) {
+        // Find matching transaction by amount (within 1% tolerance)
+        const matchingTx = transactions?.find(tx => {
+          const amountDiff = Math.abs(Math.abs(Number(tx.amount)) - invoice.amount);
+          const tolerance = invoice.amount * 0.01;
+          return amountDiff <= tolerance;
+        });
+
+        if (matchingTx) {
+          const { error } = await supabase
+            .from('invoices')
+            .update({ 
+              match_status: 'matched',
+              matched_transaction_id: matchingTx.id 
+            })
+            .eq('id', invoice.id);
+
+          if (!error) matchedCount++;
+        }
+      }
+
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+
+      toast({
+        title: "Abbinamento completato",
+        description: matchedCount > 0 
+          ? `${matchedCount} fatture abbinate automaticamente.`
+          : "Nessuna corrispondenza trovata. Prova l'abbinamento manuale.",
+      });
+    } catch (error) {
+      toast({
+        title: "Errore",
+        description: "Errore durante l'abbinamento automatico.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsAutoMatching(false);
+    }
   };
 
   // Stats
@@ -178,6 +260,20 @@ export default function Fatture() {
     .filter((i) => i.matchStatus !== "matched")
     .reduce((sum, i) => sum + i.amount, 0);
 
+  // Supplier summary
+  const supplierSummary = invoices.reduce((acc, inv) => {
+    if (!acc[inv.supplier]) {
+      acc[inv.supplier] = { count: 0, total: 0 };
+    }
+    acc[inv.supplier].count++;
+    acc[inv.supplier].total += inv.amount;
+    return acc;
+  }, {} as Record<string, { count: number; total: number }>);
+
+  const topSuppliers = Object.entries(supplierSummary)
+    .sort((a, b) => b[1].total - a[1].total)
+    .slice(0, 5);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -188,8 +284,12 @@ export default function Fatture() {
             Carica e gestisci le fatture ricevute
           </p>
         </div>
-        <Button onClick={handleAutoMatch}>
-          <Sparkles className="h-4 w-4 mr-2" />
+        <Button onClick={handleAutoMatch} disabled={isAutoMatching || pendingCount === 0}>
+          {isAutoMatching ? (
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4 mr-2" />
+          )}
           Abbina automaticamente
         </Button>
       </div>
@@ -204,7 +304,9 @@ export default function Fatture() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Totale fatture</p>
-                <p className="text-2xl font-bold text-foreground">{totalInvoices}</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {isLoading ? "-" : totalInvoices}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -217,7 +319,9 @@ export default function Fatture() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">Abbinate</p>
-                <p className="text-2xl font-bold text-foreground">{matchedCount}</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {isLoading ? "-" : matchedCount}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -230,7 +334,9 @@ export default function Fatture() {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground">In attesa</p>
-                <p className="text-2xl font-bold text-foreground">{pendingCount}</p>
+                <p className="text-2xl font-bold text-foreground">
+                  {isLoading ? "-" : pendingCount}
+                </p>
               </div>
             </div>
           </CardContent>
@@ -244,7 +350,7 @@ export default function Fatture() {
               <div>
                 <p className="text-sm text-muted-foreground">Non riconciliato</p>
                 <p className="text-xl font-bold text-foreground">
-                  {new Intl.NumberFormat("it-IT", {
+                  {isLoading ? "-" : new Intl.NumberFormat("it-IT", {
                     style: "currency",
                     currency: "EUR",
                     maximumFractionDigits: 0,
@@ -255,6 +361,37 @@ export default function Fatture() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Supplier Summary */}
+      {topSuppliers.length > 0 && (
+        <Card>
+          <CardContent className="p-4">
+            <div className="flex items-center gap-2 mb-4">
+              <Users className="h-5 w-5 text-muted-foreground" />
+              <h3 className="font-semibold text-foreground">Riepilogo per Fornitore</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
+              {topSuppliers.map(([supplier, data]) => (
+                <div key={supplier} className="bg-muted/50 rounded-lg p-3">
+                  <p className="font-medium text-sm text-foreground truncate" title={supplier}>
+                    {supplier}
+                  </p>
+                  <p className="text-lg font-bold text-foreground">
+                    {new Intl.NumberFormat("it-IT", {
+                      style: "currency",
+                      currency: "EUR",
+                      maximumFractionDigits: 0,
+                    }).format(data.total)}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {data.count} fattur{data.count === 1 ? 'a' : 'e'}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Upload Zone */}
       <InvoiceUploadZone
@@ -268,6 +405,7 @@ export default function Fatture() {
         invoices={invoices}
         onView={handleView}
         onMatch={handleMatch}
+        isLoading={isLoading}
       />
 
       {/* Modals */}

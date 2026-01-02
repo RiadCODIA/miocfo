@@ -80,7 +80,7 @@ export function InvoiceUploadZone({ onUpload, uploadingFiles, onRemoveFile }: In
         <input
           type="file"
           id="invoice-upload"
-          accept=".pdf,.png,.jpg,.jpeg"
+          accept=".pdf,.png,.jpg,.jpeg,.csv,.zip"
           multiple
           onChange={handleFileInput}
           className="hidden"
@@ -99,7 +99,7 @@ export function InvoiceUploadZone({ onUpload, uploadingFiles, onRemoveFile }: In
               </p>
             </div>
             <p className="text-xs text-muted-foreground">
-              PDF, PNG, JPG fino a 10MB
+              PDF, CSV, ZIP, PNG, JPG fino a 10MB
             </p>
           </div>
         </label>
