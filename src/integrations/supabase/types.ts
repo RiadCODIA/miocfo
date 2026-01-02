@@ -537,6 +537,39 @@ export type Database = {
         }
         Relationships: []
       }
+      feature_flags: {
+        Row: {
+          created_at: string | null
+          description: string
+          enabled: boolean | null
+          id: string
+          key: string
+          rollout_percentage: number | null
+          target_companies: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description: string
+          enabled?: boolean | null
+          id?: string
+          key: string
+          rollout_percentage?: number | null
+          target_companies?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string
+          enabled?: boolean | null
+          id?: string
+          key?: string
+          rollout_percentage?: number | null
+          target_companies?: string[] | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       gdpr_requests: {
         Row: {
           company_id: string | null
