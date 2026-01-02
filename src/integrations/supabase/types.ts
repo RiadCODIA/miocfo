@@ -237,6 +237,68 @@ export type Database = {
         }
         Relationships: []
       }
+      invoices: {
+        Row: {
+          amount: number
+          created_at: string | null
+          currency: string | null
+          file_name: string
+          file_path: string
+          file_type: string | null
+          id: string
+          invoice_date: string
+          invoice_number: string
+          match_status: string | null
+          matched_transaction_id: string | null
+          raw_data: Json | null
+          supplier_name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string | null
+          currency?: string | null
+          file_name: string
+          file_path: string
+          file_type?: string | null
+          id?: string
+          invoice_date: string
+          invoice_number: string
+          match_status?: string | null
+          matched_transaction_id?: string | null
+          raw_data?: Json | null
+          supplier_name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string | null
+          currency?: string | null
+          file_name?: string
+          file_path?: string
+          file_type?: string | null
+          id?: string
+          invoice_date?: string
+          invoice_number?: string
+          match_status?: string | null
+          matched_transaction_id?: string | null
+          raw_data?: Json | null
+          supplier_name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "invoices_matched_transaction_id_fkey"
+            columns: ["matched_transaction_id"]
+            isOneToOne: false
+            referencedRelation: "bank_transactions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null

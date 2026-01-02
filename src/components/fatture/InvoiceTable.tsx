@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Search, Eye, Link2, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,9 +36,10 @@ interface InvoiceTableProps {
   invoices: Invoice[];
   onView: (invoice: Invoice) => void;
   onMatch: (invoice: Invoice) => void;
+  isLoading?: boolean;
 }
 
-export function InvoiceTable({ invoices, onView, onMatch }: InvoiceTableProps) {
+export function InvoiceTable({ invoices, onView, onMatch, isLoading }: InvoiceTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
@@ -108,10 +110,25 @@ export function InvoiceTable({ invoices, onView, onMatch }: InvoiceTableProps) {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {filteredInvoices.length === 0 ? (
+            {isLoading ? (
+              // Loading skeleton
+              Array.from({ length: 5 }).map((_, i) => (
+                <TableRow key={i}>
+                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-24" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                  <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
+                </TableRow>
+              ))
+            ) : filteredInvoices.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  Nessuna fattura trovata
+                  {invoices.length === 0 
+                    ? "Nessuna fattura caricata. Carica le tue prime fatture qui sopra."
+                    : "Nessuna fattura trovata con i filtri selezionati"
+                  }
                 </TableCell>
               </TableRow>
             ) : (
