@@ -18,7 +18,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Search, Eye, Link2, CheckCircle2, Clock, AlertTriangle } from "lucide-react";
+import { Search, Eye, Link2, CheckCircle2, Clock, AlertTriangle, RefreshCw, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface Invoice {
@@ -36,10 +36,12 @@ interface InvoiceTableProps {
   invoices: Invoice[];
   onView: (invoice: Invoice) => void;
   onMatch: (invoice: Invoice) => void;
+  onReprocess?: (invoice: Invoice) => void;
+  reprocessingId?: string | null;
   isLoading?: boolean;
 }
 
-export function InvoiceTable({ invoices, onView, onMatch, isLoading }: InvoiceTableProps) {
+export function InvoiceTable({ invoices, onView, onMatch, onReprocess, reprocessingId, isLoading }: InvoiceTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
 
@@ -172,6 +174,21 @@ export function InvoiceTable({ invoices, onView, onMatch, isLoading }: InvoiceTa
                             onClick={() => onMatch(invoice)}
                           >
                             <Link2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                        {onReprocess && (invoice.amount === 0 || invoice.supplier === 'Fornitore Sconosciuto') && (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => onReprocess(invoice)}
+                            disabled={reprocessingId === invoice.id}
+                            title="Riprocessa con AI"
+                          >
+                            {reprocessingId === invoice.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              <RefreshCw className="h-4 w-4" />
+                            )}
                           </Button>
                         )}
                       </div>
