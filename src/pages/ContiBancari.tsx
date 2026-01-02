@@ -3,7 +3,6 @@ import { Button } from "@/components/ui/button";
 import { Plus, Landmark, AlertCircle, RefreshCw } from "lucide-react";
 import { BankAccountCard } from "@/components/conti-bancari/BankAccountCard";
 import { ConnectBankModal } from "@/components/conti-bancari/ConnectBankModal";
-import { ConnectionTestPanel } from "@/components/conti-bancari/ConnectionTestPanel";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { usePlaid, BankAccount } from "@/hooks/usePlaid";
 
@@ -160,8 +159,6 @@ export default function ContiBancari() {
         </div>
       )}
 
-      {/* Connection Test Panel */}
-      <ConnectionTestPanel />
 
       {/* Connect Bank Modal */}
       <ConnectBankModal
