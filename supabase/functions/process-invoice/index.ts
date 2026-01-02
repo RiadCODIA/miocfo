@@ -194,24 +194,22 @@ serve(async (req) => {
   }
 
   try {
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader) {
-      throw new Error('Authorization header mancante');
-    }
-
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    // Create client with user's auth
-    const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
-      global: { headers: { Authorization: authHeader } }
-    });
+    // Try to get user from auth header (optional)
+    const authHeader = req.headers.get('Authorization');
+    let userId = `demo-user-${Date.now()}`;
 
-    // Get user
-    const { data: { user }, error: userError } = await supabaseUser.auth.getUser();
-    if (userError || !user) {
-      throw new Error('Utente non autenticato');
+    if (authHeader) {
+      const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
+        global: { headers: { Authorization: authHeader } }
+      });
+      const { data: { user } } = await supabaseUser.auth.getUser();
+      if (user) {
+        userId = user.id;
+      }
     }
 
     // Create admin client for operations
@@ -224,7 +222,7 @@ serve(async (req) => {
       throw new Error('Nessun file caricato');
     }
 
-    console.log(`Processing ${files.length} files for user ${user.id}`);
+    console.log(`Processing ${files.length} files for user ${userId}`);
 
     const results: { fileName: string; invoices: ExtractedInvoice[]; error?: string }[] = [];
 
@@ -282,7 +280,7 @@ serve(async (req) => {
         }
 
         // Upload file to storage
-        const storagePath = `${user.id}/${Date.now()}-${fileName}`;
+        const storagePath = `${userId}/${Date.now()}-${fileName}`;
         const { error: uploadError } = await supabaseAdmin.storage
           .from('invoices')
           .upload(storagePath, fileData, {
@@ -299,7 +297,7 @@ serve(async (req) => {
           const { error: insertError } = await supabaseAdmin
             .from('invoices')
             .insert({
-              user_id: user.id,
+              user_id: userId,
               invoice_number: invoice.invoice_number,
               invoice_date: invoice.invoice_date,
               supplier_name: invoice.supplier_name,
