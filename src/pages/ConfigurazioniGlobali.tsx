@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Slider } from "@/components/ui/slider";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Settings, 
   Sparkles,
@@ -34,38 +35,25 @@ import {
 } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
-
-// All companies for targeting
-const allCompanies = [
-  { id: "1", name: "Acme S.r.l." },
-  { id: "2", name: "TechCorp S.p.A." },
-  { id: "3", name: "StartUp Innovation" },
-  { id: "4", name: "Global Finance Ltd" },
-  { id: "5", name: "Local Business" },
-];
-
-// Mock data
-const initialFeatureFlags = [
-  { key: "ai_categorization", description: "Categorizzazione automatica transazioni", enabled: true, rollout: 100, targetCompanies: [] },
-  { key: "ai_forecast", description: "Previsioni cash flow con AI", enabled: true, rollout: 75, targetCompanies: ["1", "2", "4"] },
-  { key: "new_dashboard", description: "Nuova dashboard 2.0", enabled: false, rollout: 0, targetCompanies: [] },
-  { key: "multi_currency", description: "Supporto multi-valuta", enabled: true, rollout: 50, targetCompanies: ["2", "4"] },
-  { key: "api_v2", description: "Nuove API v2", enabled: false, rollout: 10, targetCompanies: ["3"] },
-];
-
-type FeatureFlag = typeof initialFeatureFlags[0];
+import { useFeatureFlags, useCreateFeatureFlag, useUpdateFeatureFlag, useDeleteFeatureFlag, FeatureFlag } from "@/hooks/useFeatureFlags";
+import { useCompanies } from "@/hooks/useCompanies";
 
 export default function ConfigurazioniGlobali() {
-  const [featureFlags, setFeatureFlags] = useState(initialFeatureFlags);
   const [flagDialogOpen, setFlagDialogOpen] = useState(false);
   const [editingFlag, setEditingFlag] = useState<FeatureFlag | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+
+  const { data: featureFlags, isLoading } = useFeatureFlags();
+  const { data: companies } = useCompanies();
+  const createFlag = useCreateFeatureFlag();
+  const updateFlag = useUpdateFeatureFlag();
+  const deleteFlag = useDeleteFeatureFlag();
 
   // Form state
   const [formKey, setFormKey] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formEnabled, setFormEnabled] = useState(false);
-  const [formRollout, setFormRollout] = useState(0);
+  const [formRollout, setFormRollout] = useState(100);
   const [formTargetCompanies, setFormTargetCompanies] = useState<string[]>([]);
 
   const handleNewFlag = () => {
@@ -85,14 +73,13 @@ export default function ConfigurazioniGlobali() {
     setFormKey(flag.key);
     setFormDescription(flag.description);
     setFormEnabled(flag.enabled);
-    setFormRollout(flag.rollout);
+    setFormRollout(flag.rolloutPercentage);
     setFormTargetCompanies(flag.targetCompanies);
     setFlagDialogOpen(true);
   };
 
-  const handleDeleteFlag = (key: string) => {
-    setFeatureFlags(featureFlags.filter(f => f.key !== key));
-    toast.success("Feature flag eliminato");
+  const handleDeleteFlag = (id: string) => {
+    deleteFlag.mutate(id);
   };
 
   const handleSaveFlag = () => {
@@ -105,32 +92,27 @@ export default function ConfigurazioniGlobali() {
       return;
     }
 
-    const newFlag: FeatureFlag = {
+    const flagData = {
       key: formKey.toLowerCase().replace(/\s+/g, '_'),
       description: formDescription,
       enabled: formEnabled,
-      rollout: formRollout,
+      rolloutPercentage: formRollout,
       targetCompanies: formTargetCompanies,
     };
 
     if (isCreating) {
-      if (featureFlags.some(f => f.key === newFlag.key)) {
-        toast.error("Esiste già un flag con questa chiave");
-        return;
-      }
-      setFeatureFlags([...featureFlags, newFlag]);
-      toast.success("Feature flag creato");
-    } else {
-      setFeatureFlags(featureFlags.map(f => f.key === editingFlag!.key ? newFlag : f));
-      toast.success("Feature flag aggiornato");
+      createFlag.mutate(flagData, {
+        onSuccess: () => setFlagDialogOpen(false)
+      });
+    } else if (editingFlag) {
+      updateFlag.mutate({ id: editingFlag.id, ...flagData }, {
+        onSuccess: () => setFlagDialogOpen(false)
+      });
     }
-    setFlagDialogOpen(false);
   };
 
-  const handleToggleFlag = (key: string) => {
-    setFeatureFlags(featureFlags.map(f => 
-      f.key === key ? { ...f, enabled: !f.enabled } : f
-    ));
+  const handleToggleFlag = (flag: FeatureFlag) => {
+    updateFlag.mutate({ id: flag.id, enabled: !flag.enabled });
   };
 
   const toggleTargetCompany = (companyId: string) => {
@@ -167,7 +149,6 @@ export default function ConfigurazioniGlobali() {
         </TabsList>
 
         <TabsContent value="features" className="space-y-6">
-          {/* Feature Flags */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
@@ -185,58 +166,71 @@ export default function ConfigurazioniGlobali() {
               </div>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {featureFlags.map((flag) => (
-                  <div 
-                    key={flag.key}
-                    className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-border"
-                  >
-                    <div className="flex items-center gap-4">
-                      <Switch 
-                        checked={flag.enabled} 
-                        onCheckedChange={() => handleToggleFlag(flag.key)}
-                      />
-                      <div>
-                        <p className="font-medium text-foreground font-mono">{flag.key}</p>
-                        <p className="text-sm text-muted-foreground">{flag.description}</p>
-                        {flag.targetCompanies.length > 0 && (
-                          <div className="flex items-center gap-1 mt-1">
-                            <Building2 className="h-3 w-3 text-muted-foreground" />
-                            <span className="text-xs text-muted-foreground">
-                              Target: {flag.targetCompanies.length} aziende
-                            </span>
-                          </div>
-                        )}
+              {isLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-20 w-full" />
+                  ))}
+                </div>
+              ) : featureFlags && featureFlags.length > 0 ? (
+                <div className="space-y-4">
+                  {featureFlags.map((flag) => (
+                    <div 
+                      key={flag.id}
+                      className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-border"
+                    >
+                      <div className="flex items-center gap-4">
+                        <Switch 
+                          checked={flag.enabled} 
+                          onCheckedChange={() => handleToggleFlag(flag)}
+                          disabled={updateFlag.isPending}
+                        />
+                        <div>
+                          <p className="font-medium text-foreground font-mono">{flag.key}</p>
+                          <p className="text-sm text-muted-foreground">{flag.description}</p>
+                          {flag.targetCompanies.length > 0 && (
+                            <div className="flex items-center gap-1 mt-1">
+                              <Building2 className="h-3 w-3 text-muted-foreground" />
+                              <span className="text-xs text-muted-foreground">
+                                Target: {flag.targetCompanies.length} aziende
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-4">
+                        <div className="text-right">
+                          <p className="text-sm text-muted-foreground">Rollout</p>
+                          <Badge variant={flag.rolloutPercentage === 100 ? "default" : "secondary"}>
+                            {flag.rolloutPercentage}%
+                          </Badge>
+                        </div>
+                        <Button variant="ghost" size="icon" onClick={() => handleEditFlag(flag)}>
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="text-destructive"
+                          onClick={() => handleDeleteFlag(flag.id)}
+                          disabled={deleteFlag.isPending}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
-                        <p className="text-sm text-muted-foreground">Rollout</p>
-                        <Badge variant={flag.rollout === 100 ? "default" : "secondary"}>
-                          {flag.rollout}%
-                        </Badge>
-                      </div>
-                      <Button variant="ghost" size="icon" onClick={() => handleEditFlag(flag)}>
-                        <Edit className="h-4 w-4" />
-                      </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="icon" 
-                        className="text-destructive"
-                        onClick={() => handleDeleteFlag(flag.key)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  Nessun feature flag configurato
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
 
         <TabsContent value="ai" className="space-y-6">
-          {/* AI Settings */}
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -275,18 +269,6 @@ export default function ConfigurazioniGlobali() {
                   <Input type="number" defaultValue={60} />
                 </div>
               </div>
-              <div className="space-y-2">
-                <Label>Frequenza Forecast</Label>
-                <Select defaultValue="daily">
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="daily">Giornaliero</SelectItem>
-                    <SelectItem value="weekly">Settimanale</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
               <Button className="bg-violet-600 hover:bg-violet-700" onClick={handleSaveAiSettings}>
                 Salva Impostazioni AI
               </Button>
@@ -295,7 +277,6 @@ export default function ConfigurazioniGlobali() {
         </TabsContent>
 
         <TabsContent value="system" className="space-y-6">
-          {/* System Parameters */}
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2">
@@ -315,31 +296,10 @@ export default function ConfigurazioniGlobali() {
                   <Input type="number" defaultValue={15} />
                 </div>
               </div>
-              <div className="space-y-4">
-                <Label className="text-base">Retry Policy</Label>
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Max Retries</Label>
-                    <Input type="number" defaultValue={3} />
-                  </div>
-                  <div className="space-y-2">
-                    <Label className="text-sm text-muted-foreground">Backoff Strategy</Label>
-                    <Select defaultValue="exponential">
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="fixed">Fixed</SelectItem>
-                        <SelectItem value="exponential">Exponential</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                </div>
-              </div>
               <div className="flex items-center justify-between p-4 rounded-lg bg-destructive/10 border border-destructive/30">
                 <div>
                   <Label className="text-base text-destructive">Maintenance Mode</Label>
-                  <p className="text-sm text-muted-foreground">Attiva la modalità di manutenzione per tutta la piattaforma</p>
+                  <p className="text-sm text-muted-foreground">Attiva la modalità di manutenzione</p>
                 </div>
                 <Switch />
               </div>
@@ -375,7 +335,7 @@ export default function ConfigurazioniGlobali() {
             <div className="space-y-2">
               <Label>Descrizione</Label>
               <Input 
-                placeholder="es: Nuova funzionalità sperimentale"
+                placeholder="es: Nuova funzionalità"
                 value={formDescription}
                 onChange={(e) => setFormDescription(e.target.value)}
               />
@@ -401,11 +361,8 @@ export default function ConfigurazioniGlobali() {
                 <Building2 className="h-4 w-4" />
                 Target Companies (opzionale)
               </Label>
-              <p className="text-sm text-muted-foreground mb-2">
-                Se selezionate, il flag sarà attivo solo per queste aziende
-              </p>
               <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto p-2 border rounded-lg">
-                {allCompanies.map((company) => (
+                {companies?.map((company) => (
                   <div 
                     key={company.id}
                     className="flex items-center space-x-2 p-2 rounded hover:bg-muted/50 cursor-pointer"
@@ -419,18 +376,17 @@ export default function ConfigurazioniGlobali() {
                   </div>
                 ))}
               </div>
-              {formTargetCompanies.length > 0 && (
-                <p className="text-xs text-muted-foreground">
-                  {formTargetCompanies.length} aziende selezionate
-                </p>
-              )}
             </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setFlagDialogOpen(false)}>
               Annulla
             </Button>
-            <Button className="bg-violet-600 hover:bg-violet-700" onClick={handleSaveFlag}>
+            <Button 
+              className="bg-violet-600 hover:bg-violet-700" 
+              onClick={handleSaveFlag}
+              disabled={createFlag.isPending || updateFlag.isPending}
+            >
               {isCreating ? "Crea Flag" : "Salva Modifiche"}
             </Button>
           </DialogFooter>
