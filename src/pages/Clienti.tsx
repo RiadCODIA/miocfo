@@ -39,58 +39,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useNavigate } from "react-router-dom";
-import { toast } from "sonner";
-
-// Demo data
-const demoClients = [
-  { 
-    id: "1", 
-    name: "Tech Solutions S.r.l.", 
-    email: "info@techsolutions.it",
-    phone: "+39 02 1234567",
-    status: "active", 
-    alerts: 2, 
-    revenue: 450000,
-    cashflow: 35000,
-    createdAt: "2024-01-15"
-  },
-  { 
-    id: "2", 
-    name: "Green Energy SpA", 
-    email: "contatti@greenenergy.it",
-    phone: "+39 06 7654321",
-    status: "active", 
-    alerts: 0, 
-    revenue: 820000,
-    cashflow: 62000,
-    createdAt: "2024-02-20"
-  },
-  { 
-    id: "3", 
-    name: "Fashion House S.r.l.", 
-    email: "admin@fashionhouse.it",
-    phone: "+39 02 9876543",
-    status: "warning", 
-    alerts: 5, 
-    revenue: 380000,
-    cashflow: -12000,
-    createdAt: "2024-03-10"
-  },
-  { 
-    id: "4", 
-    name: "Food & Beverage Co.", 
-    email: "info@foodbev.it",
-    phone: "+39 051 1122334",
-    status: "active", 
-    alerts: 1, 
-    revenue: 290000,
-    cashflow: 18000,
-    createdAt: "2024-04-05"
-  },
-];
+import { useCompanies, useCreateCompany } from "@/hooks/useCompanies";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function Clienti() {
   const navigate = useNavigate();
+  const { data: companies, isLoading } = useCompanies();
+  const createCompany = useCreateCompany();
+  
   const [searchQuery, setSearchQuery] = useState("");
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [newClient, setNewClient] = useState({
@@ -99,17 +55,28 @@ export default function Clienti() {
     phone: "",
   });
 
-  const filteredClients = demoClients.filter(client =>
+  const filteredClients = (companies || []).filter(client =>
     client.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    client.email.toLowerCase().includes(searchQuery.toLowerCase())
+    (client.email || '').toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const handleCreateClient = () => {
+  const handleCreateClient = async () => {
     if (!newClient.name || !newClient.email) {
-      toast.error("Compila tutti i campi obbligatori");
       return;
     }
-    toast.success(`Cliente "${newClient.name}" creato con successo`);
+    
+    await createCompany.mutateAsync({
+      name: newClient.name,
+      email: newClient.email,
+      phone: newClient.phone || null,
+      vat_number: null,
+      status: 'active',
+      alerts_count: 0,
+      revenue: 0,
+      cashflow: 0,
+      owner_id: null,
+    });
+    
     setIsDialogOpen(false);
     setNewClient({ name: "", email: "", phone: "" });
   };
@@ -121,6 +88,22 @@ export default function Clienti() {
       maximumFractionDigits: 0,
     }).format(value);
   };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-64 mt-2" />
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <Skeleton className="h-16 w-full" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -180,8 +163,8 @@ export default function Clienti() {
               <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                 Annulla
               </Button>
-              <Button onClick={handleCreateClient}>
-                Crea Cliente
+              <Button onClick={handleCreateClient} disabled={createCompany.isPending}>
+                {createCompany.isPending ? "Creazione..." : "Crea Cliente"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -212,96 +195,112 @@ export default function Clienti() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Cliente</TableHead>
-                <TableHead>Contatti</TableHead>
-                <TableHead>Stato</TableHead>
-                <TableHead className="text-right">Fatturato</TableHead>
-                <TableHead className="text-right">Cash Flow</TableHead>
-                <TableHead className="text-right">Azioni</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredClients.map((client) => (
-                <TableRow key={client.id}>
-                  <TableCell>
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                        <Building className="h-5 w-5 text-primary" />
-                      </div>
-                      <div>
-                        <p className="font-medium">{client.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          Dal {new Date(client.createdAt).toLocaleDateString("it-IT")}
-                        </p>
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-1 text-sm">
-                        <Mail className="h-3 w-3 text-muted-foreground" />
-                        {client.email}
-                      </div>
-                      <div className="flex items-center gap-1 text-sm text-muted-foreground">
-                        <Phone className="h-3 w-3" />
-                        {client.phone}
-                      </div>
-                    </div>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
-                      <Badge
-                        variant={client.status === "warning" ? "secondary" : "outline"}
-                        className={client.status === "warning" ? "bg-amber-500/10 text-amber-600 border-amber-500/30" : ""}
-                      >
-                        {client.status === "active" ? "Attivo" : "Attenzione"}
-                      </Badge>
-                      {client.alerts > 0 && (
-                        <Badge variant="destructive" className="gap-1">
-                          <AlertTriangle className="h-3 w-3" />
-                          {client.alerts}
-                        </Badge>
-                      )}
-                    </div>
-                  </TableCell>
-                  <TableCell className="text-right font-medium">
-                    {formatCurrency(client.revenue)}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <span className={client.cashflow >= 0 ? "text-emerald-600" : "text-destructive"}>
-                      {formatCurrency(client.cashflow)}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => navigate("/kpi-clienti")}>
-                          <Eye className="h-4 w-4 mr-2" />
-                          Vedi KPI
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => navigate("/flussi-clienti")}>
-                          <TrendingUp className="h-4 w-4 mr-2" />
-                          Vedi Flussi
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => navigate("/alert")}>
-                          <AlertTriangle className="h-4 w-4 mr-2" />
-                          Vedi Alert
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+          {filteredClients.length === 0 ? (
+            <div className="text-center py-12 text-muted-foreground">
+              <Building className="h-16 w-16 mx-auto mb-4 opacity-50" />
+              <p className="text-lg font-medium">Nessun cliente trovato</p>
+              <p className="text-sm mt-1">Aggiungi il tuo primo cliente per iniziare</p>
+              <Button className="mt-4" onClick={() => setIsDialogOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Aggiungi Cliente
+              </Button>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Cliente</TableHead>
+                  <TableHead>Contatti</TableHead>
+                  <TableHead>Stato</TableHead>
+                  <TableHead className="text-right">Fatturato</TableHead>
+                  <TableHead className="text-right">Cash Flow</TableHead>
+                  <TableHead className="text-right">Azioni</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredClients.map((client) => (
+                  <TableRow key={client.id}>
+                    <TableCell>
+                      <div className="flex items-center gap-3">
+                        <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Building className="h-5 w-5 text-primary" />
+                        </div>
+                        <div>
+                          <p className="font-medium">{client.name}</p>
+                          <p className="text-sm text-muted-foreground">
+                            Dal {new Date(client.created_at).toLocaleDateString("it-IT")}
+                          </p>
+                        </div>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        {client.email && (
+                          <div className="flex items-center gap-1 text-sm">
+                            <Mail className="h-3 w-3 text-muted-foreground" />
+                            {client.email}
+                          </div>
+                        )}
+                        {client.phone && (
+                          <div className="flex items-center gap-1 text-sm text-muted-foreground">
+                            <Phone className="h-3 w-3" />
+                            {client.phone}
+                          </div>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        <Badge
+                          variant={client.status === "warning" ? "secondary" : "outline"}
+                          className={client.status === "warning" ? "bg-amber-500/10 text-amber-600 border-amber-500/30" : ""}
+                        >
+                          {client.status === "active" ? "Attivo" : client.status === "warning" ? "Attenzione" : client.status}
+                        </Badge>
+                        {client.alerts_count > 0 && (
+                          <Badge variant="destructive" className="gap-1">
+                            <AlertTriangle className="h-3 w-3" />
+                            {client.alerts_count}
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell className="text-right font-medium">
+                      {formatCurrency(Number(client.revenue) || 0)}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <span className={Number(client.cashflow) >= 0 ? "text-emerald-600" : "text-destructive"}>
+                        {formatCurrency(Number(client.cashflow) || 0)}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => navigate("/kpi-clienti")}>
+                            <Eye className="h-4 w-4 mr-2" />
+                            Vedi KPI
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => navigate("/flussi-clienti")}>
+                            <TrendingUp className="h-4 w-4 mr-2" />
+                            Vedi Flussi
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => navigate("/alert")}>
+                            <AlertTriangle className="h-4 w-4 mr-2" />
+                            Vedi Alert
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
     </div>

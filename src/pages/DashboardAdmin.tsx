@@ -3,24 +3,50 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Users, TrendingUp, AlertTriangle, Building, Plus, ArrowRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-
-// Demo data for admin dashboard
-const demoClients = [
-  { id: "1", name: "Tech Solutions S.r.l.", status: "active", alerts: 2, lastActivity: "Oggi" },
-  { id: "2", name: "Green Energy SpA", status: "active", alerts: 0, lastActivity: "Ieri" },
-  { id: "3", name: "Fashion House S.r.l.", status: "warning", alerts: 5, lastActivity: "2 giorni fa" },
-  { id: "4", name: "Food & Beverage Co.", status: "active", alerts: 1, lastActivity: "Oggi" },
-];
-
-const demoStats = {
-  totalClients: 12,
-  activeAlerts: 8,
-  totalRevenue: 2450000,
-  avgCashflow: 125000,
-};
+import { useCompanies } from "@/hooks/useCompanies";
+import { useAlerts } from "@/hooks/useAlerts";
+import { Skeleton } from "@/components/ui/skeleton";
 
 export default function DashboardAdmin() {
   const navigate = useNavigate();
+  const { data: companies, isLoading: companiesLoading } = useCompanies();
+  const { data: alerts, isLoading: alertsLoading } = useAlerts();
+
+  const isLoading = companiesLoading || alertsLoading;
+
+  // Calculate stats
+  const totalClients = companies?.length || 0;
+  const activeAlerts = alerts?.filter(a => a.status === 'active').length || 0;
+  const highPriorityAlerts = alerts?.filter(a => a.priority === 'high' && a.status === 'active').length || 0;
+  const totalRevenue = companies?.reduce((sum, c) => sum + Number(c.revenue || 0), 0) || 0;
+  const avgCashflow = companies?.length 
+    ? companies.reduce((sum, c) => sum + Number(c.cashflow || 0), 0) / companies.length 
+    : 0;
+
+  // Get recent companies (last 4)
+  const recentClients = companies?.slice(0, 4) || [];
+  
+  // Get recent active alerts
+  const recentAlerts = alerts?.filter(a => a.status === 'active').slice(0, 3) || [];
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-64 mt-2" />
+          </div>
+          <Skeleton className="h-10 w-32" />
+        </div>
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          {[1, 2, 3, 4].map(i => (
+            <Skeleton key={i} className="h-32" />
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -48,9 +74,9 @@ export default function DashboardAdmin() {
             <Users className="h-5 w-5 text-primary" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-foreground">{demoStats.totalClients}</div>
+            <div className="text-3xl font-bold text-foreground">{totalClients}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              +2 questo mese
+              {totalClients > 0 ? "Clienti gestiti" : "Nessun cliente ancora"}
             </p>
           </CardContent>
         </Card>
@@ -63,9 +89,9 @@ export default function DashboardAdmin() {
             <AlertTriangle className="h-5 w-5 text-amber-500" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-foreground">{demoStats.activeAlerts}</div>
+            <div className="text-3xl font-bold text-foreground">{activeAlerts}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              3 priorità alta
+              {highPriorityAlerts > 0 ? `${highPriorityAlerts} priorità alta` : "Nessun alert prioritario"}
             </p>
           </CardContent>
         </Card>
@@ -79,10 +105,12 @@ export default function DashboardAdmin() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-foreground">
-              €{(demoStats.totalRevenue / 1000000).toFixed(1)}M
+              {totalRevenue >= 1000000 
+                ? `€${(totalRevenue / 1000000).toFixed(1)}M` 
+                : `€${(totalRevenue / 1000).toFixed(0)}K`}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              +12% vs anno precedente
+              Ricavi totali clienti
             </p>
           </CardContent>
         </Card>
@@ -96,7 +124,7 @@ export default function DashboardAdmin() {
           </CardHeader>
           <CardContent>
             <div className="text-3xl font-bold text-foreground">
-              €{(demoStats.avgCashflow / 1000).toFixed(0)}K
+              €{(avgCashflow / 1000).toFixed(0)}K
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               Media mensile per cliente
@@ -120,41 +148,51 @@ export default function DashboardAdmin() {
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              {demoClients.map((client) => (
-                <div
-                  key={client.id}
-                  className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
-                  onClick={() => navigate("/clienti")}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
-                      <Building className="h-5 w-5 text-primary" />
+            {recentClients.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <Building className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p>Nessun cliente ancora</p>
+                <Button variant="outline" size="sm" className="mt-3" onClick={() => navigate("/clienti")}>
+                  Aggiungi il primo cliente
+                </Button>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {recentClients.map((client) => (
+                  <div
+                    key={client.id}
+                    className="flex items-center justify-between p-3 rounded-lg bg-muted/50 hover:bg-muted transition-colors cursor-pointer"
+                    onClick={() => navigate("/clienti")}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center">
+                        <Building className="h-5 w-5 text-primary" />
+                      </div>
+                      <div>
+                        <p className="font-medium text-foreground">{client.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Aggiunto: {new Date(client.created_at).toLocaleDateString("it-IT")}
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="font-medium text-foreground">{client.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Ultima attività: {client.lastActivity}
-                      </p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {client.alerts > 0 && (
-                      <Badge variant="destructive" className="gap-1">
-                        <AlertTriangle className="h-3 w-3" />
-                        {client.alerts}
+                    <div className="flex items-center gap-2">
+                      {client.alerts_count > 0 && (
+                        <Badge variant="destructive" className="gap-1">
+                          <AlertTriangle className="h-3 w-3" />
+                          {client.alerts_count}
+                        </Badge>
+                      )}
+                      <Badge
+                        variant={client.status === "warning" ? "secondary" : "outline"}
+                        className={client.status === "warning" ? "bg-amber-500/10 text-amber-600 border-amber-500/30" : ""}
+                      >
+                        {client.status === "active" ? "Attivo" : client.status === "warning" ? "Attenzione" : client.status}
                       </Badge>
-                    )}
-                    <Badge
-                      variant={client.status === "warning" ? "secondary" : "outline"}
-                      className={client.status === "warning" ? "bg-amber-500/10 text-amber-600 border-amber-500/30" : ""}
-                    >
-                      {client.status === "active" ? "Attivo" : "Attenzione"}
-                    </Badge>
+                    </div>
                   </div>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </CardContent>
         </Card>
 
@@ -171,46 +209,41 @@ export default function DashboardAdmin() {
             </Button>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <div className="p-4 rounded-lg border border-destructive/30 bg-destructive/5">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-destructive mt-0.5" />
-                  <div className="flex-1">
-                    <p className="font-medium text-foreground">Liquidità critica</p>
-                    <p className="text-sm text-muted-foreground">
-                      Fashion House S.r.l. - Cash flow negativo previsto
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">2 ore fa</p>
-                  </div>
-                </div>
+            {recentAlerts.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground">
+                <AlertTriangle className="h-12 w-12 mx-auto mb-3 opacity-50" />
+                <p>Nessun alert attivo</p>
+                <p className="text-sm mt-1">Tutto sotto controllo!</p>
               </div>
-
-              <div className="p-4 rounded-lg border border-amber-500/30 bg-amber-500/5">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="font-medium text-foreground">Scadenze imminenti</p>
-                    <p className="text-sm text-muted-foreground">
-                      Tech Solutions S.r.l. - 3 fatture in scadenza
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">5 ore fa</p>
+            ) : (
+              <div className="space-y-4">
+                {recentAlerts.map((alert) => (
+                  <div 
+                    key={alert.id}
+                    className={`p-4 rounded-lg border ${
+                      alert.priority === 'high' 
+                        ? 'border-destructive/30 bg-destructive/5' 
+                        : 'border-amber-500/30 bg-amber-500/5'
+                    }`}
+                  >
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className={`h-5 w-5 mt-0.5 ${
+                        alert.priority === 'high' ? 'text-destructive' : 'text-amber-500'
+                      }`} />
+                      <div className="flex-1">
+                        <p className="font-medium text-foreground">{alert.title}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {alert.description || 'Nessuna descrizione'}
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                          {new Date(alert.createdAt || '').toLocaleString("it-IT")}
+                        </p>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ))}
               </div>
-
-              <div className="p-4 rounded-lg border border-amber-500/30 bg-amber-500/5">
-                <div className="flex items-start gap-3">
-                  <AlertTriangle className="h-5 w-5 text-amber-500 mt-0.5" />
-                  <div className="flex-1">
-                    <p className="font-medium text-foreground">Budget superato</p>
-                    <p className="text-sm text-muted-foreground">
-                      Food & Beverage Co. - Spese operative +15%
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">1 giorno fa</p>
-                  </div>
-                </div>
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
       </div>
