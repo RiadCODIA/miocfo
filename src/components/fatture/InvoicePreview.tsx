@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import {
   Sheet,
   SheetContent,
@@ -8,6 +9,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   FileText,
   Calendar,
@@ -19,9 +21,11 @@ import {
   Clock,
   AlertTriangle,
   Download,
+  ExternalLink,
+  AlertCircle,
 } from "lucide-react";
 import { Invoice } from "./InvoiceTable";
-import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 interface InvoicePreviewProps {
   invoice: Invoice | null;
@@ -31,6 +35,65 @@ interface InvoicePreviewProps {
 }
 
 export function InvoicePreview({ invoice, open, onOpenChange, onMatch }: InvoicePreviewProps) {
+  const [fileUrl, setFileUrl] = useState<string | null>(null);
+  const [isFileLoading, setIsFileLoading] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+
+  // Load file when sheet opens
+  useEffect(() => {
+    if (open && invoice?.filePath) {
+      loadFile(invoice.filePath);
+    }
+
+    // Cleanup on close or invoice change
+    return () => {
+      if (fileUrl) {
+        URL.revokeObjectURL(fileUrl);
+        setFileUrl(null);
+      }
+      setFileError(null);
+    };
+  }, [open, invoice?.filePath]);
+
+  const loadFile = async (filePath: string) => {
+    setIsFileLoading(true);
+    setFileError(null);
+
+    try {
+      const { data, error } = await supabase.storage
+        .from('invoices')
+        .download(filePath);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      const objectUrl = URL.createObjectURL(data);
+      setFileUrl(objectUrl);
+    } catch (err) {
+      setFileError(err instanceof Error ? err.message : "Impossibile caricare il file");
+    } finally {
+      setIsFileLoading(false);
+    }
+  };
+
+  const handleDownload = () => {
+    if (fileUrl && invoice) {
+      const link = document.createElement('a');
+      link.href = fileUrl;
+      link.download = invoice.fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  };
+
+  const handleOpenInNewTab = () => {
+    if (fileUrl) {
+      window.open(fileUrl, '_blank');
+    }
+  };
+
   if (!invoice) return null;
 
   const statusConfig = {
@@ -54,9 +117,14 @@ export function InvoicePreview({ invoice, open, onOpenChange, onMatch }: Invoice
   const status = statusConfig[invoice.matchStatus];
   const StatusIcon = status.icon;
 
+  const isPdf = invoice.fileName?.toLowerCase().endsWith('.pdf') || 
+                invoice.fileType === 'application/pdf';
+  const isImage = /\.(png|jpg|jpeg|webp|gif)$/i.test(invoice.fileName || '') ||
+                  invoice.fileType?.startsWith('image/');
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-[500px]">
+      <SheetContent className="sm:max-w-[500px] overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Dettaglio Fattura</SheetTitle>
           <SheetDescription>
@@ -65,13 +133,78 @@ export function InvoicePreview({ invoice, open, onOpenChange, onMatch }: Invoice
         </SheetHeader>
 
         <div className="mt-6 space-y-6">
-          {/* PDF Preview Placeholder */}
-          <div className="aspect-[3/4] bg-muted rounded-lg flex flex-col items-center justify-center border border-border">
-            <FileText className="h-16 w-16 text-muted-foreground" />
-            <p className="mt-2 text-sm text-muted-foreground">{invoice.fileName}</p>
-            <Button variant="outline" size="sm" className="mt-4">
+          {/* File Preview */}
+          <div className="aspect-[3/4] bg-muted rounded-lg flex flex-col items-center justify-center border border-border overflow-hidden">
+            {isFileLoading ? (
+              <div className="w-full h-full flex flex-col items-center justify-center gap-4">
+                <Skeleton className="w-16 h-16 rounded-lg" />
+                <Skeleton className="w-32 h-4" />
+                <p className="text-sm text-muted-foreground">Caricamento file...</p>
+              </div>
+            ) : fileError ? (
+              <div className="flex flex-col items-center justify-center gap-3 p-4 text-center">
+                <AlertCircle className="h-12 w-12 text-destructive" />
+                <p className="text-sm text-destructive font-medium">Errore nel caricamento</p>
+                <p className="text-xs text-muted-foreground">{fileError}</p>
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  onClick={() => invoice.filePath && loadFile(invoice.filePath)}
+                >
+                  Riprova
+                </Button>
+              </div>
+            ) : fileUrl ? (
+              isPdf ? (
+                <iframe 
+                  src={fileUrl} 
+                  className="w-full h-full rounded-lg"
+                  title={invoice.fileName}
+                />
+              ) : isImage ? (
+                <img 
+                  src={fileUrl} 
+                  alt={invoice.fileName}
+                  className="w-full h-full object-contain"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center gap-3">
+                  <FileText className="h-16 w-16 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">{invoice.fileName}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Anteprima non disponibile per questo formato
+                  </p>
+                </div>
+              )
+            ) : (
+              <div className="flex flex-col items-center justify-center gap-3">
+                <FileText className="h-16 w-16 text-muted-foreground" />
+                <p className="text-sm text-muted-foreground">{invoice.fileName}</p>
+              </div>
+            )}
+          </div>
+
+          {/* Download buttons */}
+          <div className="flex gap-2">
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex-1"
+              onClick={handleDownload}
+              disabled={!fileUrl}
+            >
               <Download className="h-4 w-4 mr-2" />
-              Scarica PDF
+              Scarica
+            </Button>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="flex-1"
+              onClick={handleOpenInNewTab}
+              disabled={!fileUrl}
+            >
+              <ExternalLink className="h-4 w-4 mr-2" />
+              Apri in nuova scheda
             </Button>
           </div>
 

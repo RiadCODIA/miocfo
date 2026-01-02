@@ -30,6 +30,8 @@ export interface Invoice {
   matchStatus: "matched" | "pending" | "discrepancy";
   matchedTransactionId?: string;
   fileName: string;
+  filePath: string;
+  fileType?: string | null;
 }
 
 interface InvoiceTableProps {

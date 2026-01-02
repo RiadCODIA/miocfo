@@ -48,6 +48,8 @@ function transformInvoice(dbInvoice: DbInvoice): Invoice {
     matchStatus: dbInvoice.match_status as "matched" | "pending" | "discrepancy",
     matchedTransactionId: dbInvoice.matched_transaction_id || undefined,
     fileName: dbInvoice.file_name,
+    filePath: dbInvoice.file_path,
+    fileType: dbInvoice.file_type,
   };
 }
 
