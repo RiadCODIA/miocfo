@@ -1,26 +1,71 @@
-import { Download, FileText, BarChart3, TrendingUp, Percent, Clock } from "lucide-react";
+import { Download, FileText, BarChart3, TrendingUp, Percent, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
+import { useKPIData } from "@/hooks/useKPIData";
+import { toast } from "sonner";
 
-const kpiData = [
-  { id: "roi", nome: "ROI", valore: "18.5%", target: "15%", raggiunto: true, trend: "+2.3%", categoria: "standard" },
-  { id: "dso", nome: "DSO (Days Sales Outstanding)", valore: "42 giorni", target: "45 giorni", raggiunto: true, trend: "-3 giorni", categoria: "standard" },
-  { id: "current_ratio", nome: "Current Ratio", valore: "2.1", target: "1.5", raggiunto: true, trend: "+0.3", categoria: "standard" },
-  { id: "margine_operativo", nome: "Margine Operativo", valore: "31.8%", target: "28%", raggiunto: true, trend: "+4.2%", categoria: "standard" },
-  { id: "burn_rate", nome: "Burn Rate Mensile", valore: "€52.000", target: "€60.000", raggiunto: true, trend: "-8.000", categoria: "personalizzato" },
-  { id: "ltv_cac", nome: "LTV/CAC Ratio", valore: "4.2", target: "3.0", raggiunto: true, trend: "+0.8", categoria: "personalizzato" },
-];
-
-const reports = [
-  { id: 1, nome: "Report Mensile Dicembre 2024", tipo: "Mensile", dataCreazione: "01/12/2024", stato: "completato" },
-  { id: 2, nome: "Report Trimestrale Q4 2024", tipo: "Trimestrale", dataCreazione: "01/10/2024", stato: "in elaborazione" },
-  { id: 3, nome: "Report Annuale 2024", tipo: "Annuale", dataCreazione: "01/01/2024", stato: "programmato" },
-  { id: 4, nome: "Report Cashflow Novembre", tipo: "Mensile", dataCreazione: "01/11/2024", stato: "completato" },
-];
+const getKPIIcon = (id: string, categoria: string) => {
+  const colorClass = categoria === "standard" ? "text-primary" : "text-warning";
+  switch (id) {
+    case "roi":
+    case "burn_rate":
+    case "revenue_growth":
+      return <TrendingUp className={cn("h-4 w-4", colorClass)} />;
+    case "dso":
+      return <Clock className={cn("h-4 w-4", colorClass)} />;
+    case "current_ratio":
+    case "ltv_cac":
+      return <BarChart3 className={cn("h-4 w-4", colorClass)} />;
+    case "margine_operativo":
+      return <Percent className={cn("h-4 w-4", colorClass)} />;
+    default:
+      return <BarChart3 className={cn("h-4 w-4", colorClass)} />;
+  }
+};
 
 export default function KPIReport() {
+  const { data, isLoading } = useKPIData();
+
+  const handleExport = () => {
+    if (!data) return;
+    
+    const csvContent = [
+      ["KPI", "Valore", "Target", "Raggiunto", "Trend"].join(","),
+      ...data.kpis.map(kpi => [kpi.nome, kpi.valore, kpi.target, kpi.raggiunto ? "Sì" : "No", kpi.trend].join(","))
+    ].join("\n");
+    
+    const blob = new Blob([csvContent], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `kpi-report-${new Date().toISOString().split("T")[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Report esportato con successo");
+  };
+
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">KPI & Report</h1>
+          <p className="text-muted-foreground mt-1">Indicatori sintetici e reportistica</p>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {[...Array(6)].map((_, i) => (
+            <Skeleton key={i} className="h-40 rounded-xl" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const kpis = data?.kpis || [];
+  const reports = data?.reports || [];
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -40,49 +85,53 @@ export default function KPIReport() {
             <Badge variant="outline" className="border-warning/50 text-warning">Personalizzati</Badge>
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {kpiData.map((kpi, index) => (
-            <div
-              key={kpi.id}
-              className="glass rounded-xl p-5 opacity-0 animate-fade-in"
-              style={{ animationDelay: `${150 + index * 50}ms` }}
-            >
-              <div className="flex items-start justify-between mb-3">
-                <div className="flex items-center gap-2">
-                  <div className={cn(
-                    "p-2 rounded-lg",
-                    kpi.categoria === "standard" ? "bg-primary/10" : "bg-warning/10"
-                  )}>
-                    {kpi.id === "roi" && <TrendingUp className={cn("h-4 w-4", kpi.categoria === "standard" ? "text-primary" : "text-warning")} />}
-                    {kpi.id === "dso" && <Clock className={cn("h-4 w-4", kpi.categoria === "standard" ? "text-primary" : "text-warning")} />}
-                    {kpi.id === "current_ratio" && <BarChart3 className={cn("h-4 w-4", kpi.categoria === "standard" ? "text-primary" : "text-warning")} />}
-                    {kpi.id === "margine_operativo" && <Percent className={cn("h-4 w-4", kpi.categoria === "standard" ? "text-primary" : "text-warning")} />}
-                    {kpi.id === "burn_rate" && <TrendingUp className={cn("h-4 w-4", kpi.categoria === "standard" ? "text-primary" : "text-warning")} />}
-                    {kpi.id === "ltv_cac" && <BarChart3 className={cn("h-4 w-4", kpi.categoria === "standard" ? "text-primary" : "text-warning")} />}
+
+        {kpis.length === 0 ? (
+          <div className="glass rounded-xl p-8 text-center">
+            <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <p className="text-muted-foreground">Nessun dato disponibile per calcolare i KPI</p>
+            <p className="text-sm text-muted-foreground mt-1">Aggiungi transazioni bancarie per visualizzare gli indicatori</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {kpis.map((kpi, index) => (
+              <div
+                key={kpi.id}
+                className="glass rounded-xl p-5 opacity-0 animate-fade-in"
+                style={{ animationDelay: `${150 + index * 50}ms` }}
+              >
+                <div className="flex items-start justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <div className={cn(
+                      "p-2 rounded-lg",
+                      kpi.categoria === "standard" ? "bg-primary/10" : "bg-warning/10"
+                    )}>
+                      {getKPIIcon(kpi.id, kpi.categoria)}
+                    </div>
+                    <span className="text-sm text-muted-foreground">{kpi.nome}</span>
                   </div>
-                  <span className="text-sm text-muted-foreground">{kpi.nome}</span>
+                  <Badge className={cn(
+                    "text-xs",
+                    kpi.raggiunto ? "bg-success/10 text-success border-success/20" : "bg-destructive/10 text-destructive border-destructive/20"
+                  )}>
+                    {kpi.raggiunto ? "✓ Target" : "✗ Target"}
+                  </Badge>
                 </div>
-                <Badge className={cn(
-                  "text-xs",
-                  kpi.raggiunto ? "bg-success/10 text-success border-success/20" : "bg-destructive/10 text-destructive border-destructive/20"
-                )}>
-                  {kpi.raggiunto ? "✓ Target" : "✗ Target"}
-                </Badge>
+                <p className="text-2xl font-bold text-foreground">{kpi.valore}</p>
+                <div className="flex items-center justify-between mt-3">
+                  <span className="text-xs text-muted-foreground">Target: {kpi.target}</span>
+                  <span className={cn(
+                    "text-xs font-medium",
+                    kpi.raggiunto ? "text-success" : "text-destructive"
+                  )}>
+                    {kpi.trend}
+                  </span>
+                </div>
+                <Progress value={kpi.progressValue} className="mt-3 h-1.5 bg-secondary" />
               </div>
-              <p className="text-2xl font-bold text-foreground">{kpi.valore}</p>
-              <div className="flex items-center justify-between mt-3">
-                <span className="text-xs text-muted-foreground">Target: {kpi.target}</span>
-                <span className={cn(
-                  "text-xs font-medium",
-                  kpi.trend.startsWith("+") || kpi.trend.startsWith("-") && !kpi.trend.includes("giorni") && kpi.raggiunto ? "text-success" : "text-muted-foreground"
-                )}>
-                  {kpi.trend}
-                </span>
-              </div>
-              <Progress value={kpi.raggiunto ? 100 : 75} className="mt-3 h-1.5 bg-secondary" />
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Reports List */}
@@ -92,7 +141,7 @@ export default function KPIReport() {
             <h3 className="text-lg font-semibold text-foreground">Report Periodici</h3>
             <p className="text-sm text-muted-foreground">Cronologia e stato dei report generati</p>
           </div>
-          <Button className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
+          <Button onClick={handleExport} className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
             <Download className="h-4 w-4" />
             Esporta Report
           </Button>
@@ -124,7 +173,7 @@ export default function KPIReport() {
                   {report.stato}
                 </Badge>
                 {report.stato === "completato" && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary">
+                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary" onClick={handleExport}>
                     <Download className="h-4 w-4 text-muted-foreground" />
                   </Button>
                 )}
