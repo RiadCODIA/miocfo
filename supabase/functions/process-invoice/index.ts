@@ -203,7 +203,8 @@ serve(async (req) => {
 
     // Try to get user from auth header (optional)
     const authHeader = req.headers.get('Authorization');
-    let userId = `demo-user-${Date.now()}`;
+    // UUID valido per utenti demo (non autenticati)
+    let userId = '00000000-0000-0000-0000-000000000000';
 
     if (authHeader) {
       const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {

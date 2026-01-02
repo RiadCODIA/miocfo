@@ -78,7 +78,8 @@ export default function Fatture() {
   const uploadMutation = useMutation({
     mutationFn: async (files: File[]) => {
       const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id || `demo-user-${Date.now()}`;
+      // UUID valido per utenti demo (non autenticati)
+      const userId = session?.user?.id || '00000000-0000-0000-0000-000000000000';
       
       const uploadResults = [];
       
