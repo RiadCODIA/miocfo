@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   Users, 
   Search, 
@@ -14,7 +15,6 @@ import {
   Ban,
   LogOut,
   Filter,
-  UserCheck,
   Clock,
   Shield,
   Activity
@@ -61,110 +61,20 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
-
-// Mock data
-const users = [
-  { 
-    id: "1", 
-    name: "Mario Rossi", 
-    email: "mario.rossi@acme.it", 
-    company: "Acme S.r.l.", 
-    role: "admin_aziendale", 
-    status: "active", 
-    lastLogin: "2 ore fa",
-    createdAt: "2023-06-15",
-    phone: "+39 333 1234567",
-    twoFactorEnabled: true,
-    activityLog: [
-      { action: "login", timestamp: "2024-01-15 14:30", details: "Login da Milano, IT" },
-      { action: "permission_change", timestamp: "2024-01-14 10:15", details: "Promosso ad Admin Aziendale" },
-      { action: "password_reset", timestamp: "2024-01-10 09:00", details: "Password resettata via email" },
-      { action: "login", timestamp: "2024-01-09 08:45", details: "Login da Roma, IT" },
-    ]
-  },
-  { 
-    id: "2", 
-    name: "Giulia Bianchi", 
-    email: "g.bianchi@techcorp.com", 
-    company: "TechCorp S.p.A.", 
-    role: "user", 
-    status: "active", 
-    lastLogin: "15 min fa",
-    createdAt: "2023-08-20",
-    phone: "+39 347 9876543",
-    twoFactorEnabled: false,
-    activityLog: [
-      { action: "login", timestamp: "2024-01-15 14:45", details: "Login da Napoli, IT" },
-      { action: "report_generated", timestamp: "2024-01-15 14:30", details: "Report Cash Flow Q4 2023" },
-    ]
-  },
-  { 
-    id: "3", 
-    name: "Luca Verdi", 
-    email: "luca@startup.io", 
-    company: "StartUp Innovation", 
-    role: "admin_aziendale", 
-    status: "invited", 
-    lastLogin: "Mai",
-    createdAt: "2024-01-10",
-    phone: null,
-    twoFactorEnabled: false,
-    activityLog: []
-  },
-  { 
-    id: "4", 
-    name: "Anna Neri", 
-    email: "a.neri@globalfinance.com", 
-    company: "Global Finance Ltd", 
-    role: "user", 
-    status: "active", 
-    lastLogin: "1 giorno fa",
-    createdAt: "2022-11-05",
-    phone: "+39 02 5556667",
-    twoFactorEnabled: true,
-    activityLog: [
-      { action: "login", timestamp: "2024-01-14 09:00", details: "Login da Milano, IT" },
-      { action: "transaction_export", timestamp: "2024-01-13 16:30", details: "Export 500 transazioni" },
-    ]
-  },
-  { 
-    id: "5", 
-    name: "Marco Costa", 
-    email: "m.costa@localbiz.it", 
-    company: "Local Business", 
-    role: "user", 
-    status: "disabled", 
-    lastLogin: "30 giorni fa",
-    createdAt: "2023-09-01",
-    phone: "+39 055 9998887",
-    twoFactorEnabled: false,
-    activityLog: [
-      { action: "account_disabled", timestamp: "2023-12-15 11:00", details: "Disabilitato per inattività" },
-    ]
-  },
-];
+import { useGlobalUsers, useUpdateUserRole, GlobalUser } from "@/hooks/useGlobalUsers";
 
 export default function UtentiGlobali() {
-  const [selectedUser, setSelectedUser] = useState<typeof users[0] | null>(null);
+  const [selectedUser, setSelectedUser] = useState<GlobalUser | null>(null);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
-  const [newRole, setNewRole] = useState("");
+  const [newRole, setNewRole] = useState<'user' | 'admin_aziendale' | 'super_admin'>('user');
   const [roleChangeReason, setRoleChangeReason] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterRole, setFilterRole] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case "active":
-        return <Badge className="bg-emerald-500/20 text-emerald-600 border-emerald-500/30">Attivo</Badge>;
-      case "invited":
-        return <Badge className="bg-blue-500/20 text-blue-600 border-blue-500/30">Invitato</Badge>;
-      case "disabled":
-        return <Badge variant="destructive">Disabilitato</Badge>;
-      default:
-        return <Badge variant="secondary">{status}</Badge>;
-    }
-  };
+  const { data: users, isLoading } = useGlobalUsers();
+  const updateUserRole = useUpdateUserRole();
 
   const getRoleBadge = (role: string) => {
     switch (role) {
@@ -179,27 +89,12 @@ export default function UtentiGlobali() {
     }
   };
 
-  const getActionIcon = (action: string) => {
-    switch (action) {
-      case "login":
-        return <LogOut className="h-4 w-4 text-blue-500" />;
-      case "permission_change":
-        return <Shield className="h-4 w-4 text-violet-500" />;
-      case "password_reset":
-        return <KeyRound className="h-4 w-4 text-amber-500" />;
-      case "account_disabled":
-        return <Ban className="h-4 w-4 text-destructive" />;
-      default:
-        return <Activity className="h-4 w-4 text-muted-foreground" />;
-    }
-  };
-
-  const handleViewDetails = (user: typeof users[0]) => {
+  const handleViewDetails = (user: GlobalUser) => {
     setSelectedUser(user);
     setDetailSheetOpen(true);
   };
 
-  const handleChangeRole = (user: typeof users[0]) => {
+  const handleChangeRole = (user: GlobalUser) => {
     setSelectedUser(user);
     setNewRole(user.role);
     setRoleDialogOpen(true);
@@ -210,34 +105,45 @@ export default function UtentiGlobali() {
       toast.error("Inserisci un motivo per la modifica");
       return;
     }
-    toast.success("Ruolo modificato con successo", {
-      description: `${selectedUser?.name} → ${newRole === "admin_aziendale" ? "Admin Aziendale" : "Utente"}`
+    if (!selectedUser) return;
+    
+    updateUserRole.mutate({
+      userId: selectedUser.id,
+      role: newRole,
+    }, {
+      onSuccess: () => {
+        setRoleDialogOpen(false);
+        setRoleChangeReason("");
+      }
     });
-    setRoleDialogOpen(false);
-    setRoleChangeReason("");
   };
 
-  const handleResetPassword = (user: typeof users[0]) => {
+  const handleResetPassword = (user: GlobalUser) => {
     toast.success("Email di reset password inviata", {
-      description: `Inviata a ${user.email}`
+      description: `Inviata a ${user.firstName || user.id}`
     });
   };
 
-  const handleForceLogout = (user: typeof users[0]) => {
+  const handleForceLogout = (user: GlobalUser) => {
     toast.success("Logout forzato", {
-      description: `${user.name} è stato disconnesso da tutte le sessioni`
+      description: `${user.firstName || 'Utente'} è stato disconnesso da tutte le sessioni`
     });
   };
 
-  const handleDisableAccount = (user: typeof users[0]) => {
+  const handleDisableAccount = (user: GlobalUser) => {
     toast.success("Account disabilitato", {
-      description: `${user.name} non potrà più accedere`
+      description: `${user.firstName || 'Utente'} non potrà più accedere`
     });
   };
 
-  const filteredUsers = users.filter(user => {
-    if (filterStatus !== "all" && user.status !== filterStatus) return false;
+  const filteredUsers = (users || []).filter(user => {
     if (filterRole !== "all" && user.role !== filterRole) return false;
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase();
+      const fullName = `${user.firstName || ''} ${user.lastName || ''}`.toLowerCase();
+      const company = (user.companyName || '').toLowerCase();
+      if (!fullName.includes(query) && !company.includes(query)) return false;
+    }
     return true;
   });
 
@@ -260,6 +166,8 @@ export default function UtentiGlobali() {
               <Input 
                 placeholder="Cerca per nome, email, azienda..." 
                 className="pl-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             <Popover>
@@ -277,20 +185,6 @@ export default function UtentiGlobali() {
               <PopoverContent className="w-80">
                 <div className="space-y-4">
                   <h4 className="font-medium">Filtri Avanzati</h4>
-                  <div className="space-y-2">
-                    <Label>Stato</Label>
-                    <Select value={filterStatus} onValueChange={setFilterStatus}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Tutti gli stati" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tutti gli stati</SelectItem>
-                        <SelectItem value="active">Attivo</SelectItem>
-                        <SelectItem value="invited">Invitato</SelectItem>
-                        <SelectItem value="disabled">Disabilitato</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <div className="space-y-2">
                     <Label>Ruolo</Label>
                     <Select value={filterRole} onValueChange={setFilterRole}>
@@ -324,69 +218,84 @@ export default function UtentiGlobali() {
         <CardHeader>
           <CardTitle>Elenco Utenti</CardTitle>
           <CardDescription>
-            {filteredUsers.length} utenti {filteredUsers.length !== users.length && `(filtrati da ${users.length})`}
+            {filteredUsers.length} utenti {filteredUsers.length !== (users?.length || 0) && `(filtrati da ${users?.length || 0})`}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Nome</TableHead>
-                <TableHead>Email</TableHead>
-                <TableHead>Azienda</TableHead>
-                <TableHead>Ruolo</TableHead>
-                <TableHead>Stato</TableHead>
-                <TableHead>Ultimo Accesso</TableHead>
-                <TableHead className="text-right">Azioni</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredUsers.map((user) => (
-                <TableRow key={user.id}>
-                  <TableCell className="font-medium">{user.name}</TableCell>
-                  <TableCell className="text-muted-foreground">{user.email}</TableCell>
-                  <TableCell>{user.company}</TableCell>
-                  <TableCell>{getRoleBadge(user.role)}</TableCell>
-                  <TableCell>{getStatusBadge(user.status)}</TableCell>
-                  <TableCell className="text-muted-foreground">{user.lastLogin}</TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleViewDetails(user)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          Visualizza Profilo
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleChangeRole(user)}>
-                          <Shield className="mr-2 h-4 w-4" />
-                          Modifica Ruolo
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleResetPassword(user)}>
-                          <KeyRound className="mr-2 h-4 w-4" />
-                          Reset Password
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleForceLogout(user)}>
-                          <LogOut className="mr-2 h-4 w-4" />
-                          Forza Logout
-                        </DropdownMenuItem>
-                        <DropdownMenuItem 
-                          className="text-destructive"
-                          onClick={() => handleDisableAccount(user)}
-                        >
-                          <Ban className="mr-2 h-4 w-4" />
-                          Disabilita Account
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
-                </TableRow>
+          {isLoading ? (
+            <div className="space-y-4">
+              {[1, 2, 3, 4, 5].map((i) => (
+                <Skeleton key={i} className="h-16 w-full" />
               ))}
-            </TableBody>
-          </Table>
+            </div>
+          ) : filteredUsers.length > 0 ? (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Nome</TableHead>
+                  <TableHead>Azienda</TableHead>
+                  <TableHead>Ruolo</TableHead>
+                  <TableHead>Registrato</TableHead>
+                  <TableHead className="text-right">Azioni</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {filteredUsers.map((user) => (
+                  <TableRow key={user.id}>
+                    <TableCell className="font-medium">
+                      {user.firstName || user.lastName 
+                        ? `${user.firstName || ''} ${user.lastName || ''}`.trim()
+                        : user.id.slice(0, 8)
+                      }
+                    </TableCell>
+                    <TableCell>{user.companyName || '-'}</TableCell>
+                    <TableCell>{getRoleBadge(user.role)}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      {new Date(user.createdAt).toLocaleDateString('it-IT')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleViewDetails(user)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            Visualizza Profilo
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleChangeRole(user)}>
+                            <Shield className="mr-2 h-4 w-4" />
+                            Modifica Ruolo
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleResetPassword(user)}>
+                            <KeyRound className="mr-2 h-4 w-4" />
+                            Reset Password
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleForceLogout(user)}>
+                            <LogOut className="mr-2 h-4 w-4" />
+                            Forza Logout
+                          </DropdownMenuItem>
+                          <DropdownMenuItem 
+                            className="text-destructive"
+                            onClick={() => handleDisableAccount(user)}
+                          >
+                            <Ban className="mr-2 h-4 w-4" />
+                            Disabilita Account
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              Nessun utente trovato
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -396,7 +305,10 @@ export default function UtentiGlobali() {
           <SheetHeader>
             <SheetTitle className="flex items-center gap-2">
               <Users className="h-5 w-5" />
-              {selectedUser?.name}
+              {selectedUser?.firstName || selectedUser?.lastName 
+                ? `${selectedUser.firstName || ''} ${selectedUser.lastName || ''}`.trim()
+                : 'Utente'
+              }
             </SheetTitle>
             <SheetDescription>
               Profilo e attività utente
@@ -410,125 +322,85 @@ export default function UtentiGlobali() {
                 <h4 className="font-medium text-foreground">Profilo</h4>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
-                    <p className="text-muted-foreground">Email</p>
-                    <p className="font-medium">{selectedUser.email}</p>
+                    <p className="text-muted-foreground">Nome</p>
+                    <p className="font-medium">{selectedUser.firstName || '-'}</p>
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Telefono</p>
-                    <p className="font-medium">{selectedUser.phone || "Non specificato"}</p>
+                    <p className="text-muted-foreground">Cognome</p>
+                    <p className="font-medium">{selectedUser.lastName || '-'}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Azienda</p>
-                    <p className="font-medium">{selectedUser.company}</p>
+                    <p className="font-medium">{selectedUser.companyName || '-'}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Data Registrazione</p>
-                    <p className="font-medium">{selectedUser.createdAt}</p>
+                    <p className="font-medium">{new Date(selectedUser.createdAt).toLocaleDateString('it-IT')}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Ruolo</p>
                     {getRoleBadge(selectedUser.role)}
                   </div>
                   <div>
-                    <p className="text-muted-foreground">Stato</p>
-                    {getStatusBadge(selectedUser.status)}
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">2FA</p>
-                    {selectedUser.twoFactorEnabled ? (
-                      <Badge className="bg-emerald-500/20 text-emerald-600 border-emerald-500/30">Attiva</Badge>
-                    ) : (
-                      <Badge variant="secondary">Non attiva</Badge>
-                    )}
-                  </div>
-                  <div>
                     <p className="text-muted-foreground">Ultimo Accesso</p>
-                    <p className="font-medium">{selectedUser.lastLogin}</p>
+                    <p className="font-medium">{selectedUser.lastSignIn ? new Date(selectedUser.lastSignIn).toLocaleString('it-IT') : 'Mai'}</p>
                   </div>
                 </div>
               </div>
 
-              {/* Activity Timeline */}
+              {/* Quick Actions */}
               <div className="space-y-4">
                 <h4 className="font-medium text-foreground flex items-center gap-2">
-                  <Clock className="h-4 w-4" />
-                  Timeline Attività
+                  <Activity className="h-4 w-4" />
+                  Azioni Rapide
                 </h4>
-                {selectedUser.activityLog.length > 0 ? (
-                  <div className="space-y-3">
-                    {selectedUser.activityLog.map((activity, idx) => (
-                      <div 
-                        key={idx} 
-                        className="flex items-start gap-3 p-3 rounded-lg bg-muted/50 border border-border"
-                      >
-                        {getActionIcon(activity.action)}
-                        <div className="flex-1">
-                          <p className="text-sm font-medium capitalize">
-                            {activity.action.replace(/_/g, " ")}
-                          </p>
-                          <p className="text-xs text-muted-foreground">{activity.details}</p>
-                        </div>
-                        <span className="text-xs text-muted-foreground whitespace-nowrap">
-                          {activity.timestamp}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Nessuna attività registrata</p>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-4 border-t">
-                <Button 
-                  variant="outline" 
-                  className="flex-1"
-                  onClick={() => handleChangeRole(selectedUser)}
-                >
-                  <Shield className="mr-2 h-4 w-4" />
-                  Modifica Ruolo
-                </Button>
-                <Button 
-                  variant="outline" 
-                  className="flex-1"
-                  onClick={() => handleForceLogout(selectedUser)}
-                >
-                  <LogOut className="mr-2 h-4 w-4" />
-                  Forza Logout
-                </Button>
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => handleChangeRole(selectedUser)}>
+                    <Shield className="mr-2 h-4 w-4" />
+                    Modifica Ruolo
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => handleResetPassword(selectedUser)}>
+                    <KeyRound className="mr-2 h-4 w-4" />
+                    Reset Password
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => handleForceLogout(selectedUser)}>
+                    <LogOut className="mr-2 h-4 w-4" />
+                    Forza Logout
+                  </Button>
+                </div>
               </div>
             </div>
           )}
         </SheetContent>
       </Sheet>
 
-      {/* Change Role Dialog */}
+      {/* Role Change Dialog */}
       <Dialog open={roleDialogOpen} onOpenChange={setRoleDialogOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Modifica Ruolo Utente</DialogTitle>
             <DialogDescription>
-              Modifica il ruolo di {selectedUser?.name}
+              Stai modificando i permessi di {selectedUser?.firstName || 'questo utente'}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
               <Label>Nuovo Ruolo</Label>
-              <Select value={newRole} onValueChange={setNewRole}>
+              <Select value={newRole} onValueChange={(v) => setNewRole(v as typeof newRole)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="user">Utente</SelectItem>
                   <SelectItem value="admin_aziendale">Admin Aziendale</SelectItem>
+                  <SelectItem value="super_admin">Super Admin</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Motivo della modifica *</Label>
+              <Label>Motivo della Modifica</Label>
               <Textarea 
-                placeholder="Inserisci il motivo della modifica ruolo..."
+                placeholder="Inserisci il motivo della modifica (verrà registrato nell'audit trail)"
                 value={roleChangeReason}
                 onChange={(e) => setRoleChangeReason(e.target.value)}
                 rows={3}
@@ -539,7 +411,11 @@ export default function UtentiGlobali() {
             <Button variant="outline" onClick={() => setRoleDialogOpen(false)}>
               Annulla
             </Button>
-            <Button className="bg-violet-600 hover:bg-violet-700" onClick={handleConfirmRoleChange}>
+            <Button 
+              className="bg-violet-600 hover:bg-violet-700" 
+              onClick={handleConfirmRoleChange}
+              disabled={updateUserRole.isPending}
+            >
               Conferma Modifica
             </Button>
           </DialogFooter>

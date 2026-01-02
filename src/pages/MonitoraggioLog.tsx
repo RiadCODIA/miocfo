@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
   FileSearch, 
   Search,
@@ -37,25 +38,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { toast } from "sonner";
-
-// Mock log data
-const applicationLogs = [
-  { timestamp: "2024-01-15 14:32:45", level: "error", service: "api-gateway", message: "Connection timeout to database", requestId: "req-001", companyId: "acme" },
-  { timestamp: "2024-01-15 14:32:44", level: "warn", service: "sync-service", message: "Rate limit approaching for Plaid API", requestId: "req-002", companyId: "techcorp" },
-  { timestamp: "2024-01-15 14:32:40", level: "info", service: "auth-service", message: "User login successful: mario.rossi@acme.it", requestId: "req-003", companyId: "acme" },
-  { timestamp: "2024-01-15 14:32:38", level: "info", service: "api-gateway", message: "Request completed: GET /api/transactions (45ms)", requestId: "req-004", companyId: "globalfinance" },
-  { timestamp: "2024-01-15 14:32:35", level: "warn", service: "billing-service", message: "Invoice generation delayed for company_123", requestId: "req-005", companyId: "startup" },
-  { timestamp: "2024-01-15 14:32:30", level: "error", service: "sync-service", message: "Failed to sync transactions: Invalid credentials", requestId: "req-006", companyId: "localbiz" },
-  { timestamp: "2024-01-15 14:32:25", level: "info", service: "api-gateway", message: "Request completed: POST /api/transactions (123ms)", requestId: "req-007", companyId: "acme" },
-];
-
-const auditTrail = [
-  { timestamp: "2024-01-15 14:30:00", actor: "admin@finexa.com", role: "super_admin", action: "company_status_change", target: "Acme S.r.l.", result: "success" },
-  { timestamp: "2024-01-15 14:28:00", actor: "admin@finexa.com", role: "super_admin", action: "impersonation_start", target: "mario.rossi@acme.it", result: "success" },
-  { timestamp: "2024-01-15 14:25:00", actor: "admin@finexa.com", role: "super_admin", action: "plan_change", target: "TechCorp S.p.A.", result: "success" },
-  { timestamp: "2024-01-15 14:20:00", actor: "system", role: "system", action: "security_policy_change", target: "password_policy", result: "success" },
-  { timestamp: "2024-01-15 14:15:00", actor: "admin@finexa.com", role: "super_admin", action: "user_role_change", target: "giulia@techcorp.com", result: "success" },
-];
+import { useApplicationLogs, useAuditTrail } from "@/hooks/useSystemLogs";
 
 export default function MonitoraggioLog() {
   const [liveTailActive, setLiveTailActive] = useState(false);
@@ -66,6 +49,9 @@ export default function MonitoraggioLog() {
   const [exportDialogOpen, setExportDialogOpen] = useState(false);
   const [exportFormat, setExportFormat] = useState("json");
   const [exportRange, setExportRange] = useState("24h");
+
+  const { data: applicationLogs, isLoading: logsLoading } = useApplicationLogs({}, 100);
+  const { data: auditTrail, isLoading: auditLoading } = useAuditTrail(50);
 
   const getLevelBadge = (level: string) => {
     switch (level) {
@@ -80,24 +66,11 @@ export default function MonitoraggioLog() {
     }
   };
 
-  const getLevelIcon = (level: string) => {
-    switch (level) {
-      case "error":
-        return <AlertCircle className="h-4 w-4 text-destructive" />;
-      case "warn":
-        return <AlertTriangle className="h-4 w-4 text-amber-500" />;
-      case "info":
-        return <Info className="h-4 w-4 text-blue-500" />;
-      default:
-        return null;
-    }
-  };
-
-  const filteredLogs = applicationLogs.filter(log => {
+  const filteredLogs = (applicationLogs || []).filter(log => {
     if (filterSeverity !== "all" && log.level !== filterSeverity) return false;
     if (filterService !== "all" && log.service !== filterService) return false;
-    if (filterCompany && !log.companyId.toLowerCase().includes(filterCompany.toLowerCase())) return false;
-    if (filterRequestId && !log.requestId.toLowerCase().includes(filterRequestId.toLowerCase())) return false;
+    if (filterCompany && !log.company_id?.toLowerCase().includes(filterCompany.toLowerCase())) return false;
+    if (filterRequestId && !log.request_id?.toLowerCase().includes(filterRequestId.toLowerCase())) return false;
     return true;
   });
 
@@ -132,6 +105,9 @@ export default function MonitoraggioLog() {
     filterCompany !== "",
     filterRequestId !== ""
   ].filter(Boolean).length;
+
+  // Get unique services for filter
+  const uniqueServices = [...new Set((applicationLogs || []).map(log => log.service))];
 
   return (
     <div className="space-y-6">
@@ -196,10 +172,9 @@ export default function MonitoraggioLog() {
                           </SelectTrigger>
                           <SelectContent>
                             <SelectItem value="all">Tutti</SelectItem>
-                            <SelectItem value="api-gateway">API Gateway</SelectItem>
-                            <SelectItem value="auth-service">Auth Service</SelectItem>
-                            <SelectItem value="sync-service">Sync Service</SelectItem>
-                            <SelectItem value="billing-service">Billing Service</SelectItem>
+                            {uniqueServices.map(service => (
+                              <SelectItem key={service} value={service}>{service}</SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -262,24 +237,40 @@ export default function MonitoraggioLog() {
                 )}
               </CardTitle>
               <CardDescription>
-                {filteredLogs.length} log {filteredLogs.length !== applicationLogs.length && `(filtrati da ${applicationLogs.length})`}
+                {filteredLogs.length} log {filteredLogs.length !== (applicationLogs?.length || 0) && `(filtrati da ${applicationLogs?.length || 0})`}
               </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                {filteredLogs.map((log, index) => (
-                  <div 
-                    key={index}
-                    className="flex items-start gap-4 p-3 rounded-lg bg-muted/30 border border-border font-mono text-sm"
-                  >
-                    <span className="text-muted-foreground whitespace-nowrap">{log.timestamp}</span>
-                    {getLevelBadge(log.level)}
-                    <span className="text-violet-600 dark:text-violet-400">[{log.service}]</span>
-                    <span className="text-foreground flex-1">{log.message}</span>
-                    <span className="text-muted-foreground text-xs">{log.requestId}</span>
-                  </div>
-                ))}
-              </div>
+              {logsLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : filteredLogs.length > 0 ? (
+                <div className="space-y-2">
+                  {filteredLogs.map((log) => (
+                    <div 
+                      key={log.id}
+                      className="flex items-start gap-4 p-3 rounded-lg bg-muted/30 border border-border font-mono text-sm"
+                    >
+                      <span className="text-muted-foreground whitespace-nowrap">
+                        {new Date(log.created_at).toLocaleString('it-IT')}
+                      </span>
+                      {getLevelBadge(log.level)}
+                      <span className="text-violet-600 dark:text-violet-400">[{log.service}]</span>
+                      <span className="text-foreground flex-1">{log.message}</span>
+                      {log.request_id && (
+                        <span className="text-muted-foreground text-xs">{log.request_id}</span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  Nessun log trovato
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
@@ -292,32 +283,46 @@ export default function MonitoraggioLog() {
               <CardDescription>Tracciamento azioni sensibili sulla piattaforma</CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-4">
-                {auditTrail.map((event, index) => (
-                  <div 
-                    key={index}
-                    className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-border"
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="h-10 w-10 rounded-full bg-violet-500/20 flex items-center justify-center">
-                        <FileSearch className="h-5 w-5 text-violet-600" />
+              {auditLoading ? (
+                <div className="space-y-4">
+                  {[1, 2, 3, 4, 5].map((i) => (
+                    <Skeleton key={i} className="h-16 w-full" />
+                  ))}
+                </div>
+              ) : (auditTrail && auditTrail.length > 0) ? (
+                <div className="space-y-4">
+                  {auditTrail.map((event) => (
+                    <div 
+                      key={event.id}
+                      className="flex items-center justify-between p-4 rounded-lg bg-muted/50 border border-border"
+                    >
+                      <div className="flex items-center gap-4">
+                        <div className="h-10 w-10 rounded-full bg-violet-500/20 flex items-center justify-center">
+                          <FileSearch className="h-5 w-5 text-violet-600" />
+                        </div>
+                        <div>
+                          <p className="font-medium text-foreground">{event.action.replace(/_/g, " ").toUpperCase()}</p>
+                          <p className="text-sm text-muted-foreground">
+                            da <span className="text-foreground">{event.actor_email || 'Sistema'}</span> → <span className="text-foreground">{event.target_name || event.target_id || 'N/A'}</span>
+                          </p>
+                        </div>
                       </div>
-                      <div>
-                        <p className="font-medium text-foreground">{event.action.replace(/_/g, " ").toUpperCase()}</p>
-                        <p className="text-sm text-muted-foreground">
-                          da <span className="text-foreground">{event.actor}</span> → <span className="text-foreground">{event.target}</span>
-                        </p>
+                      <div className="flex items-center gap-4">
+                        <span className="text-sm text-muted-foreground">
+                          {new Date(event.created_at).toLocaleString('it-IT')}
+                        </span>
+                        <Badge className={event.result === 'success' ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/30" : "bg-destructive/20 text-destructive border-destructive/30"}>
+                          {event.result}
+                        </Badge>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <span className="text-sm text-muted-foreground">{event.timestamp}</span>
-                      <Badge className="bg-emerald-500/20 text-emerald-600 border-emerald-500/30">
-                        {event.result}
-                      </Badge>
-                    </div>
-                  </div>
-                ))}
-              </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  Nessun evento nell'audit trail
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
