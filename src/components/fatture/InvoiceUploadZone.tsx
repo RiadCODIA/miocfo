@@ -4,7 +4,7 @@ import { Upload, FileText, X, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 
-const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB limit per Edge Functions
+const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB limit per Supabase Storage
 
 export interface UploadedInvoice {
   id: string;
@@ -46,7 +46,7 @@ export function InvoiceUploadZone({ onUpload, uploadingFiles, onRemoveFile }: In
     if (invalidFiles.length > 0) {
       toast({
         title: "File troppo grandi",
-        description: `${invalidFiles.map(f => f.name).join(", ")} supera il limite di 5MB. Riduci la dimensione del file.`,
+        description: `${invalidFiles.map(f => f.name).join(", ")} supera il limite di 50MB.`,
         variant: "destructive",
       });
     }
@@ -133,7 +133,7 @@ export function InvoiceUploadZone({ onUpload, uploadingFiles, onRemoveFile }: In
               </p>
             </div>
             <p className="text-xs text-muted-foreground">
-            PDF, CSV, ZIP, PNG, JPG fino a 5MB
+            PDF, CSV, ZIP, PNG, JPG fino a 50MB
             </p>
           </div>
         </label>

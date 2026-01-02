@@ -198,6 +198,9 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
+    // Create admin client for operations
+    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
     // Try to get user from auth header (optional)
     const authHeader = req.headers.get('Authorization');
     let userId = `demo-user-${Date.now()}`;
@@ -212,128 +215,140 @@ serve(async (req) => {
       }
     }
 
-    // Create admin client for operations
-    const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+    const contentType = req.headers.get('content-type') || '';
+    
+    let storagePath: string;
+    let fileName: string;
+    let fileType: string;
+    let fileData: Uint8Array;
 
-    const formData = await req.formData();
-    const files = formData.getAll('files') as File[];
+    if (contentType.includes('application/json')) {
+      // New flow: file already uploaded to storage
+      const body = await req.json();
+      storagePath = body.storagePath;
+      fileName = body.fileName;
+      fileType = body.fileType || fileName.split('.').pop()?.toLowerCase() || '';
+      userId = body.userId || userId;
 
-    if (!files || files.length === 0) {
-      throw new Error('Nessun file caricato');
+      console.log(`Processing file from storage: ${storagePath}`);
+
+      // Download file from storage
+      const { data: downloadData, error: downloadError } = await supabaseAdmin.storage
+        .from('invoices')
+        .download(storagePath);
+
+      if (downloadError || !downloadData) {
+        throw new Error(`Errore download file: ${downloadError?.message || 'File non trovato'}`);
+      }
+
+      fileData = new Uint8Array(await downloadData.arrayBuffer());
+
+    } else if (contentType.includes('multipart/form-data')) {
+      // Legacy flow: file sent via FormData
+      const formData = await req.formData();
+      const files = formData.getAll('files') as File[];
+
+      if (!files || files.length === 0) {
+        throw new Error('Nessun file caricato');
+      }
+
+      const file = files[0];
+      fileName = file.name;
+      fileType = file.type || fileName.split('.').pop()?.toLowerCase() || '';
+      const fileBuffer = await file.arrayBuffer();
+      fileData = new Uint8Array(fileBuffer);
+
+      // Upload file to storage
+      storagePath = `${userId}/${Date.now()}-${fileName}`;
+      const { error: uploadError } = await supabaseAdmin.storage
+        .from('invoices')
+        .upload(storagePath, fileData, {
+          contentType: file.type || 'application/octet-stream'
+        });
+
+      if (uploadError) {
+        console.error('Storage upload error:', uploadError);
+        throw new Error(`Errore upload: ${uploadError.message}`);
+      }
+    } else {
+      throw new Error('Formato richiesta non valido');
     }
 
-    console.log(`Processing ${files.length} files for user ${userId}`);
+    console.log(`Processing file: ${fileName} (${fileType}), size: ${fileData.length}`);
 
-    const results: { fileName: string; invoices: ExtractedInvoice[]; error?: string }[] = [];
+    let extractedInvoices: ExtractedInvoice[] = [];
 
-    for (const file of files) {
-      const fileName = file.name;
-      const fileType = file.type || fileName.split('.').pop()?.toLowerCase();
-      const fileBuffer = await file.arrayBuffer();
-      const fileData = new Uint8Array(fileBuffer);
+    if (fileType === 'text/csv' || fileName.endsWith('.csv')) {
+      // CSV file
+      const content = new TextDecoder().decode(fileData);
+      extractedInvoices = parseCSV(content);
+      console.log(`Extracted ${extractedInvoices.length} invoices from CSV`);
 
-      console.log(`Processing file: ${fileName} (${fileType})`);
+    } else if (fileType === 'application/zip' || fileName.endsWith('.zip')) {
+      // ZIP file - process as container
+      extractedInvoices = [{
+        invoice_number: `ZIP-${Date.now()}`,
+        invoice_date: new Date().toISOString().split('T')[0],
+        supplier_name: fileName.replace('.zip', '').replace(/[_-]/g, ' '),
+        amount: 0,
+        currency: 'EUR',
+        raw_data: { note: 'Archivio ZIP caricato - estrazione automatica non disponibile', file_size: fileData.length }
+      }];
+      console.log('ZIP file detected - basic processing');
 
-      try {
-        let extractedInvoices: ExtractedInvoice[] = [];
+    } else if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
+      // PDF file
+      const pdfText = extractPDFText(fileData);
+      console.log(`Extracted PDF text length: ${pdfText.length}`);
+      const invoice = extractFromPDFText(pdfText, fileName);
+      extractedInvoices = [invoice];
 
-        if (fileType === 'text/csv' || fileName.endsWith('.csv')) {
-          // CSV file
-          const content = new TextDecoder().decode(fileData);
-          extractedInvoices = parseCSV(content);
-          console.log(`Extracted ${extractedInvoices.length} invoices from CSV`);
+    } else if (fileType?.startsWith('image/') || /\.(jpg|jpeg|png|gif)$/i.test(fileName)) {
+      // Image file - would need OCR
+      extractedInvoices = [{
+        invoice_number: `IMG-${Date.now()}`,
+        invoice_date: new Date().toISOString().split('T')[0],
+        supplier_name: 'Immagine Fattura',
+        amount: 0,
+        currency: 'EUR',
+        raw_data: { note: 'Immagine - inserimento manuale richiesto', file_name: fileName }
+      }];
 
-        } else if (fileType === 'application/zip' || fileName.endsWith('.zip')) {
-          // ZIP file - we'll process it as a container
-          // For simplicity, we'll note it as a single entry with raw data
-          // Full ZIP extraction would require a zip library
-          extractedInvoices = [{
-            invoice_number: `ZIP-${Date.now()}`,
-            invoice_date: new Date().toISOString().split('T')[0],
-            supplier_name: 'Archivio ZIP',
-            amount: 0,
-            currency: 'EUR',
-            raw_data: { note: 'Archivio ZIP - estrazione manuale richiesta', file_size: fileData.length }
-          }];
-          console.log('ZIP file detected - basic processing');
+    } else {
+      throw new Error(`Tipo file non supportato: ${fileType}`);
+    }
 
-        } else if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
-          // PDF file
-          const pdfText = extractPDFText(fileData);
-          console.log(`Extracted PDF text length: ${pdfText.length}`);
-          const invoice = extractFromPDFText(pdfText, fileName);
-          extractedInvoices = [invoice];
+    // Insert invoices into database
+    for (const invoice of extractedInvoices) {
+      const { error: insertError } = await supabaseAdmin
+        .from('invoices')
+        .insert({
+          user_id: userId,
+          invoice_number: invoice.invoice_number,
+          invoice_date: invoice.invoice_date,
+          supplier_name: invoice.supplier_name,
+          amount: invoice.amount,
+          currency: invoice.currency,
+          file_name: fileName,
+          file_path: storagePath,
+          file_type: fileType,
+          raw_data: invoice.raw_data,
+          match_status: 'pending'
+        });
 
-        } else if (fileType?.startsWith('image/') || /\.(jpg|jpeg|png|gif)$/i.test(fileName)) {
-          // Image file - would need OCR, for now just note it
-          extractedInvoices = [{
-            invoice_number: `IMG-${Date.now()}`,
-            invoice_date: new Date().toISOString().split('T')[0],
-            supplier_name: 'Immagine Fattura',
-            amount: 0,
-            currency: 'EUR',
-            raw_data: { note: 'Immagine - inserimento manuale richiesto', file_name: fileName }
-          }];
-
-        } else {
-          throw new Error(`Tipo file non supportato: ${fileType}`);
-        }
-
-        // Upload file to storage
-        const storagePath = `${userId}/${Date.now()}-${fileName}`;
-        const { error: uploadError } = await supabaseAdmin.storage
-          .from('invoices')
-          .upload(storagePath, fileData, {
-            contentType: file.type || 'application/octet-stream'
-          });
-
-        if (uploadError) {
-          console.error('Storage upload error:', uploadError);
-          throw new Error(`Errore upload: ${uploadError.message}`);
-        }
-
-        // Insert invoices into database
-        for (const invoice of extractedInvoices) {
-          const { error: insertError } = await supabaseAdmin
-            .from('invoices')
-            .insert({
-              user_id: userId,
-              invoice_number: invoice.invoice_number,
-              invoice_date: invoice.invoice_date,
-              supplier_name: invoice.supplier_name,
-              amount: invoice.amount,
-              currency: invoice.currency,
-              file_name: fileName,
-              file_path: storagePath,
-              file_type: fileType,
-              raw_data: invoice.raw_data,
-              match_status: 'pending'
-            });
-
-          if (insertError) {
-            console.error('Insert error:', insertError);
-            throw new Error(`Errore inserimento: ${insertError.message}`);
-          }
-        }
-
-        results.push({ fileName, invoices: extractedInvoices });
-
-      } catch (fileError: unknown) {
-        const errorMessage = fileError instanceof Error ? fileError.message : 'Unknown error';
-        console.error(`Error processing ${fileName}:`, fileError);
-        results.push({ fileName, invoices: [], error: errorMessage });
+      if (insertError) {
+        console.error('Insert error:', insertError);
+        throw new Error(`Errore inserimento: ${insertError.message}`);
       }
     }
 
-    const totalInvoices = results.reduce((sum, r) => sum + r.invoices.length, 0);
-    console.log(`Total invoices processed: ${totalInvoices}`);
+    console.log(`Total invoices processed: ${extractedInvoices.length}`);
 
     return new Response(
       JSON.stringify({
         success: true,
-        processed: results.length,
-        total_invoices: totalInvoices,
-        results
+        invoices_count: extractedInvoices.length,
+        invoices: extractedInvoices
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
