@@ -1,11 +1,12 @@
 import { useState, useEffect } from "react";
 import { Navigate, useNavigate } from "react-router-dom";
-import { useAuth } from "@/contexts/AuthContext";
+import { useAuth, AppRole } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
 import finexaLogo from "@/assets/finexa-logo.png";
@@ -48,6 +49,7 @@ export default function Auth() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [selectedRole, setSelectedRole] = useState<"user" | "admin_aziendale">("user");
 
   // Redirect if already authenticated or in demo mode
   useEffect(() => {
@@ -150,6 +152,7 @@ export default function Auth() {
       first_name: firstName,
       last_name: lastName,
       company_name: companyName || undefined,
+      role: selectedRole,
     });
     setIsSubmitting(false);
 
@@ -343,6 +346,29 @@ export default function Auth() {
                       className="pl-10"
                     />
                   </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="accountType">Tipo di Account</Label>
+                  <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v as "user" | "admin_aziendale")}>
+                    <SelectTrigger id="accountType">
+                      <SelectValue placeholder="Seleziona tipo account" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="user">
+                        <div className="flex items-center gap-2">
+                          <User className="h-4 w-4" />
+                          <span>Utente Standard</span>
+                        </div>
+                      </SelectItem>
+                      <SelectItem value="admin_aziendale">
+                        <div className="flex items-center gap-2">
+                          <ShieldCheck className="h-4 w-4" />
+                          <span>Admin Aziendale (gestisce clienti)</span>
+                        </div>
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 
                 <div className="space-y-2">
