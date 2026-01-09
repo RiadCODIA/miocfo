@@ -46,7 +46,7 @@ interface AuthContextType {
   permissions: AdminPermissions | null;
   superAdminPermissions: SuperAdminPermissions | null;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, metadata?: { first_name?: string; last_name?: string; company_name?: string }) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, metadata?: { first_name?: string; last_name?: string; company_name?: string; role?: string }) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   signInAsDemo: () => void;
   signInAsDemoAdmin: () => void;
@@ -112,6 +112,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   };
 
+  const fetchUserRole = async (userId: string) => {
+    const { data, error } = await supabase
+      .from("user_roles")
+      .select("role")
+      .eq("user_id", userId)
+      .single();
+    
+    if (!error && data) {
+      const role = data.role as AppRole;
+      if (role === 'admin_aziendale') {
+        setPermissions(ADMIN_PERMISSIONS);
+        setSuperAdminPermissions(null);
+      } else if (role === 'super_admin') {
+        setPermissions(null);
+        setSuperAdminPermissions(SUPER_ADMIN_PERMISSIONS);
+      } else {
+        setPermissions(USER_PERMISSIONS);
+        setSuperAdminPermissions(null);
+      }
+    }
+  };
+
   useEffect(() => {
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
@@ -119,13 +141,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         
-        // Defer profile fetch with setTimeout to avoid deadlock
+        // Defer profile and role fetch with setTimeout to avoid deadlock
         if (session?.user) {
           setTimeout(() => {
             fetchProfile(session.user.id);
+            fetchUserRole(session.user.id);
           }, 0);
         } else {
           setProfile(null);
+          setPermissions(null);
+          setSuperAdminPermissions(null);
         }
         
         setLoading(false);
@@ -139,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       
       if (session?.user) {
         fetchProfile(session.user.id);
+        fetchUserRole(session.user.id);
       }
       
       setLoading(false);
@@ -158,7 +184,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (
     email: string,
     password: string,
-    metadata?: { first_name?: string; last_name?: string; company_name?: string }
+    metadata?: { first_name?: string; last_name?: string; company_name?: string; role?: string }
   ) => {
     const redirectUrl = `${window.location.origin}/`;
     
