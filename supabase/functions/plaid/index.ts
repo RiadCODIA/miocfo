@@ -112,37 +112,40 @@ async function exchangePublicToken(publicToken: string) {
   const accounts = accountsData.accounts;
   console.log(`[Plaid] Found ${accounts.length} accounts`);
 
-  // Save each account to database
+  // Save each account to database using upsert (handles re-connections)
   const savedAccounts = [];
 
   for (const account of accounts) {
     const { data: savedAccount, error } = await supabase
       .from("bank_accounts")
-      .insert({
-        plaid_item_id: itemId,
-        plaid_access_token: accessToken,
-        plaid_account_id: account.account_id,
-        bank_name: bankName,
-        account_name: account.name,
-        account_type: account.type,
-        account_subtype: account.subtype,
-        mask: account.mask,
-        currency: account.balances.iso_currency_code || "EUR",
-        current_balance: account.balances.current || 0,
-        available_balance: account.balances.available || 0,
-        status: "active",
-        last_sync_at: new Date().toISOString(),
-      })
+      .upsert(
+        {
+          plaid_item_id: itemId,
+          plaid_access_token: accessToken,
+          plaid_account_id: account.account_id,
+          bank_name: bankName,
+          account_name: account.name,
+          account_type: account.type,
+          account_subtype: account.subtype,
+          mask: account.mask,
+          currency: account.balances.iso_currency_code || "EUR",
+          current_balance: account.balances.current || 0,
+          available_balance: account.balances.available || 0,
+          status: "active",
+          last_sync_at: new Date().toISOString(),
+        },
+        { onConflict: "plaid_account_id" }
+      )
       .select()
       .single();
 
     if (error) {
-      console.error("[Plaid] Error saving account:", error);
+      console.error(`[Plaid] Error saving account ${account.account_id}:`, error);
       throw error;
     }
 
     savedAccounts.push(savedAccount);
-    console.log(`[Plaid] Saved account: ${savedAccount.id}`);
+    console.log(`[Plaid] Saved account: ${savedAccount.id} (${account.mask})`);
   }
 
   return { accounts: savedAccounts };
@@ -307,28 +310,34 @@ async function removeItem(accountId: string) {
     throw new Error("Account not found");
   }
 
+  const plaidItemId = account.plaid_item_id;
+
   // Remove item from Plaid
   try {
     await plaidRequest("/item/remove", {
       access_token: account.plaid_access_token,
     });
-    console.log(`[Plaid] Removed item from Plaid: ${account.plaid_item_id}`);
+    console.log(`[Plaid] Removed item from Plaid: ${plaidItemId}`);
   } catch (e) {
     console.log("[Plaid] Item may already be removed from Plaid");
   }
 
-  // Delete from database (cascade will delete transactions)
-  const { error: deleteError } = await supabase
+  // Delete ALL accounts with the same plaid_item_id (an item can have multiple accounts)
+  const { data: deletedAccounts, error: deleteError } = await supabase
     .from("bank_accounts")
     .delete()
-    .eq("id", accountId);
+    .eq("plaid_item_id", plaidItemId)
+    .select("id");
 
   if (deleteError) {
-    console.error("[Plaid] Error deleting account:", deleteError);
+    console.error("[Plaid] Error deleting accounts:", deleteError);
     throw deleteError;
   }
 
-  return { success: true };
+  const deletedCount = deletedAccounts?.length || 0;
+  console.log(`[Plaid] Deleted ${deletedCount} accounts for item ${plaidItemId}`);
+
+  return { success: true, deleted_count: deletedCount, plaid_item_id: plaidItemId };
 }
 
 Deno.serve(async (req) => {

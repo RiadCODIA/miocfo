@@ -198,13 +198,15 @@ export function usePlaid() {
     async (accountId: string): Promise<void> => {
       setIsLoading(true);
       try {
-        await callPlaidFunction("remove_item", { account_id: accountId });
-
-        setAccounts((prev) => prev.filter((acc) => acc.id !== accountId));
+        const result = await callPlaidFunction("remove_item", { account_id: accountId });
+        
+        // Refresh accounts from DB to ensure UI is in sync
+        // (an item removal deletes all accounts for that item)
+        await fetchAccounts();
 
         toast({
           title: "Conto rimosso",
-          description: "Il conto è stato scollegato con successo",
+          description: `${result.deleted_count || 1} conto/i scollegati con successo`,
         });
       } catch (error) {
         toast({
@@ -218,7 +220,7 @@ export function usePlaid() {
         setIsLoading(false);
       }
     },
-    [callPlaidFunction, toast]
+    [callPlaidFunction, toast, fetchAccounts]
   );
 
   return {
