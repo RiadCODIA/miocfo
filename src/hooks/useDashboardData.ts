@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { startOfMonth, endOfMonth, subMonths, format, eachDayOfInterval, startOfDay } from "date-fns";
+import { startOfMonth, endOfMonth, subMonths, format, eachDayOfInterval, parseISO } from "date-fns";
+import { it } from "date-fns/locale";
 
 interface DashboardKPIs {
   totalBalance: number;
@@ -10,6 +11,7 @@ interface DashboardKPIs {
   previousPeriodIncome: number;
   previousPeriodExpenses: number;
   previousTotalBalance: number;
+  referenceMonth: string;
 }
 
 interface DailyBalance {
@@ -27,11 +29,24 @@ export function useDashboardKPIs() {
   return useQuery({
     queryKey: ["dashboard-kpis"],
     queryFn: async (): Promise<DashboardKPIs> => {
-      const now = new Date();
-      const currentMonthStart = startOfMonth(now);
-      const currentMonthEnd = endOfMonth(now);
-      const previousMonthStart = startOfMonth(subMonths(now, 1));
-      const previousMonthEnd = endOfMonth(subMonths(now, 1));
+      // First, find the most recent transaction date to use as reference
+      const { data: latestTx, error: latestError } = await supabase
+        .from("bank_transactions")
+        .select("date")
+        .order("date", { ascending: false })
+        .limit(1);
+
+      if (latestError) throw latestError;
+
+      // Use latest transaction date as reference, or today if no transactions
+      const referenceDate = latestTx?.[0]?.date 
+        ? parseISO(latestTx[0].date) 
+        : new Date();
+
+      const currentMonthStart = startOfMonth(referenceDate);
+      const currentMonthEnd = endOfMonth(referenceDate);
+      const previousMonthStart = startOfMonth(subMonths(referenceDate, 1));
+      const previousMonthEnd = endOfMonth(subMonths(referenceDate, 1));
 
       // Fetch total balance from bank accounts
       const { data: accounts, error: accountsError } = await supabase
@@ -75,7 +90,8 @@ export function useDashboardKPIs() {
         netCashflow,
         previousPeriodIncome,
         previousPeriodExpenses,
-        previousTotalBalance: 0, // Would need historical snapshots
+        previousTotalBalance: 0,
+        referenceMonth: format(referenceDate, "MMMM yyyy", { locale: it }),
       };
     },
   });
@@ -85,15 +101,28 @@ export function useLiquidityChart() {
   return useQuery({
     queryKey: ["liquidity-chart"],
     queryFn: async (): Promise<DailyBalance[]> => {
-      const now = new Date();
-      const thirtyDaysAgo = subMonths(now, 1);
+      // Find the date range with actual transactions
+      const { data: dateRange, error: rangeError } = await supabase
+        .from("bank_transactions")
+        .select("date")
+        .order("date", { ascending: false })
+        .limit(1);
+
+      if (rangeError) throw rangeError;
+
+      // Use latest transaction date as reference
+      const latestDate = dateRange?.[0]?.date 
+        ? parseISO(dateRange[0].date) 
+        : new Date();
+      
+      const thirtyDaysAgo = subMonths(latestDate, 1);
 
       // Fetch all transactions in the period
       const { data: transactions, error: txError } = await supabase
         .from("bank_transactions")
         .select("amount, date")
         .gte("date", format(thirtyDaysAgo, "yyyy-MM-dd"))
-        .lte("date", format(now, "yyyy-MM-dd"))
+        .lte("date", format(latestDate, "yyyy-MM-dd"))
         .order("date", { ascending: true });
 
       if (txError) throw txError;
@@ -109,7 +138,7 @@ export function useLiquidityChart() {
       const currentBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.current_balance) || 0), 0) || 0;
 
       // Calculate running balance backwards from current
-      const days = eachDayOfInterval({ start: thirtyDaysAgo, end: now });
+      const days = eachDayOfInterval({ start: thirtyDaysAgo, end: latestDate });
       const dailyTotals = new Map<string, number>();
 
       transactions?.forEach(tx => {
@@ -126,7 +155,7 @@ export function useLiquidityChart() {
         const day = days[i];
         const dateKey = format(day, "yyyy-MM-dd");
         balances.unshift({
-          date: format(day, "dd MMM"),
+          date: format(day, "dd MMM", { locale: it }),
           saldo: runningBalance,
         });
         runningBalance -= dailyTotals.get(dateKey) || 0;
@@ -142,23 +171,38 @@ export function useIncomeExpenseChart() {
   return useQuery({
     queryKey: ["income-expense-chart"],
     queryFn: async (): Promise<MonthlyComparison[]> => {
-      const now = new Date();
-      const sixMonthsAgo = subMonths(now, 5);
+      // Find the date range with actual transactions
+      const { data: dateRange, error: rangeError } = await supabase
+        .from("bank_transactions")
+        .select("date")
+        .order("date", { ascending: false })
+        .limit(1);
+
+      if (rangeError) throw rangeError;
+
+      // Use latest transaction date as reference
+      const latestDate = dateRange?.[0]?.date 
+        ? parseISO(dateRange[0].date) 
+        : new Date();
+      
+      const sixMonthsAgo = subMonths(latestDate, 5);
 
       const { data: transactions, error } = await supabase
         .from("bank_transactions")
         .select("amount, date")
         .gte("date", format(startOfMonth(sixMonthsAgo), "yyyy-MM-dd"))
-        .lte("date", format(endOfMonth(now), "yyyy-MM-dd"));
+        .lte("date", format(endOfMonth(latestDate), "yyyy-MM-dd"));
 
       if (error) throw error;
 
-      // Group by month
-      const monthlyData = new Map<string, { incassi: number; pagamenti: number }>();
+      // Group by month with year-month key to avoid duplicates
+      const monthlyData = new Map<string, { incassi: number; pagamenti: number; label: string }>();
 
       transactions?.forEach(tx => {
-        const monthKey = format(new Date(tx.date), "MMM");
-        const current = monthlyData.get(monthKey) || { incassi: 0, pagamenti: 0 };
+        const txDate = parseISO(tx.date);
+        const monthKey = format(txDate, "yyyy-MM");
+        const monthLabel = format(txDate, "MMM", { locale: it });
+        const current = monthlyData.get(monthKey) || { incassi: 0, pagamenti: 0, label: monthLabel };
         const amount = Number(tx.amount);
 
         if (amount > 0) {
@@ -170,14 +214,15 @@ export function useIncomeExpenseChart() {
         monthlyData.set(monthKey, current);
       });
 
-      // Convert to array for chart
+      // Convert to array for chart, ordered by date
       const result: MonthlyComparison[] = [];
       for (let i = 5; i >= 0; i--) {
-        const month = subMonths(now, i);
-        const monthKey = format(month, "MMM");
-        const data = monthlyData.get(monthKey) || { incassi: 0, pagamenti: 0 };
+        const month = subMonths(latestDate, i);
+        const monthKey = format(month, "yyyy-MM");
+        const monthLabel = format(month, "MMM", { locale: it });
+        const data = monthlyData.get(monthKey) || { incassi: 0, pagamenti: 0, label: monthLabel };
         result.push({
-          mese: monthKey,
+          mese: data.label || monthLabel,
           incassi: data.incassi,
           pagamenti: data.pagamenti,
         });
