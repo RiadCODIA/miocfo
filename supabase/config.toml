@@ -17,3 +17,9 @@ verify_jwt = false
 
 [functions.analyze-spending]
 verify_jwt = false
+
+[functions.send-alert-email]
+verify_jwt = false
+
+[functions.check-alerts]
+verify_jwt = false

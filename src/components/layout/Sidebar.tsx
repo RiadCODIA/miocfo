@@ -34,6 +34,7 @@ import {
 } from "@/components/ui/tooltip";
 import { Badge } from "@/components/ui/badge";
 import { useSidebarState } from "./MainLayout";
+import { useActiveAlertsCount } from "@/hooks/useAlerts";
 
 interface SidebarSection {
   id: string;
@@ -84,6 +85,7 @@ export function Sidebar() {
   const { collapsed, setCollapsed } = useSidebarState();
   const location = useLocation();
   const { user, profile, signOut, demoRole, isDemoMode } = useAuth();
+  const { data: alertsCount } = useActiveAlertsCount();
 
   const isAdmin = demoRole === 'admin_aziendale';
   const isSuperAdmin = demoRole === 'super_admin';
@@ -94,8 +96,6 @@ export function Sidebar() {
     : isAdmin 
       ? adminSidebarSections 
       : userSidebarSections;
-
-  // Completely different sidebar based on role - already defined above
 
   const getInitials = () => {
     if (profile?.first_name && profile?.last_name) {
@@ -175,13 +175,16 @@ export function Sidebar() {
         <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
           {sidebarSections.map((section, index) => {
             const isActive = location.pathname === section.path;
+            const isAlertSection = section.id === "alert_notifiche";
+            const showAlertBadge = isAlertSection && alertsCount && alertsCount.total > 0;
+            
             return (
               <Tooltip key={section.id}>
                 <TooltipTrigger asChild>
                   <NavLink
                     to={section.path}
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group",
+                      "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative",
                       isActive
                         ? "bg-primary/10 text-primary"
                         : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
@@ -193,7 +196,17 @@ export function Sidebar() {
                     {!collapsed && (
                       <span className="text-sm font-medium truncate">{section.label}</span>
                     )}
-                    {isActive && !collapsed && (
+                    {/* Alert badge */}
+                    {showAlertBadge && (
+                      <span className={cn(
+                        "flex items-center justify-center text-xs font-bold text-white rounded-full",
+                        alertsCount.highPriority > 0 ? "bg-destructive" : "bg-amber-500",
+                        collapsed ? "absolute -top-1 -right-1 h-5 w-5" : "ml-auto h-5 min-w-5 px-1.5"
+                      )}>
+                        {alertsCount.total > 99 ? "99+" : alertsCount.total}
+                      </span>
+                    )}
+                    {isActive && !collapsed && !showAlertBadge && (
                       <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse-glow" />
                     )}
                   </NavLink>

@@ -40,6 +40,8 @@ export type Database = {
           alert_type: string
           created_at: string | null
           description: string | null
+          email_sent: boolean | null
+          email_sent_at: string | null
           id: string
           priority: string | null
           resolved_at: string | null
@@ -52,6 +54,8 @@ export type Database = {
           alert_type: string
           created_at?: string | null
           description?: string | null
+          email_sent?: boolean | null
+          email_sent_at?: string | null
           id?: string
           priority?: string | null
           resolved_at?: string | null
@@ -64,6 +68,8 @@ export type Database = {
           alert_type?: string
           created_at?: string | null
           description?: string | null
+          email_sent?: boolean | null
+          email_sent_at?: string | null
           id?: string
           priority?: string | null
           resolved_at?: string | null
@@ -802,6 +808,54 @@ export type Database = {
           description?: string | null
           id?: string
           ip_address?: string
+        }
+        Relationships: []
+      }
+      notification_preferences: {
+        Row: {
+          created_at: string | null
+          critical_alerts: boolean | null
+          email_notifications: boolean | null
+          id: string
+          notification_email: string | null
+          notify_budget: boolean | null
+          notify_cashflow: boolean | null
+          notify_deadlines: boolean | null
+          notify_liquidity: boolean | null
+          push_notifications: boolean | null
+          updated_at: string | null
+          user_id: string
+          weekly_reports: boolean | null
+        }
+        Insert: {
+          created_at?: string | null
+          critical_alerts?: boolean | null
+          email_notifications?: boolean | null
+          id?: string
+          notification_email?: string | null
+          notify_budget?: boolean | null
+          notify_cashflow?: boolean | null
+          notify_deadlines?: boolean | null
+          notify_liquidity?: boolean | null
+          push_notifications?: boolean | null
+          updated_at?: string | null
+          user_id: string
+          weekly_reports?: boolean | null
+        }
+        Update: {
+          created_at?: string | null
+          critical_alerts?: boolean | null
+          email_notifications?: boolean | null
+          id?: string
+          notification_email?: string | null
+          notify_budget?: boolean | null
+          notify_cashflow?: boolean | null
+          notify_deadlines?: boolean | null
+          notify_liquidity?: boolean | null
+          push_notifications?: boolean | null
+          updated_at?: string | null
+          user_id?: string
+          weekly_reports?: boolean | null
         }
         Relationships: []
       }
