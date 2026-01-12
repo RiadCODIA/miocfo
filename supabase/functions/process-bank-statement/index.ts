@@ -297,13 +297,7 @@ serve(async (req) => {
       );
     }
 
-    const companyId = user.user_metadata?.company_id;
-    if (!companyId) {
-      return new Response(
-        JSON.stringify({ error: "Company ID non trovato nel profilo utente" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    const userId = user.id;
 
     // Parse request body
     const { file_path, bank_name } = await req.json();
@@ -381,7 +375,7 @@ serve(async (req) => {
       .from("bank_accounts")
       .insert({
         id: accountId,
-        company_id: companyId,
+        user_id: userId,
         bank_name: finalBankName,
         account_name: statement.account_number || "Conto Principale",
         iban: statement.iban,
