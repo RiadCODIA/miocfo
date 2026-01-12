@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { Search, Filter, Download, Edit2, Sparkles, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Search, Filter, Download, Edit2, BarChart3, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -24,6 +24,7 @@ import { useTransactions, useBankAccounts } from "@/hooks/useTransactions";
 import { useCategorizeTransactions, CategorizationResult } from "@/hooks/useCategorizeTransactions";
 import { CategoryBadge } from "@/components/transazioni/CategoryBadge";
 import { CategoryModal } from "@/components/transazioni/CategoryModal";
+import { SpendingReportModal } from "@/components/transazioni/SpendingReportModal";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { toast } from "sonner";
@@ -43,6 +44,7 @@ export default function Transazioni() {
   const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<CategorizationResult | null>(null);
+  const [reportModalOpen, setReportModalOpen] = useState(false);
 
   const queryClient = useQueryClient();
 
@@ -198,24 +200,14 @@ export default function Transazioni() {
           Altri filtri
         </Button>
 
-        {/* AI Categorize Button */}
+        {/* AI Spending Analysis Button */}
         <Button
           variant="default"
           className="gap-2"
-          onClick={handleCategorizeAll}
-          disabled={isCategorizing || uncategorizedCount === 0}
+          onClick={() => setReportModalOpen(true)}
         >
-          {isCategorizing ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Sparkles className="h-4 w-4" />
-          )}
-          {isCategorizing ? "Analisi in corso..." : "Categorizza con AI"}
-          {uncategorizedCount > 0 && !isCategorizing && (
-            <Badge variant="secondary" className="ml-1">
-              {uncategorizedCount}
-            </Badge>
-          )}
+          <BarChart3 className="h-4 w-4" />
+          Analisi AI Spese
         </Button>
 
         <Button variant="outline" className="gap-2 bg-card border-border hover:bg-secondary ml-auto">
@@ -318,6 +310,12 @@ export default function Transazioni() {
         }}
         transaction={selectedTransaction}
         aiSuggestion={aiSuggestion}
+      />
+
+      {/* Spending Report Modal */}
+      <SpendingReportModal
+        open={reportModalOpen}
+        onOpenChange={setReportModalOpen}
       />
     </div>
   );
