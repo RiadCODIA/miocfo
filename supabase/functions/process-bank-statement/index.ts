@@ -23,6 +23,27 @@ interface ExtractedStatement {
   transactions: ExtractedTransaction[];
 }
 
+// Parse Italian amount format: 1.234,56 -> 1234.56
+function parseItalianAmount(value: string): number {
+  if (!value || value.trim() === '') return 0;
+  
+  // Remove currency symbols and spaces
+  let cleaned = value.replace(/[€\s]/g, '').trim();
+  
+  // Handle negative sign at start or end
+  const isNegative = cleaned.startsWith('-') || cleaned.endsWith('-');
+  cleaned = cleaned.replace(/-/g, '');
+  
+  // Italian format: dots are thousands separators, comma is decimal
+  // First remove dots (thousands), then replace comma with dot (decimal)
+  if (cleaned.includes(',')) {
+    cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+  }
+  
+  const amount = parseFloat(cleaned) || 0;
+  return isNegative ? -amount : amount;
+}
+
 // Parse CSV content for bank statements
 function parseCSV(content: string): ExtractedStatement {
   console.log("[process-bank-statement] Parsing CSV...");
@@ -34,7 +55,10 @@ function parseCSV(content: string): ExtractedStatement {
   const headerLine = lines[0].toLowerCase();
   const headers = headerLine.split(/[,;]/).map((h) => h.trim().replace(/"/g, ""));
 
-  // Find column indices
+  // Log headers for debugging
+  console.log("[process-bank-statement] CSV Headers:", headers);
+
+  // Find column indices with extended Italian keywords
   const dateIdx = headers.findIndex((h) =>
     ["data", "date", "data operazione", "data valuta", "data contabile"].includes(h)
   );
@@ -42,16 +66,16 @@ function parseCSV(content: string): ExtractedStatement {
     ["descrizione", "description", "causale", "movimento", "dettaglio"].includes(h)
   );
   const amountIdx = headers.findIndex((h) =>
-    ["importo", "amount", "valore", "euro"].includes(h)
+    ["importo", "amount", "valore", "euro", "importo €", "importo eur"].some(k => h.includes(k))
   );
   const debitIdx = headers.findIndex((h) =>
-    ["dare", "uscite", "addebito", "debit", "withdrawal"].includes(h)
+    ["dare", "uscite", "addebito", "debit", "withdrawal", "addebiti", "addebiti €", "addebiti eur"].some(k => h.includes(k))
   );
   const creditIdx = headers.findIndex((h) =>
-    ["avere", "entrate", "accredito", "credit", "deposit"].includes(h)
+    ["avere", "entrate", "accredito", "credit", "deposit", "accrediti", "accrediti €", "accrediti eur"].some(k => h.includes(k))
   );
   const balanceIdx = headers.findIndex((h) =>
-    ["saldo", "balance", "saldo contabile", "saldo disponibile"].includes(h)
+    ["saldo", "balance", "saldo contabile", "saldo disponibile", "saldo €", "saldo eur"].some(k => h.includes(k))
   );
 
   console.log("[process-bank-statement] Column indices:", {
@@ -87,19 +111,19 @@ function parseCSV(content: string): ExtractedStatement {
 
     let amount = 0;
     if (amountIdx !== -1 && values[amountIdx]) {
-      amount = parseFloat(values[amountIdx].replace(/[^\d,.-]/g, "").replace(",", ".")) || 0;
+      amount = parseItalianAmount(values[amountIdx]);
     } else {
       const debit = debitIdx !== -1 && values[debitIdx]
-        ? parseFloat(values[debitIdx].replace(/[^\d,.-]/g, "").replace(",", ".")) || 0
+        ? parseItalianAmount(values[debitIdx])
         : 0;
       const credit = creditIdx !== -1 && values[creditIdx]
-        ? parseFloat(values[creditIdx].replace(/[^\d,.-]/g, "").replace(",", ".")) || 0
+        ? parseItalianAmount(values[creditIdx])
         : 0;
       amount = credit - debit;
     }
 
     const balance = balanceIdx !== -1 && values[balanceIdx]
-      ? parseFloat(values[balanceIdx].replace(/[^\d,.-]/g, "").replace(",", "."))
+      ? parseItalianAmount(values[balanceIdx])
       : undefined;
 
     if (dateStr && description) {
