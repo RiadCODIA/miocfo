@@ -53,9 +53,23 @@ export function InvoiceMatchingModal({
       setError(null);
       
       try {
+        // Calculate date range: invoice date ± 60 days
+        const invoiceDate = new Date(invoice.date);
+        const dateFrom = new Date(invoiceDate);
+        dateFrom.setDate(dateFrom.getDate() - 60);
+        const dateTo = new Date(invoiceDate);
+        dateTo.setDate(dateTo.getDate() + 60);
+        
+        // Calculate amount range: ±30% of invoice amount
+        const minAmount = invoice.amount * 0.7;
+        const maxAmount = invoice.amount * 1.3;
+        
+        // Query with server-side filters for better performance
         const { data, error: fetchError } = await supabase
           .from('bank_transactions')
           .select('*')
+          .gte('date', dateFrom.toISOString().split('T')[0])
+          .lte('date', dateTo.toISOString().split('T')[0])
           .order('date', { ascending: false })
           .limit(100);
 
@@ -63,40 +77,58 @@ export function InvoiceMatchingModal({
 
         if (!data || data.length === 0) {
           setTransactions([]);
-          setError("Nessuna transazione bancaria disponibile. Collega un conto bancario per iniziare.");
+          setError("Nessuna transazione nel periodo della fattura. Prova a importare transazioni bancarie.");
           return;
         }
+        
+        // Filter by amount client-side (absolute values need client-side handling)
+        const filteredByAmount = data.filter(tx => {
+          const txAmount = Math.abs(Number(tx.amount));
+          return txAmount >= minAmount && txAmount <= maxAmount;
+        });
+        
+        console.log('InvoiceMatching - Transazioni caricate:', data.length);
+        console.log('InvoiceMatching - Dopo filtro importo:', filteredByAmount.length);
+        console.log('InvoiceMatching - Range importo:', minAmount.toFixed(2), '-', maxAmount.toFixed(2));
+        console.log('InvoiceMatching - Primi 5 importi:', data.slice(0, 5).map(t => t.amount));
 
-        // Calculate match score for each transaction
-        const scoredTransactions: Transaction[] = data.map(tx => {
+        // Calculate match score for each transaction (use filtered data if available, else all)
+        const transactionsToScore = filteredByAmount.length > 0 ? filteredByAmount : data;
+        
+        const scoredTransactions: Transaction[] = transactionsToScore.map(tx => {
           let score = 0;
           const txAmount = Math.abs(Number(tx.amount));
           const invAmount = invoice.amount;
 
-          // Amount matching (0-60 points)
+          // Amount matching (0-60 points) - more granular scoring
           const amountDiff = Math.abs(txAmount - invAmount);
           const amountPercentDiff = (amountDiff / invAmount) * 100;
           if (amountPercentDiff === 0) score += 60;
+          else if (amountPercentDiff <= 0.5) score += 55;
           else if (amountPercentDiff <= 1) score += 50;
+          else if (amountPercentDiff <= 2) score += 40;
           else if (amountPercentDiff <= 5) score += 30;
-          else if (amountPercentDiff <= 10) score += 15;
+          else if (amountPercentDiff <= 10) score += 20;
+          else if (amountPercentDiff <= 20) score += 10;
+          else if (amountPercentDiff <= 30) score += 5;
 
-          // Date matching (0-30 points)
+          // Date matching (0-30 points) - more granular
           const txDate = new Date(tx.date);
           const invDate = invoice.date;
           const daysDiff = Math.abs((txDate.getTime() - invDate.getTime()) / (1000 * 60 * 60 * 24));
-          if (daysDiff <= 3) score += 30;
+          if (daysDiff <= 1) score += 30;
+          else if (daysDiff <= 3) score += 25;
           else if (daysDiff <= 7) score += 20;
-          else if (daysDiff <= 14) score += 10;
-          else if (daysDiff <= 30) score += 5;
+          else if (daysDiff <= 14) score += 15;
+          else if (daysDiff <= 30) score += 10;
+          else if (daysDiff <= 60) score += 5;
 
-          // Name/description matching (0-10 points)
+          // Name/description matching (0-10 points) - improved fuzzy matching
           const txDesc = (tx.name || '').toLowerCase() + ' ' + (tx.merchant_name || '').toLowerCase();
-          const supplierWords = invoice.supplier.toLowerCase().split(/\s+/);
-          const nameMatches = supplierWords.some(word => 
-            word.length > 2 && txDesc.includes(word)
-          );
-          if (nameMatches) score += 10;
+          const supplierWords = invoice.supplier.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+          const matchedWords = supplierWords.filter(word => txDesc.includes(word));
+          if (matchedWords.length >= 2) score += 10;
+          else if (matchedWords.length === 1) score += 5;
 
           return {
             id: tx.id,
