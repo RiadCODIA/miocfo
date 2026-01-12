@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Switch } from "@/components/ui/switch";
 import {
   Upload,
   FileText,
@@ -17,6 +18,7 @@ import {
   CheckCircle,
   AlertCircle,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,6 +52,7 @@ export function UploadStatementModal({
   const [isDragging, setIsDragging] = useState(false);
   const [file, setFile] = useState<File | null>(null);
   const [bankName, setBankName] = useState("");
+  const [replaceExisting, setReplaceExisting] = useState(true);
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ProcessResult | null>(null);
@@ -58,6 +61,7 @@ export function UploadStatementModal({
   const resetState = useCallback(() => {
     setFile(null);
     setBankName("");
+    setReplaceExisting(true);
     setUploadState("idle");
     setError(null);
     setResult(null);
@@ -161,6 +165,7 @@ export function UploadStatementModal({
           body: {
             file_path: fileName,
             bank_name: bankName || undefined,
+            replace_existing: replaceExisting,
           },
         }
       );
@@ -282,6 +287,26 @@ export function UploadStatementModal({
                 <p className="text-xs text-muted-foreground">
                   Se non specificato, verrà estratto automaticamente dal documento.
                 </p>
+              </div>
+
+              {/* Replace Existing Toggle */}
+              <div className="flex items-center justify-between rounded-lg border p-4 bg-muted/30">
+                <div className="space-y-0.5">
+                  <div className="flex items-center gap-2">
+                    <RefreshCw className="h-4 w-4 text-muted-foreground" />
+                    <Label htmlFor="replace-existing" className="font-medium">
+                      Sostituisci import precedente
+                    </Label>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Elimina i conti importati manualmente e le relative transazioni prima di importare
+                  </p>
+                </div>
+                <Switch
+                  id="replace-existing"
+                  checked={replaceExisting}
+                  onCheckedChange={setReplaceExisting}
+                />
               </div>
             </>
           )}

@@ -24,6 +24,7 @@ interface ExtractedStatement {
 }
 
 // Parse Italian amount format: 1.234,56 -> 1234.56
+// Also handles: "4.800" (thousands only), "-1.234,56", "€ 1.234,56"
 function parseItalianAmount(value: string): number {
   if (!value || value.trim() === '') return 0;
   
@@ -34,29 +35,112 @@ function parseItalianAmount(value: string): number {
   const isNegative = cleaned.startsWith('-') || cleaned.endsWith('-');
   cleaned = cleaned.replace(/-/g, '');
   
-  // Italian format: dots are thousands separators, comma is decimal
-  // First remove dots (thousands), then replace comma with dot (decimal)
-  if (cleaned.includes(',')) {
+  if (!cleaned) return 0;
+  
+  // Detect format by analyzing dots and commas
+  const dotCount = (cleaned.match(/\./g) || []).length;
+  const commaCount = (cleaned.match(/,/g) || []).length;
+  const lastDotPos = cleaned.lastIndexOf('.');
+  const lastCommaPos = cleaned.lastIndexOf(',');
+  
+  let amount = 0;
+  
+  if (commaCount === 1 && dotCount >= 0) {
+    // Italian format: 1.234,56 or 1234,56
+    // Comma is decimal separator
     cleaned = cleaned.replace(/\./g, '').replace(',', '.');
+    amount = parseFloat(cleaned) || 0;
+  } else if (commaCount === 0 && dotCount === 1) {
+    // Could be "1234.56" (US format) or "1.234" (Italian thousands only)
+    // Check position of dot - if 3 digits after dot, it's likely thousands separator
+    const afterDot = cleaned.substring(lastDotPos + 1);
+    if (afterDot.length === 3 && /^\d{3}$/.test(afterDot)) {
+      // Likely Italian thousands: "4.800" -> 4800
+      cleaned = cleaned.replace(/\./g, '');
+      amount = parseFloat(cleaned) || 0;
+    } else {
+      // Likely decimal: "123.45" -> 123.45
+      amount = parseFloat(cleaned) || 0;
+    }
+  } else if (commaCount === 0 && dotCount > 1) {
+    // Multiple dots = thousands separators: 1.234.567 -> 1234567
+    cleaned = cleaned.replace(/\./g, '');
+    amount = parseFloat(cleaned) || 0;
+  } else if (commaCount > 1) {
+    // Multiple commas = thousands separators (unusual but possible)
+    cleaned = cleaned.replace(/,/g, '');
+    amount = parseFloat(cleaned) || 0;
+  } else {
+    // No dots or commas, just parse
+    amount = parseFloat(cleaned) || 0;
   }
   
-  const amount = parseFloat(cleaned) || 0;
   return isNegative ? -amount : amount;
+}
+
+// Smart CSV line splitter that respects quoted fields
+function splitCsvLine(line: string, delimiter: string): string[] {
+  const result: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        // Escaped quote
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === delimiter && !inQuotes) {
+      result.push(current.trim().replace(/^"|"$/g, ''));
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  
+  // Push last field
+  result.push(current.trim().replace(/^"|"$/g, ''));
+  
+  return result;
+}
+
+// Detect CSV delimiter from header line
+function detectDelimiter(headerLine: string): string {
+  const semicolonCount = (headerLine.match(/;/g) || []).length;
+  const commaCount = (headerLine.match(/,/g) || []).length;
+  
+  // If more semicolons than commas, use semicolon (common in Italian CSVs)
+  if (semicolonCount > commaCount) {
+    return ';';
+  }
+  return ',';
 }
 
 // Parse CSV content for bank statements
 function parseCSV(content: string): ExtractedStatement {
   console.log("[process-bank-statement] Parsing CSV...");
-  const lines = content.split("\n").filter((line) => line.trim());
+  
+  // Normalize line endings
+  const normalizedContent = content.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  const lines = normalizedContent.split("\n").filter((line) => line.trim());
+  
   if (lines.length < 2) {
     throw new Error("Il file CSV non contiene dati sufficienti");
   }
 
-  const headerLine = lines[0].toLowerCase();
-  const headers = headerLine.split(/[,;]/).map((h) => h.trim().replace(/"/g, ""));
-
-  // Log headers for debugging
+  // Detect delimiter from header
+  const headerLine = lines[0];
+  const delimiter = detectDelimiter(headerLine);
+  console.log(`[process-bank-statement] Detected delimiter: "${delimiter}"`);
+  
+  const headers = splitCsvLine(headerLine.toLowerCase(), delimiter);
   console.log("[process-bank-statement] CSV Headers:", headers);
+  console.log("[process-bank-statement] Header count:", headers.length);
 
   // Find column indices with extended Italian keywords
   const dateIdx = headers.findIndex((h) =>
@@ -101,9 +185,20 @@ function parseCSV(content: string): ExtractedStatement {
 
   const transactions: ExtractedTransaction[] = [];
   let finalBalance: number | undefined;
+  
+  // Track parsing quality for sanity check
+  let zeroAmountCount = 0;
+  let maxAbsAmount = 0;
+
+  // Log first few data rows for debugging
+  console.log("[process-bank-statement] First 3 data rows:");
+  for (let i = 1; i <= 3 && i < lines.length; i++) {
+    const values = splitCsvLine(lines[i], delimiter);
+    console.log(`  Row ${i}: columns=${values.length}, values=`, values.slice(0, 6));
+  }
 
   for (let i = 1; i < lines.length; i++) {
-    const values = lines[i].split(/[,;]/).map((v) => v.trim().replace(/"/g, ""));
+    const values = splitCsvLine(lines[i], delimiter);
     if (values.length < Math.max(dateIdx, descIdx) + 1) continue;
 
     const dateStr = values[dateIdx];
@@ -134,6 +229,10 @@ function parseCSV(content: string): ExtractedStatement {
         balance,
       });
 
+      // Track for sanity check
+      if (amount === 0) zeroAmountCount++;
+      if (Math.abs(amount) > maxAbsAmount) maxAbsAmount = Math.abs(amount);
+
       if (balance !== undefined) {
         finalBalance = balance;
       }
@@ -141,6 +240,21 @@ function parseCSV(content: string): ExtractedStatement {
   }
 
   console.log(`[process-bank-statement] Parsed ${transactions.length} transactions from CSV`);
+  console.log(`[process-bank-statement] Max abs amount: ${maxAbsAmount}, Zero count: ${zeroAmountCount}`);
+
+  // Sanity check: if many transactions but all amounts seem wrong
+  if (transactions.length > 20) {
+    const zeroPercentage = zeroAmountCount / transactions.length;
+    
+    if (maxAbsAmount < 100 && zeroPercentage > 0.3) {
+      console.error("[process-bank-statement] SANITY CHECK FAILED: amounts look corrupted");
+      console.error(`  Max amount: ${maxAbsAmount}, Zero percentage: ${(zeroPercentage * 100).toFixed(1)}%`);
+      throw new Error(
+        `Parsing CSV non riuscito: gli importi sembrano corrotti (max: €${maxAbsAmount.toFixed(2)}, ${(zeroPercentage * 100).toFixed(0)}% valori zero). ` +
+        `Verifica che il file CSV utilizzi ";" come separatore di colonne e "," come separatore decimale.`
+      );
+    }
+  }
 
   return {
     bank_name: "Conto Importato",
@@ -324,7 +438,7 @@ serve(async (req) => {
     const userId = user.id;
 
     // Parse request body
-    const { file_path, bank_name } = await req.json();
+    const { file_path, bank_name, replace_existing } = await req.json();
     if (!file_path) {
       return new Response(
         JSON.stringify({ error: "file_path richiesto" }),
@@ -332,7 +446,49 @@ serve(async (req) => {
       );
     }
 
-    console.log(`[process-bank-statement] Processing file: ${file_path}`);
+    console.log(`[process-bank-statement] Processing file: ${file_path}, replace_existing: ${replace_existing}`);
+
+    // If replace_existing is true, delete existing manual accounts for this user
+    if (replace_existing) {
+      console.log("[process-bank-statement] Deleting existing manual accounts for user...");
+      
+      const { data: existingAccounts, error: fetchError } = await supabase
+        .from("bank_accounts")
+        .select("id, bank_name")
+        .eq("user_id", userId)
+        .eq("source", "manual");
+      
+      if (fetchError) {
+        console.error("[process-bank-statement] Error fetching existing accounts:", fetchError);
+      } else if (existingAccounts && existingAccounts.length > 0) {
+        console.log(`[process-bank-statement] Found ${existingAccounts.length} manual accounts to delete`);
+        
+        // Delete transactions first (should cascade, but being explicit)
+        for (const account of existingAccounts) {
+          const { error: txDeleteError } = await supabase
+            .from("bank_transactions")
+            .delete()
+            .eq("bank_account_id", account.id);
+          
+          if (txDeleteError) {
+            console.error(`[process-bank-statement] Error deleting transactions for account ${account.id}:`, txDeleteError);
+          }
+        }
+        
+        // Delete the accounts
+        const { error: deleteError } = await supabase
+          .from("bank_accounts")
+          .delete()
+          .eq("user_id", userId)
+          .eq("source", "manual");
+        
+        if (deleteError) {
+          console.error("[process-bank-statement] Error deleting accounts:", deleteError);
+        } else {
+          console.log("[process-bank-statement] Successfully deleted existing manual accounts");
+        }
+      }
+    }
 
     // Download file from storage
     const { data: fileData, error: downloadError } = await supabase.storage
