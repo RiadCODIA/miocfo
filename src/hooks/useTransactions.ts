@@ -12,6 +12,9 @@ export interface Transaction {
   category: string[];
   pending: boolean;
   merchantName: string | null;
+  aiCategoryId: string | null;
+  aiConfidence: number | null;
+  categoryConfirmed: boolean;
 }
 
 interface UseTransactionsOptions {
@@ -38,6 +41,9 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
           category,
           pending,
           merchant_name,
+          ai_category_id,
+          ai_confidence,
+          category_confirmed,
           bank_accounts!inner(bank_name)
         `)
         .order("date", { ascending: false })
@@ -72,6 +78,9 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
         category: tx.category || [],
         pending: tx.pending,
         merchantName: tx.merchant_name,
+        aiCategoryId: tx.ai_category_id,
+        aiConfidence: tx.ai_confidence,
+        categoryConfirmed: tx.category_confirmed ?? false,
       })) || [];
 
       // Apply search filter client-side

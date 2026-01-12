@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Search, Filter, Download, Edit2 } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Filter, Download, Edit2, Sparkles, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -21,16 +21,32 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useTransactions, useBankAccounts } from "@/hooks/useTransactions";
+import { useCategorizeTransactions, CategorizationResult } from "@/hooks/useCategorizeTransactions";
+import { CategoryBadge } from "@/components/transazioni/CategoryBadge";
+import { CategoryModal } from "@/components/transazioni/CategoryModal";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+
+interface CostCategory {
+  id: string;
+  name: string;
+}
 
 export default function Transazioni() {
   const [searchTerm, setSearchTerm] = useState("");
   const [period, setPeriod] = useState<"all" | "today" | "week" | "month">("all");
   const [accountId, setAccountId] = useState("all");
   const [category, setCategory] = useState("all");
+  const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
+  const [categoryModalOpen, setCategoryModalOpen] = useState(false);
+  const [aiSuggestion, setAiSuggestion] = useState<CategorizationResult | null>(null);
 
-  const { data: transactions, isLoading } = useTransactions({
+  const queryClient = useQueryClient();
+
+  const { data: transactions, isLoading, refetch } = useTransactions({
     searchTerm,
     period,
     accountId,
@@ -38,6 +54,76 @@ export default function Transazioni() {
   });
 
   const { data: accounts } = useBankAccounts();
+  const { categorizeBatch, categorize, isLoading: isCategorizing } = useCategorizeTransactions();
+
+  // Fetch cost categories for mapping
+  const { data: costCategories } = useQuery({
+    queryKey: ["cost-categories"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("cost_categories")
+        .select("id, name")
+        .eq("is_active", true);
+      if (error) throw error;
+      return data as CostCategory[];
+    },
+  });
+
+  // Map category IDs to names
+  const getCategoryName = (categoryId?: string) => {
+    if (!categoryId || !costCategories) return null;
+    const cat = costCategories.find((c) => c.id === categoryId);
+    return cat?.name || null;
+  };
+
+  // Count uncategorized transactions
+  const uncategorizedCount = transactions?.filter(
+    (tx) => !tx.aiCategoryId && !tx.categoryConfirmed
+  ).length || 0;
+
+  const handleCategorizeAll = async () => {
+    try {
+      const results = await categorizeBatch();
+      if (results.length > 0) {
+        toast.success(`${results.length} transazioni categorizzate con AI`);
+        refetch();
+      } else {
+        toast.info("Nessuna transazione da categorizzare");
+      }
+    } catch (error) {
+      // Error toast already shown by hook
+    }
+  };
+
+  const handleCategorizeOne = async (transaction: any) => {
+    setSelectedTransaction(transaction);
+    
+    // If already has AI category, just open modal
+    if (transaction.aiCategoryId) {
+      setAiSuggestion({
+        transaction_id: transaction.id,
+        category_id: transaction.aiCategoryId,
+        category_name: getCategoryName(transaction.aiCategoryId) || "",
+        confidence: transaction.aiConfidence || 0,
+        reasoning: "Suggerimento AI precedente",
+      });
+      setCategoryModalOpen(true);
+      return;
+    }
+
+    // Otherwise, get AI suggestion first
+    try {
+      const results = await categorize([transaction.id]);
+      if (results.length > 0) {
+        setAiSuggestion(results[0]);
+        refetch();
+      }
+      setCategoryModalOpen(true);
+    } catch (error) {
+      // Still open modal even if AI fails
+      setCategoryModalOpen(true);
+    }
+  };
 
   const getStatoBadge = (pending: boolean) => {
     if (pending) {
@@ -112,6 +198,26 @@ export default function Transazioni() {
           Altri filtri
         </Button>
 
+        {/* AI Categorize Button */}
+        <Button
+          variant="default"
+          className="gap-2"
+          onClick={handleCategorizeAll}
+          disabled={isCategorizing || uncategorizedCount === 0}
+        >
+          {isCategorizing ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Sparkles className="h-4 w-4" />
+          )}
+          {isCategorizing ? "Analisi in corso..." : "Categorizza con AI"}
+          {uncategorizedCount > 0 && !isCategorizing && (
+            <Badge variant="secondary" className="ml-1">
+              {uncategorizedCount}
+            </Badge>
+          )}
+        </Button>
+
         <Button variant="outline" className="gap-2 bg-card border-border hover:bg-secondary ml-auto">
           <Download className="h-4 w-4" />
           Esporta
@@ -175,13 +281,21 @@ export default function Transazioni() {
                   </TableCell>
                   <TableCell className="text-muted-foreground">{tx.bankName}</TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="border-border">
-                      {tx.category?.[0] || "N/A"}
-                    </Badge>
+                    <CategoryBadge
+                      categoryName={getCategoryName(tx.aiCategoryId)}
+                      confidence={tx.aiConfidence}
+                      confirmed={tx.categoryConfirmed}
+                      onClick={() => handleCategorizeOne(tx)}
+                    />
                   </TableCell>
                   <TableCell>{getStatoBadge(tx.pending)}</TableCell>
                   <TableCell>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary">
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      className="h-8 w-8 hover:bg-secondary"
+                      onClick={() => handleCategorizeOne(tx)}
+                    >
                       <Edit2 className="h-4 w-4 text-muted-foreground" />
                     </Button>
                   </TableCell>
@@ -191,6 +305,20 @@ export default function Transazioni() {
           </TableBody>
         </Table>
       </div>
+
+      {/* Category Modal */}
+      <CategoryModal
+        open={categoryModalOpen}
+        onOpenChange={(open) => {
+          setCategoryModalOpen(open);
+          if (!open) {
+            setSelectedTransaction(null);
+            setAiSuggestion(null);
+          }
+        }}
+        transaction={selectedTransaction}
+        aiSuggestion={aiSuggestion}
+      />
     </div>
   );
 }

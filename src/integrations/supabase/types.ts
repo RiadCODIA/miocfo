@@ -225,9 +225,12 @@ export type Database = {
       }
       bank_transactions: {
         Row: {
+          ai_category_id: string | null
+          ai_confidence: number | null
           amount: number
           bank_account_id: string
           category: string[] | null
+          category_confirmed: boolean | null
           created_at: string
           currency: string | null
           date: string
@@ -240,9 +243,12 @@ export type Database = {
           transaction_type: string | null
         }
         Insert: {
+          ai_category_id?: string | null
+          ai_confidence?: number | null
           amount: number
           bank_account_id: string
           category?: string[] | null
+          category_confirmed?: boolean | null
           created_at?: string
           currency?: string | null
           date: string
@@ -255,9 +261,12 @@ export type Database = {
           transaction_type?: string | null
         }
         Update: {
+          ai_category_id?: string | null
+          ai_confidence?: number | null
           amount?: number
           bank_account_id?: string
           category?: string[] | null
+          category_confirmed?: boolean | null
           created_at?: string
           currency?: string | null
           date?: string
@@ -270,6 +279,13 @@ export type Database = {
           transaction_type?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "bank_transactions_ai_category_id_fkey"
+            columns: ["ai_category_id"]
+            isOneToOne: false
+            referencedRelation: "cost_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "bank_transactions_bank_account_id_fkey"
             columns: ["bank_account_id"]
@@ -314,6 +330,47 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      categorization_rules: {
+        Row: {
+          category_id: string | null
+          created_at: string | null
+          id: string
+          match_type: string | null
+          pattern: string
+          priority: number | null
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string | null
+          id?: string
+          match_type?: string | null
+          pattern: string
+          priority?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string | null
+          id?: string
+          match_type?: string | null
+          pattern?: string
+          priority?: number | null
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "categorization_rules_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "cost_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       companies: {
         Row: {
