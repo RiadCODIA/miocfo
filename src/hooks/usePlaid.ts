@@ -4,7 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 
 export interface BankAccount {
   id: string;
-  plaid_item_id: string;
+  plaid_item_id: string | null;
   plaid_account_id: string;
   bank_name: string;
   account_name: string | null;
@@ -19,6 +19,7 @@ export interface BankAccount {
   last_sync_at: string | null;
   created_at: string;
   updated_at: string;
+  source: "plaid" | "manual";
 }
 
 export interface BankTransaction {

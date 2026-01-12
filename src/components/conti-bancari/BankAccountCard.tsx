@@ -13,6 +13,7 @@ export interface BankAccount {
   currency: string;
   status: "active" | "pending" | "error";
   lastSync: Date;
+  source?: "plaid" | "manual";
 }
 
 interface BankAccountCardProps {
@@ -51,6 +52,8 @@ export function BankAccountCard({ account, onSync, onTest, onRemove }: BankAccou
 
   const status = statusConfig[account.status];
 
+  const isManual = account.source === "manual";
+
   return (
     <Card className="hover:shadow-lg transition-shadow">
       <CardContent className="p-6">
@@ -64,7 +67,15 @@ export function BankAccountCard({ account, onSync, onTest, onRemove }: BankAccou
               <p className="text-sm text-muted-foreground font-mono">{maskIban(account.iban)}</p>
             </div>
           </div>
-          <Badge className={status.className}>{status.label}</Badge>
+          <div className="flex gap-2">
+            <Badge 
+              variant="outline" 
+              className={isManual ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}
+            >
+              {isManual ? "Manuale" : "Plaid"}
+            </Badge>
+            <Badge className={status.className}>{status.label}</Badge>
+          </div>
         </div>
 
         <div className="mt-6 flex items-end justify-between">
@@ -87,24 +98,33 @@ export function BankAccountCard({ account, onSync, onTest, onRemove }: BankAccou
           </div>
 
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleSync}
-              disabled={isSyncing}
-            >
-              <RefreshCw className={cn("h-4 w-4 mr-1", isSyncing && "animate-spin")} />
-              Sincronizza
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleTest}
-              disabled={isTesting}
-            >
-              <TestTube className={cn("h-4 w-4 mr-1", isTesting && "animate-pulse")} />
-              Testa
-            </Button>
+            {!isManual && (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSync}
+                  disabled={isSyncing}
+                >
+                  <RefreshCw className={cn("h-4 w-4 mr-1", isSyncing && "animate-spin")} />
+                  Sincronizza
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleTest}
+                  disabled={isTesting}
+                >
+                  <TestTube className={cn("h-4 w-4 mr-1", isTesting && "animate-pulse")} />
+                  Testa
+                </Button>
+              </>
+            )}
+            {isManual && (
+              <span className="text-xs text-muted-foreground self-center mr-2">
+                Importato da file
+              </span>
+            )}
             <Button
               variant="ghost"
               size="sm"

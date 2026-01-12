@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { Plus, Landmark, AlertCircle, RefreshCw } from "lucide-react";
+import { Plus, Landmark, AlertCircle, RefreshCw, Upload } from "lucide-react";
 import { BankAccountCard } from "@/components/conti-bancari/BankAccountCard";
 import { ConnectBankModal } from "@/components/conti-bancari/ConnectBankModal";
+import { UploadStatementModal } from "@/components/conti-bancari/UploadStatementModal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { usePlaid, BankAccount } from "@/hooks/usePlaid";
 
 export default function ContiBancari() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const { accounts, isLoading, fetchAccounts, syncAccount, removeAccount } = usePlaid();
 
   useEffect(() => {
@@ -32,6 +34,10 @@ export default function ContiBancari() {
     console.log("Connected accounts:", newAccounts);
   };
 
+  const handleUploadSuccess = () => {
+    fetchAccounts();
+  };
+
   const totalBalance = accounts.reduce((sum, acc) => sum + (acc.current_balance || 0), 0);
 
   // Map the Plaid account format to the card format
@@ -43,6 +49,7 @@ export default function ContiBancari() {
     currency: account.currency || "EUR",
     status: account.status as "active" | "pending" | "error",
     lastSync: account.last_sync_at ? new Date(account.last_sync_at) : new Date(),
+    source: (account as BankAccount & { source?: string }).source || "plaid",
   });
 
   return (
@@ -52,13 +59,17 @@ export default function ContiBancari() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Conti Bancari</h1>
           <p className="text-muted-foreground mt-1">
-            Gestisci i tuoi conti collegati tramite Plaid
+            Gestisci i tuoi conti collegati tramite Plaid o caricando estratti conto
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <Button variant="outline" onClick={() => fetchAccounts()} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
             Aggiorna
+          </Button>
+          <Button variant="outline" onClick={() => setIsUploadModalOpen(true)}>
+            <Upload className="h-4 w-4 mr-2" />
+            Carica estratto conto
           </Button>
           <Button onClick={() => setIsModalOpen(true)}>
             <Plus className="h-4 w-4 mr-2" />
@@ -70,10 +81,10 @@ export default function ContiBancari() {
       {/* Info Alert */}
       <Alert>
         <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Integrazione Plaid</AlertTitle>
+        <AlertTitle>Importa i tuoi conti</AlertTitle>
         <AlertDescription>
-          I tuoi conti bancari sono collegati in modo sicuro tramite Plaid. 
-          Le transazioni vengono sincronizzate automaticamente ogni giorno.
+          Collega i tuoi conti bancari tramite Plaid per sincronizzazione automatica, 
+          oppure carica estratti conto in formato PDF o CSV per importare le transazioni manualmente.
         </AlertDescription>
       </Alert>
 
@@ -165,6 +176,13 @@ export default function ContiBancari() {
         open={isModalOpen}
         onOpenChange={setIsModalOpen}
         onConnect={handleConnect}
+      />
+
+      {/* Upload Statement Modal */}
+      <UploadStatementModal
+        open={isUploadModalOpen}
+        onOpenChange={setIsUploadModalOpen}
+        onSuccess={handleUploadSuccess}
       />
     </div>
   );

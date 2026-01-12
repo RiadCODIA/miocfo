@@ -8,3 +8,6 @@ verify_jwt = false
 
 [functions.create-client-user]
 verify_jwt = false
+
+[functions.process-bank-statement]
+verify_jwt = false

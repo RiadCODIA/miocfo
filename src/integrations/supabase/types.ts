@@ -171,9 +171,10 @@ export type Database = {
           id: string
           last_sync_at: string | null
           mask: string | null
-          plaid_access_token: string
+          plaid_access_token: string | null
           plaid_account_id: string
-          plaid_item_id: string
+          plaid_item_id: string | null
+          source: string | null
           status: string | null
           updated_at: string
         }
@@ -190,9 +191,10 @@ export type Database = {
           id?: string
           last_sync_at?: string | null
           mask?: string | null
-          plaid_access_token: string
+          plaid_access_token?: string | null
           plaid_account_id: string
-          plaid_item_id: string
+          plaid_item_id?: string | null
+          source?: string | null
           status?: string | null
           updated_at?: string
         }
@@ -209,9 +211,10 @@ export type Database = {
           id?: string
           last_sync_at?: string | null
           mask?: string | null
-          plaid_access_token?: string
+          plaid_access_token?: string | null
           plaid_account_id?: string
-          plaid_item_id?: string
+          plaid_item_id?: string | null
+          source?: string | null
           status?: string | null
           updated_at?: string
         }
