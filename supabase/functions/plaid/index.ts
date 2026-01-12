@@ -310,6 +310,25 @@ async function removeItem(accountId: string) {
     throw new Error("Account not found");
   }
 
+  // Handle manual accounts (imported via CSV) - delete directly by ID
+  if (account.source === 'manual' || !account.plaid_item_id) {
+    console.log(`[Plaid] Deleting manual account: ${accountId}`);
+    
+    const { error: deleteError } = await supabase
+      .from("bank_accounts")
+      .delete()
+      .eq("id", accountId);
+
+    if (deleteError) {
+      console.error("[Plaid] Error deleting manual account:", deleteError);
+      throw deleteError;
+    }
+
+    console.log(`[Plaid] Deleted manual account: ${accountId}`);
+    return { success: true, deleted_count: 1, account_type: "manual" };
+  }
+
+  // Handle Plaid accounts - use plaid_item_id
   const plaidItemId = account.plaid_item_id;
 
   // Remove item from Plaid
