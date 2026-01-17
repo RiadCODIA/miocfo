@@ -19,7 +19,7 @@ export interface BankAccount {
   last_sync_at: string | null;
   created_at: string;
   updated_at: string;
-  source: "plaid" | "manual";
+  source: "powens" | "manual";
 }
 
 export interface BankTransaction {
@@ -38,25 +38,25 @@ export interface BankTransaction {
   created_at: string;
 }
 
-export function usePlaid() {
+export function usePowens() {
   const [isLoading, setIsLoading] = useState(false);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const { toast } = useToast();
 
-  const callPlaidFunction = useCallback(
+  const callPowensFunction = useCallback(
     async (action: string, params: Record<string, unknown> = {}) => {
-      const { data, error } = await supabase.functions.invoke("plaid", {
+      const { data, error } = await supabase.functions.invoke("powens", {
         body: { action, ...params },
       });
 
       if (error) {
-        console.error("[usePlaid] Function error:", error);
-        throw new Error(error.message || "Errore nella chiamata Plaid");
+        console.error("[usePowens] Function error:", error);
+        throw new Error(error.message || "Errore nella chiamata Powens");
       }
 
       if (data?.error) {
-        console.error("[usePlaid] API error:", data.error);
+        console.error("[usePowens] API error:", data.error);
         throw new Error(data.error);
       }
 
@@ -65,23 +65,26 @@ export function usePlaid() {
     []
   );
 
-  const createLinkToken = useCallback(async (): Promise<string> => {
-    setIsLoading(true);
-    try {
-      const data = await callPlaidFunction("create_link_token");
-      return data.link_token;
-    } finally {
-      setIsLoading(false);
-    }
-  }, [callPlaidFunction]);
-
-  const exchangePublicToken = useCallback(
-    async (publicToken: string): Promise<BankAccount[]> => {
+  const createWebviewUrl = useCallback(
+    async (redirectUri: string): Promise<{ webview_url: string; auth_token: string }> => {
       setIsLoading(true);
       try {
-        const data = await callPlaidFunction("exchange_public_token", {
-          public_token: publicToken,
+        const data = await callPowensFunction("create_webview_url", {
+          redirect_uri: redirectUri,
         });
+        return data;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [callPowensFunction]
+  );
+
+  const exchangeCode = useCallback(
+    async (code: string): Promise<BankAccount[]> => {
+      setIsLoading(true);
+      try {
+        const data = await callPowensFunction("exchange_code", { code });
 
         const newAccounts = data.accounts as BankAccount[];
         setAccounts((prev) => [...prev, ...newAccounts]);
@@ -104,13 +107,13 @@ export function usePlaid() {
         setIsLoading(false);
       }
     },
-    [callPlaidFunction, toast]
+    [callPowensFunction, toast]
   );
 
   const fetchAccounts = useCallback(async (): Promise<BankAccount[]> => {
     setIsLoading(true);
     try {
-      const data = await callPlaidFunction("get_accounts");
+      const data = await callPowensFunction("get_accounts");
       const fetchedAccounts = data.accounts as BankAccount[];
       setAccounts(fetchedAccounts);
       return fetchedAccounts;
@@ -124,7 +127,7 @@ export function usePlaid() {
     } finally {
       setIsLoading(false);
     }
-  }, [callPlaidFunction, toast]);
+  }, [callPowensFunction, toast]);
 
   const syncAccount = useCallback(
     async (
@@ -132,7 +135,7 @@ export function usePlaid() {
     ): Promise<{ account: BankAccount; transactions_synced: number }> => {
       setIsLoading(true);
       try {
-        const data = await callPlaidFunction("sync_account", {
+        const data = await callPowensFunction("sync_account", {
           account_id: accountId,
         });
 
@@ -161,7 +164,7 @@ export function usePlaid() {
         setIsLoading(false);
       }
     },
-    [callPlaidFunction, toast]
+    [callPowensFunction, toast]
   );
 
   const fetchTransactions = useCallback(
@@ -172,7 +175,7 @@ export function usePlaid() {
     ): Promise<BankTransaction[]> => {
       setIsLoading(true);
       try {
-        const data = await callPlaidFunction("get_transactions", {
+        const data = await callPowensFunction("get_transactions", {
           account_id: accountId,
           start_date: startDate,
           end_date: endDate,
@@ -192,17 +195,18 @@ export function usePlaid() {
         setIsLoading(false);
       }
     },
-    [callPlaidFunction, toast]
+    [callPowensFunction, toast]
   );
 
   const removeAccount = useCallback(
     async (accountId: string): Promise<void> => {
       setIsLoading(true);
       try {
-        const result = await callPlaidFunction("remove_item", { account_id: accountId });
-        
-        // Refresh accounts from DB to ensure UI is in sync
-        // (an item removal deletes all accounts for that item)
+        const result = await callPowensFunction("remove_connection", {
+          account_id: accountId,
+        });
+
+        // Refresh accounts from DB
         await fetchAccounts();
 
         toast({
@@ -221,15 +225,15 @@ export function usePlaid() {
         setIsLoading(false);
       }
     },
-    [callPlaidFunction, toast, fetchAccounts]
+    [callPowensFunction, toast, fetchAccounts]
   );
 
   return {
     isLoading,
     accounts,
     transactions,
-    createLinkToken,
-    exchangePublicToken,
+    createWebviewUrl,
+    exchangeCode,
     fetchAccounts,
     syncAccount,
     fetchTransactions,
