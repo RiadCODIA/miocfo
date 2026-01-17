@@ -74,9 +74,8 @@ async function powensRequest(
 
 async function createWebviewUrl(redirectUri: string) {
   // Generate the webview URL for bank connection
-  // The webview will handle user creation and return a code in the callback
-  // URL format: https://webview.powens.com/{lang}/connect?domain={domain}.biapi.pro&client_id=...&redirect_uri=...
-  const webviewUrl = `https://webview.powens.com/it/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}`;
+  // URL format: https://webview.powens.com/connect?domain={domain}&client_id=...&redirect_uri=...
+  const webviewUrl = `https://webview.powens.com/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}`;
 
   console.log(`[Powens] Created webview URL: ${webviewUrl}`);
 
