@@ -1,6 +1,6 @@
 project_id = "ublsnradzhfpqhunfqbn"
 
-[functions.plaid]
+[functions.powens]
 verify_jwt = false
 
 [functions.process-invoice]

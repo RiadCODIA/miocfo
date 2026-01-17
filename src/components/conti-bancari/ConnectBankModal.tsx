@@ -8,8 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
-import { usePlaidLink } from "react-plaid-link";
-import { usePlaid, BankAccount } from "@/hooks/usePlaid";
+import { usePowens, BankAccount } from "@/hooks/usePowens";
 
 interface ConnectBankModalProps {
   open: boolean;
@@ -19,61 +18,67 @@ interface ConnectBankModalProps {
 
 export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankModalProps) {
   const [step, setStep] = useState<"init" | "ready" | "connecting" | "success" | "error">("init");
-  const [linkToken, setLinkToken] = useState<string | null>(null);
+  const [webviewUrl, setWebviewUrl] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<BankAccount[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [plaidLinkOpen, setPlaidLinkOpen] = useState(false);
   
-  const { createLinkToken, exchangePublicToken, isLoading } = usePlaid();
+  const { createWebviewUrl, exchangeCode, isLoading } = usePowens();
 
-  // Get link token when modal opens
+  // Generate redirect URI for Powens callback
+  const getRedirectUri = useCallback(() => {
+    const baseUrl = window.location.origin;
+    return `${baseUrl}/conti-bancari?powens_callback=true`;
+  }, []);
+
+  // Get webview URL when modal opens
   useEffect(() => {
-    if (open && !linkToken) {
+    if (open && !webviewUrl) {
       setStep("init");
-      createLinkToken()
-        .then((token) => {
-          setLinkToken(token);
+      createWebviewUrl(getRedirectUri())
+        .then((data) => {
+          setWebviewUrl(data.webview_url);
           setStep("ready");
         })
         .catch((error) => {
-          console.error("Failed to get link token:", error);
-          setErrorMessage(error.message || "Impossibile inizializzare Plaid");
+          console.error("Failed to get webview URL:", error);
+          setErrorMessage(error.message || "Impossibile inizializzare Powens");
           setStep("error");
         });
     }
-  }, [open, linkToken, createLinkToken]);
+  }, [open, webviewUrl, createWebviewUrl, getRedirectUri]);
 
-  const onSuccess = useCallback(
-    async (publicToken: string) => {
-      setPlaidLinkOpen(false);
+  // Handle Powens callback (check for code in URL on mount)
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get("code");
+    const isPowensCallback = urlParams.get("powens_callback");
+
+    if (code && isPowensCallback) {
+      // Remove params from URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+
+      // Exchange code for tokens
       setStep("connecting");
-      try {
-        const accounts = await exchangePublicToken(publicToken);
-        setConnectedAccounts(accounts);
-        setStep("success");
-      } catch (error) {
-        console.error("Failed to exchange token:", error);
-        setErrorMessage(error instanceof Error ? error.message : "Errore nel collegamento");
-        setStep("error");
-      }
-    },
-    [exchangePublicToken]
-  );
+      exchangeCode(code)
+        .then((accounts) => {
+          setConnectedAccounts(accounts);
+          setStep("success");
+          onOpenChange(true); // Open modal to show success
+        })
+        .catch((error) => {
+          console.error("Failed to exchange code:", error);
+          setErrorMessage(error.message || "Errore nel collegamento");
+          setStep("error");
+          onOpenChange(true); // Open modal to show error
+        });
+    }
+  }, [exchangeCode, onOpenChange]);
 
-  const onExit = useCallback(() => {
-    setPlaidLinkOpen(false);
-    console.log("User exited Plaid Link");
-  }, []);
-
-  const { open: openPlaidLink, ready } = usePlaidLink({
-    token: linkToken,
-    onSuccess,
-    onExit,
-  });
-
-  const handleOpenPlaidLink = () => {
-    setPlaidLinkOpen(true);
-    openPlaidLink();
+  const handleOpenPowensWebview = () => {
+    if (webviewUrl) {
+      // Open Powens webview in a new window/tab
+      window.location.href = webviewUrl;
+    }
   };
 
   const handleComplete = () => {
@@ -83,29 +88,29 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   const handleClose = () => {
     setStep("init");
-    setLinkToken(null);
+    setWebviewUrl(null);
     setConnectedAccounts([]);
     setErrorMessage("");
     onOpenChange(false);
   };
 
   const handleRetry = () => {
-    setLinkToken(null);
+    setWebviewUrl(null);
     setErrorMessage("");
     setStep("init");
-    createLinkToken()
-      .then((token) => {
-        setLinkToken(token);
+    createWebviewUrl(getRedirectUri())
+      .then((data) => {
+        setWebviewUrl(data.webview_url);
         setStep("ready");
       })
       .catch((error) => {
-        setErrorMessage(error.message || "Impossibile inizializzare Plaid");
+        setErrorMessage(error.message || "Impossibile inizializzare Powens");
         setStep("error");
       });
   };
 
   return (
-    <Dialog open={open && !plaidLinkOpen} onOpenChange={handleClose}>
+    <Dialog open={open} onOpenChange={handleClose}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
@@ -116,8 +121,8 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
             {step === "error" && "Errore di connessione"}
           </DialogTitle>
           <DialogDescription>
-            {step === "init" && "Stiamo preparando la connessione sicura con Plaid"}
-            {step === "ready" && "Clicca per aprire Plaid Link e collegare il tuo conto"}
+            {step === "init" && "Stiamo preparando la connessione sicura con Powens"}
+            {step === "ready" && "Clicca per aprire la finestra di collegamento bancario"}
             {step === "connecting" && "Stiamo salvando i tuoi dati..."}
             {step === "success" && `${connectedAccounts.length} conto/i collegati con successo`}
             {step === "error" && "Si è verificato un errore durante il collegamento"}
@@ -128,7 +133,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
         {step === "init" && (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <Loader2 className="h-12 w-12 text-primary animate-spin" />
-            <p className="text-muted-foreground">Inizializzazione Plaid...</p>
+            <p className="text-muted-foreground">Inizializzazione Powens...</p>
           </div>
         )}
 
@@ -142,20 +147,20 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
             </div>
             <div className="text-center space-y-2">
               <p className="text-foreground">
-                Clicca il pulsante qui sotto per aprire Plaid Link e selezionare la tua banca.
+                Clicca il pulsante qui sotto per aprire Powens e selezionare la tua banca.
               </p>
               <p className="text-sm text-muted-foreground">
-                Powered by Plaid - i tuoi dati sono criptati e al sicuro
+                Powered by Powens - i tuoi dati sono criptati e al sicuro
               </p>
             </div>
             <div className="space-y-3">
               <Button
-                onClick={handleOpenPlaidLink}
-                disabled={!ready || isLoading}
+                onClick={handleOpenPowensWebview}
+                disabled={!webviewUrl || isLoading}
                 className="w-full"
               >
                 <ExternalLink className="h-4 w-4 mr-2" />
-                Apri Plaid Link
+                Collega la tua banca
               </Button>
               <Button
                 variant="outline"
@@ -206,7 +211,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
                     <div className="flex-1">
                       <p className="font-medium text-foreground">{account.bank_name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {account.account_name || account.account_type} •••• {account.mask}
+                        {account.account_name || account.account_type} {account.iban ? `IBAN: ...${account.iban.slice(-4)}` : account.mask ? `•••• ${account.mask}` : ""}
                       </p>
                     </div>
                   </div>

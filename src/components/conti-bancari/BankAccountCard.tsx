@@ -13,7 +13,7 @@ export interface BankAccount {
   currency: string;
   status: "active" | "pending" | "error";
   lastSync: Date;
-  source?: "plaid" | "manual";
+  source?: "powens" | "manual";
 }
 
 interface BankAccountCardProps {
@@ -72,7 +72,7 @@ export function BankAccountCard({ account, onSync, onTest, onRemove }: BankAccou
               variant="outline" 
               className={isManual ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}
             >
-              {isManual ? "Manuale" : "Plaid"}
+              {isManual ? "Manuale" : "Powens"}
             </Badge>
             <Badge className={status.className}>{status.label}</Badge>
           </div>
