@@ -66,7 +66,7 @@ export function usePowens() {
   );
 
   const createWebviewUrl = useCallback(
-    async (redirectUri: string): Promise<{ webview_url: string; auth_token: string }> => {
+    async (redirectUri: string): Promise<{ webview_url: string }> => {
       setIsLoading(true);
       try {
         const data = await callPowensFunction("create_webview_url", {

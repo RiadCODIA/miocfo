@@ -72,40 +72,15 @@ async function powensRequest(
   return data;
 }
 
-// Get client access token (for creating webview URLs)
-async function getClientToken(): Promise<string> {
-  const response = await fetch(`${POWENS_API_URL}/auth/init`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      client_id: POWENS_CLIENT_ID,
-      client_secret: POWENS_CLIENT_SECRET,
-    }),
-  });
-
-  const data = await response.json();
-
-  if (!response.ok) {
-    console.error("[Powens] Error getting client token:", data);
-    throw new Error(data.message || "Failed to get client token");
-  }
-
-  console.log("[Powens] Got client token");
-  return data.auth_token;
-}
-
 async function createWebviewUrl(redirectUri: string) {
-  // Get a temporary auth token
-  const authToken = await getClientToken();
-
   // Generate the webview URL for bank connection
-  const webviewUrl = `https://${POWENS_DOMAIN}/2.0/auth/webview/${authToken}?redirect_uri=${encodeURIComponent(redirectUri)}`;
+  // The webview will handle user creation and return a code in the callback
+  // URL format: https://webview.powens.com/{lang}/connect?domain={domain}.biapi.pro&client_id=...&redirect_uri=...
+  const webviewUrl = `https://webview.powens.com/it/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}`;
 
-  console.log("[Powens] Created webview URL");
+  console.log(`[Powens] Created webview URL: ${webviewUrl}`);
 
-  return { webview_url: webviewUrl, auth_token: authToken };
+  return { webview_url: webviewUrl };
 }
 
 async function exchangeCode(code: string) {
