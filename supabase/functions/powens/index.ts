@@ -6,7 +6,9 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
-const POWENS_DOMAIN = Deno.env.get("POWENS_DOMAIN")!;
+// Clean domain from any protocol prefix or trailing slashes
+const rawDomain = Deno.env.get("POWENS_DOMAIN")!;
+const POWENS_DOMAIN = rawDomain.replace(/^https?:\/\//, '').replace(/\/$/, '');
 const POWENS_CLIENT_ID = Deno.env.get("POWENS_CLIENT_ID")!;
 const POWENS_CLIENT_SECRET = Deno.env.get("POWENS_CLIENT_SECRET")!;
 
