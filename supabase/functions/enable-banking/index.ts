@@ -37,6 +37,7 @@ async function createJWT(): Promise<string> {
   const header = {
     alg: "RS256",
     typ: "JWT",
+    kid: ENABLE_BANKING_APP_ID, // Application ID as Key ID
   };
   
   const payload = {
