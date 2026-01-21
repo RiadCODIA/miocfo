@@ -5,16 +5,33 @@ import { BankAccountCard } from "@/components/conti-bancari/BankAccountCard";
 import { ConnectBankModal } from "@/components/conti-bancari/ConnectBankModal";
 import { UploadStatementModal } from "@/components/conti-bancari/UploadStatementModal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { usePowens, BankAccount } from "@/hooks/usePowens";
+import { useEnableBanking, BankAccount } from "@/hooks/useEnableBanking";
 
 export default function ContiBancari() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const { accounts, isLoading, fetchAccounts, syncAccount, removeAccount } = usePowens();
+  const { accounts, isLoading, fetchAccounts, syncAccount, removeAccount, completeSession } = useEnableBanking();
 
+  // Handle Enable Banking callback on mount
   useEffect(() => {
-    fetchAccounts();
-  }, [fetchAccounts]);
+    const urlParams = new URLSearchParams(window.location.search);
+    const sessionId = urlParams.get("session_id");
+    
+    if (sessionId) {
+      // Remove params from URL
+      window.history.replaceState({}, document.title, window.location.pathname);
+      
+      // Complete the session
+      completeSession(sessionId).then(() => {
+        setIsModalOpen(true);
+      }).catch((error) => {
+        console.error("Failed to complete session:", error);
+        setIsModalOpen(true);
+      });
+    } else {
+      fetchAccounts();
+    }
+  }, [fetchAccounts, completeSession]);
 
   const handleSync = async (id: string) => {
     await syncAccount(id);
@@ -40,7 +57,7 @@ export default function ContiBancari() {
 
   const totalBalance = accounts.reduce((sum, acc) => sum + (acc.current_balance || 0), 0);
 
-  // Map the Plaid account format to the card format
+  // Map the account format to the card format
   const mapAccountToCard = (account: BankAccount) => ({
     id: account.id,
     bankName: account.bank_name,
@@ -49,7 +66,7 @@ export default function ContiBancari() {
     currency: account.currency || "EUR",
     status: account.status as "active" | "pending" | "error",
     lastSync: account.last_sync_at ? new Date(account.last_sync_at) : new Date(),
-    source: (account as BankAccount & { source?: string }).source || "powens",
+    source: (account as BankAccount & { source?: string }).source || "enable_banking",
   });
 
   return (
@@ -59,7 +76,7 @@ export default function ContiBancari() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Conti Bancari</h1>
           <p className="text-muted-foreground mt-1">
-            Gestisci i tuoi conti collegati tramite Powens o caricando estratti conto
+            Gestisci i tuoi conti collegati tramite Enable Banking o caricando estratti conto
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -83,7 +100,7 @@ export default function ContiBancari() {
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Importa i tuoi conti</AlertTitle>
         <AlertDescription>
-          Collega i tuoi conti bancari tramite Powens per sincronizzazione automatica, 
+          Collega i tuoi conti bancari tramite Enable Banking per sincronizzazione automatica, 
           oppure carica estratti conto in formato PDF o CSV per importare le transazioni manualmente.
         </AlertDescription>
       </Alert>

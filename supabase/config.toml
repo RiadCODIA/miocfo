@@ -1,6 +1,6 @@
 project_id = "ublsnradzhfpqhunfqbn"
 
-[functions.powens]
+[functions.enable-banking]
 verify_jwt = false
 
 [functions.process-invoice]

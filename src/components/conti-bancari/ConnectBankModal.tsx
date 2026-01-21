@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
-import { usePowens, BankAccount } from "@/hooks/usePowens";
+import { useEnableBanking, BankAccount } from "@/hooks/useEnableBanking";
 
 interface ConnectBankModalProps {
   open: boolean;
@@ -18,66 +18,67 @@ interface ConnectBankModalProps {
 
 export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankModalProps) {
   const [step, setStep] = useState<"init" | "ready" | "connecting" | "success" | "error">("init");
-  const [webviewUrl, setWebviewUrl] = useState<string | null>(null);
+  const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null);
+  const [sessionId, setSessionId] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<BankAccount[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
   
-  const { createWebviewUrl, exchangeCode, isLoading } = usePowens();
+  const { createSession, completeSession, isLoading } = useEnableBanking();
 
-  // Generate redirect URI for Powens callback
+  // Generate redirect URI for Enable Banking callback
   const getRedirectUri = useCallback(() => {
     const baseUrl = window.location.origin;
-    return `${baseUrl}/conti-bancari?powens_callback=true`;
+    return `${baseUrl}/conti-bancari`;
   }, []);
 
-  // Get webview URL when modal opens
+  // Get authorization URL when modal opens
   useEffect(() => {
-    if (open && !webviewUrl) {
+    if (open && !authorizationUrl) {
       setStep("init");
-      createWebviewUrl(getRedirectUri())
+      createSession(getRedirectUri())
         .then((data) => {
-          setWebviewUrl(data.webview_url);
+          setAuthorizationUrl(data.authorization_url);
+          setSessionId(data.session_id);
           setStep("ready");
         })
         .catch((error) => {
-          console.error("Failed to get webview URL:", error);
-          setErrorMessage(error.message || "Impossibile inizializzare Powens");
+          console.error("Failed to create session:", error);
+          setErrorMessage(error.message || "Impossibile inizializzare Enable Banking");
           setStep("error");
         });
     }
-  }, [open, webviewUrl, createWebviewUrl, getRedirectUri]);
+  }, [open, authorizationUrl, createSession, getRedirectUri]);
 
-  // Handle Powens callback (check for code in URL on mount)
+  // Handle Enable Banking callback (check for session_id in URL on mount)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get("code");
-    const isPowensCallback = urlParams.get("powens_callback");
+    const callbackSessionId = urlParams.get("session_id");
 
-    if (code && isPowensCallback) {
+    if (callbackSessionId) {
       // Remove params from URL
       window.history.replaceState({}, document.title, window.location.pathname);
 
-      // Exchange code for tokens
+      // Complete the session
       setStep("connecting");
-      exchangeCode(code)
+      completeSession(callbackSessionId)
         .then((accounts) => {
           setConnectedAccounts(accounts);
           setStep("success");
           onOpenChange(true); // Open modal to show success
         })
         .catch((error) => {
-          console.error("Failed to exchange code:", error);
+          console.error("Failed to complete session:", error);
           setErrorMessage(error.message || "Errore nel collegamento");
           setStep("error");
           onOpenChange(true); // Open modal to show error
         });
     }
-  }, [exchangeCode, onOpenChange]);
+  }, [completeSession, onOpenChange]);
 
-  const handleOpenPowensWebview = () => {
-    if (webviewUrl) {
-      // Open Powens webview in a new window/tab
-      window.location.href = webviewUrl;
+  const handleOpenEnableBankingAuth = () => {
+    if (authorizationUrl) {
+      // Redirect to Enable Banking authorization page
+      window.location.href = authorizationUrl;
     }
   };
 
@@ -88,23 +89,26 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   const handleClose = () => {
     setStep("init");
-    setWebviewUrl(null);
+    setAuthorizationUrl(null);
+    setSessionId(null);
     setConnectedAccounts([]);
     setErrorMessage("");
     onOpenChange(false);
   };
 
   const handleRetry = () => {
-    setWebviewUrl(null);
+    setAuthorizationUrl(null);
+    setSessionId(null);
     setErrorMessage("");
     setStep("init");
-    createWebviewUrl(getRedirectUri())
+    createSession(getRedirectUri())
       .then((data) => {
-        setWebviewUrl(data.webview_url);
+        setAuthorizationUrl(data.authorization_url);
+        setSessionId(data.session_id);
         setStep("ready");
       })
       .catch((error) => {
-        setErrorMessage(error.message || "Impossibile inizializzare Powens");
+        setErrorMessage(error.message || "Impossibile inizializzare Enable Banking");
         setStep("error");
       });
   };
@@ -121,7 +125,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
             {step === "error" && "Errore di connessione"}
           </DialogTitle>
           <DialogDescription>
-            {step === "init" && "Stiamo preparando la connessione sicura con Powens"}
+            {step === "init" && "Stiamo preparando la connessione sicura con Enable Banking"}
             {step === "ready" && "Clicca per aprire la finestra di collegamento bancario"}
             {step === "connecting" && "Stiamo salvando i tuoi dati..."}
             {step === "success" && `${connectedAccounts.length} conto/i collegati con successo`}
@@ -133,7 +137,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
         {step === "init" && (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <Loader2 className="h-12 w-12 text-primary animate-spin" />
-            <p className="text-muted-foreground">Inizializzazione Powens...</p>
+            <p className="text-muted-foreground">Inizializzazione Enable Banking...</p>
           </div>
         )}
 
@@ -147,16 +151,16 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
             </div>
             <div className="text-center space-y-2">
               <p className="text-foreground">
-                Clicca il pulsante qui sotto per aprire Powens e selezionare la tua banca.
+                Clicca il pulsante qui sotto per selezionare la tua banca e autorizzare l'accesso.
               </p>
               <p className="text-sm text-muted-foreground">
-                Powered by Powens - i tuoi dati sono criptati e al sicuro
+                Powered by Enable Banking - i tuoi dati sono criptati e al sicuro
               </p>
             </div>
             <div className="space-y-3">
               <Button
-                onClick={handleOpenPowensWebview}
-                disabled={!webviewUrl || isLoading}
+                onClick={handleOpenEnableBankingAuth}
+                disabled={!authorizationUrl || isLoading}
                 className="w-full"
               >
                 <ExternalLink className="h-4 w-4 mr-2" />

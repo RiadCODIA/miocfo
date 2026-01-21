@@ -13,7 +13,7 @@ export interface BankAccount {
   currency: string;
   status: "active" | "pending" | "error";
   lastSync: Date;
-  source?: "powens" | "manual";
+  source?: "enable_banking" | "powens" | "manual";
 }
 
 interface BankAccountCardProps {
@@ -53,6 +53,7 @@ export function BankAccountCard({ account, onSync, onTest, onRemove }: BankAccou
   const status = statusConfig[account.status];
 
   const isManual = account.source === "manual";
+  const isConnected = account.source === "enable_banking" || account.source === "powens";
 
   return (
     <Card className="hover:shadow-lg transition-shadow">
@@ -72,7 +73,7 @@ export function BankAccountCard({ account, onSync, onTest, onRemove }: BankAccou
               variant="outline" 
               className={isManual ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}
             >
-              {isManual ? "Manuale" : "Powens"}
+              {isManual ? "Manuale" : "Enable Banking"}
             </Badge>
             <Badge className={status.className}>{status.label}</Badge>
           </div>

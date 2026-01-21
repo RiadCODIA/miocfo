@@ -19,7 +19,7 @@ export interface BankAccount {
   last_sync_at: string | null;
   created_at: string;
   updated_at: string;
-  source: "powens" | "manual";
+  source: "enable_banking" | "manual";
 }
 
 export interface BankTransaction {
@@ -38,25 +38,25 @@ export interface BankTransaction {
   created_at: string;
 }
 
-export function usePowens() {
+export function useEnableBanking() {
   const [isLoading, setIsLoading] = useState(false);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const { toast } = useToast();
 
-  const callPowensFunction = useCallback(
+  const callEnableBankingFunction = useCallback(
     async (action: string, params: Record<string, unknown> = {}) => {
-      const { data, error } = await supabase.functions.invoke("powens", {
+      const { data, error } = await supabase.functions.invoke("enable-banking", {
         body: { action, ...params },
       });
 
       if (error) {
-        console.error("[usePowens] Function error:", error);
-        throw new Error(error.message || "Errore nella chiamata Powens");
+        console.error("[useEnableBanking] Function error:", error);
+        throw new Error(error.message || "Errore nella chiamata Enable Banking");
       }
 
       if (data?.error) {
-        console.error("[usePowens] API error:", data.error);
+        console.error("[useEnableBanking] API error:", data.error);
         throw new Error(data.error);
       }
 
@@ -65,26 +65,34 @@ export function usePowens() {
     []
   );
 
-  const createWebviewUrl = useCallback(
-    async (redirectUri: string): Promise<{ webview_url: string }> => {
+  const createSession = useCallback(
+    async (
+      redirectUri: string,
+      aspspCountry?: string,
+      aspspName?: string
+    ): Promise<{ session_id: string; authorization_url: string }> => {
       setIsLoading(true);
       try {
-        const data = await callPowensFunction("create_webview_url", {
+        const data = await callEnableBankingFunction("create_session", {
           redirect_uri: redirectUri,
+          aspsp_country: aspspCountry,
+          aspsp_name: aspspName,
         });
         return data;
       } finally {
         setIsLoading(false);
       }
     },
-    [callPowensFunction]
+    [callEnableBankingFunction]
   );
 
-  const exchangeCode = useCallback(
-    async (code: string): Promise<BankAccount[]> => {
+  const completeSession = useCallback(
+    async (sessionId: string): Promise<BankAccount[]> => {
       setIsLoading(true);
       try {
-        const data = await callPowensFunction("exchange_code", { code });
+        const data = await callEnableBankingFunction("complete_session", {
+          session_id: sessionId,
+        });
 
         const newAccounts = data.accounts as BankAccount[];
         setAccounts((prev) => [...prev, ...newAccounts]);
@@ -107,13 +115,13 @@ export function usePowens() {
         setIsLoading(false);
       }
     },
-    [callPowensFunction, toast]
+    [callEnableBankingFunction, toast]
   );
 
   const fetchAccounts = useCallback(async (): Promise<BankAccount[]> => {
     setIsLoading(true);
     try {
-      const data = await callPowensFunction("get_accounts");
+      const data = await callEnableBankingFunction("get_accounts");
       const fetchedAccounts = data.accounts as BankAccount[];
       setAccounts(fetchedAccounts);
       return fetchedAccounts;
@@ -127,7 +135,7 @@ export function usePowens() {
     } finally {
       setIsLoading(false);
     }
-  }, [callPowensFunction, toast]);
+  }, [callEnableBankingFunction, toast]);
 
   const syncAccount = useCallback(
     async (
@@ -135,7 +143,7 @@ export function usePowens() {
     ): Promise<{ account: BankAccount; transactions_synced: number }> => {
       setIsLoading(true);
       try {
-        const data = await callPowensFunction("sync_account", {
+        const data = await callEnableBankingFunction("sync_account", {
           account_id: accountId,
         });
 
@@ -164,7 +172,7 @@ export function usePowens() {
         setIsLoading(false);
       }
     },
-    [callPowensFunction, toast]
+    [callEnableBankingFunction, toast]
   );
 
   const fetchTransactions = useCallback(
@@ -175,7 +183,7 @@ export function usePowens() {
     ): Promise<BankTransaction[]> => {
       setIsLoading(true);
       try {
-        const data = await callPowensFunction("get_transactions", {
+        const data = await callEnableBankingFunction("get_transactions", {
           account_id: accountId,
           start_date: startDate,
           end_date: endDate,
@@ -195,14 +203,14 @@ export function usePowens() {
         setIsLoading(false);
       }
     },
-    [callPowensFunction, toast]
+    [callEnableBankingFunction, toast]
   );
 
   const removeAccount = useCallback(
     async (accountId: string): Promise<void> => {
       setIsLoading(true);
       try {
-        const result = await callPowensFunction("remove_connection", {
+        const result = await callEnableBankingFunction("remove_connection", {
           account_id: accountId,
         });
 
@@ -225,18 +233,34 @@ export function usePowens() {
         setIsLoading(false);
       }
     },
-    [callPowensFunction, toast, fetchAccounts]
+    [callEnableBankingFunction, toast, fetchAccounts]
+  );
+
+  const getASPSPs = useCallback(
+    async (country: string): Promise<unknown[]> => {
+      setIsLoading(true);
+      try {
+        const data = await callEnableBankingFunction("get_aspsps", {
+          aspsp_country: country,
+        });
+        return data.aspsps;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [callEnableBankingFunction]
   );
 
   return {
     isLoading,
     accounts,
     transactions,
-    createWebviewUrl,
-    exchangeCode,
+    createSession,
+    completeSession,
     fetchAccounts,
     syncAccount,
     fetchTransactions,
     removeAccount,
+    getASPSPs,
   };
 }
