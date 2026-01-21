@@ -62,8 +62,14 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   // Generate redirect URI for Enable Banking callback
   const getRedirectUri = useCallback(() => {
-    const baseUrl = window.location.origin;
-    return `${baseUrl}/conti-bancari`;
+    // Enable Banking requires the redirect URL to be pre-whitelisted.
+    // The Lovable preview domain (lovableproject.com) is often not whitelisted,
+    // so we prefer a stable public URL when configured.
+    const origin = window.location.origin;
+    const configuredBase = (import.meta as any).env?.VITE_PUBLIC_APP_URL as string | undefined;
+    const shouldUseOrigin = origin.includes(".lovable.app");
+    const baseUrl = (shouldUseOrigin ? origin : configuredBase?.trim()) || origin;
+    return `${baseUrl.replace(/\/$/, "")}/conti-bancari`;
   }, []);
 
   // Load banks when country changes
