@@ -133,27 +133,25 @@ async function enableBankingRequest(
 // Create an authorization request and get the authorization URL
 async function createSession(
   redirectUri: string,
-  aspspCountry?: string,
-  aspspName?: string
+  aspspCountry: string,
+  aspspName: string
 ): Promise<{ session_id: string; authorization_url: string }> {
   // For Enable Banking, we use /auth endpoint to start the authorization flow
-  const authData: Record<string, unknown> = {
+  // valid_until needs full ISO datetime with timezone
+  const validUntil = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
+  
+  const authData = {
     access: {
-      valid_until: new Date(Date.now() + 90 * 24 + 60 * 60 * 1000).toISOString().split("T")[0], // 90 days
+      valid_until: validUntil,
     },
-    aspsp: aspspCountry && aspspName ? {
+    aspsp: {
       country: aspspCountry,
       name: aspspName,
-    } : undefined,
+    },
     state: crypto.randomUUID(),
     redirect_url: redirectUri,
     psu_type: "personal",
   };
-  
-  // Remove undefined values
-  if (!authData.aspsp) {
-    delete authData.aspsp;
-  }
   
   console.log("[Enable Banking] Creating auth request with data:", JSON.stringify(authData));
   
@@ -519,6 +517,9 @@ serve(async (req: Request) => {
       case "create_session":
         if (!body.redirect_uri) {
           throw new Error("redirect_uri is required");
+        }
+        if (!body.aspsp_country || !body.aspsp_name) {
+          throw new Error("aspsp_country and aspsp_name are required");
         }
         result = await createSession(body.redirect_uri, body.aspsp_country, body.aspsp_name);
         break;
