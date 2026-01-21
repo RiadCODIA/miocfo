@@ -49,18 +49,18 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     }
   }, [open, authorizationUrl, createSession, getRedirectUri]);
 
-  // Handle Enable Banking callback (check for session_id in URL on mount)
+  // Handle Enable Banking callback (check for code in URL on mount)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const callbackSessionId = urlParams.get("session_id");
+    const authCode = urlParams.get("code");
 
-    if (callbackSessionId) {
+    if (authCode) {
       // Remove params from URL
       window.history.replaceState({}, document.title, window.location.pathname);
 
-      // Complete the session
+      // Complete the session with the authorization code
       setStep("connecting");
-      completeSession(callbackSessionId)
+      completeSession(authCode)
         .then((accounts) => {
           setConnectedAccounts(accounts);
           setStep("success");

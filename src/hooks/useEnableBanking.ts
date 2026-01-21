@@ -87,11 +87,11 @@ export function useEnableBanking() {
   );
 
   const completeSession = useCallback(
-    async (sessionId: string): Promise<BankAccount[]> => {
+    async (code: string): Promise<BankAccount[]> => {
       setIsLoading(true);
       try {
         const data = await callEnableBankingFunction("complete_session", {
-          session_id: sessionId,
+          code: code,
         });
 
         const newAccounts = data.accounts as BankAccount[];
