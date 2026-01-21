@@ -16,7 +16,7 @@ const ENABLE_BANKING_API_URL = "https://api.enablebanking.com";
 interface EnableBankingRequest {
   action: string;
   redirect_uri?: string;
-  session_id?: string;
+  code?: string; // Authorization code from callback
   account_id?: string;
   start_date?: string;
   end_date?: string;
@@ -130,15 +130,16 @@ async function enableBankingRequest(
   return response.json();
 }
 
-// Create a PSU session and get the authorization URL
+// Create an authorization request and get the authorization URL
 async function createSession(
   redirectUri: string,
   aspspCountry?: string,
   aspspName?: string
 ): Promise<{ session_id: string; authorization_url: string }> {
-  const sessionData: Record<string, unknown> = {
+  // For Enable Banking, we use /auth endpoint to start the authorization flow
+  const authData: Record<string, unknown> = {
     access: {
-      valid_until: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0], // 90 days
+      valid_until: new Date(Date.now() + 90 * 24 + 60 * 60 * 1000).toISOString().split("T")[0], // 90 days
     },
     aspsp: aspspCountry && aspspName ? {
       country: aspspCountry,
@@ -150,33 +151,47 @@ async function createSession(
   };
   
   // Remove undefined values
-  if (!sessionData.aspsp) {
-    delete sessionData.aspsp;
+  if (!authData.aspsp) {
+    delete authData.aspsp;
   }
   
-  console.log("[Enable Banking] Creating session with data:", JSON.stringify(sessionData));
+  console.log("[Enable Banking] Creating auth request with data:", JSON.stringify(authData));
   
-  const response = await enableBankingRequest("/sessions", "POST", sessionData) as {
-    session_id: string;
+  // Use /auth endpoint to get the authorization URL
+  const response = await enableBankingRequest("/auth", "POST", authData) as {
     url: string;
   };
   
-  console.log("[Enable Banking] Session created:", response.session_id);
+  console.log("[Enable Banking] Auth response received, URL:", response.url?.substring(0, 50) + "...");
   
+  // Return the state as session_id (it will be returned in the callback)
   return {
-    session_id: response.session_id,
+    session_id: authData.state as string,
     authorization_url: response.url,
   };
 }
 
-// Complete the session after user authorization
-async function completeSession(sessionId: string): Promise<{ accounts: unknown[] }> {
-  console.log(`[Enable Banking] Completing session: ${sessionId}`);
+// Complete the authorization after user returns with code
+async function completeSession(code: string): Promise<{ accounts: unknown[] }> {
+  console.log(`[Enable Banking] Completing session with code: ${code.substring(0, 20)}...`);
   
-  // Get the session status
-  const session = await enableBankingRequest(`/sessions/${sessionId}`) as {
-    status: string;
-    accounts?: Array<{
+  // Exchange the authorization code for a session
+  const session = await enableBankingRequest("/sessions", "POST", { code }) as {
+    session_id: string;
+    access?: {
+      valid_until: string;
+    };
+    aspsp?: {
+      name: string;
+      country: string;
+    };
+  };
+  
+  console.log("[Enable Banking] Session created:", session.session_id);
+  
+  // Fetch accounts for this session
+  const accountsResponse = await enableBankingRequest(`/sessions/${session.session_id}/accounts`) as {
+    accounts: Array<{
       uid: string;
       iban?: string;
       account_id?: {
@@ -186,52 +201,51 @@ async function completeSession(sessionId: string): Promise<{ accounts: unknown[]
       currency?: string;
       product?: string;
       cash_account_type?: string;
-      balances?: Array<{
-        balance_amount: {
-          amount: number;
-          currency: string;
-        };
-        balance_type: string;
-      }>;
     }>;
-    aspsp?: {
-      name: string;
-      country: string;
-    };
   };
   
-  console.log("[Enable Banking] Session status:", session.status);
-  
-  if (session.status !== "AUTHORIZED") {
-    throw new Error(`Session not authorized. Status: ${session.status}`);
-  }
+  console.log(`[Enable Banking] Found ${accountsResponse.accounts?.length || 0} accounts`);
   
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const savedAccounts: unknown[] = [];
   
-  if (session.accounts) {
-    for (const account of session.accounts) {
+  if (accountsResponse.accounts) {
+    for (const account of accountsResponse.accounts) {
       // Get account balances
       let currentBalance = 0;
       let availableBalance = 0;
       
-      if (account.balances) {
-        for (const balance of account.balances) {
-          if (balance.balance_type === "closingBooked" || balance.balance_type === "interimBooked") {
-            currentBalance = balance.balance_amount.amount;
-          }
-          if (balance.balance_type === "interimAvailable" || balance.balance_type === "expected") {
-            availableBalance = balance.balance_amount.amount;
+      try {
+        const balances = await enableBankingRequest(`/accounts/${account.uid}/balances`) as {
+          balances: Array<{
+            balance_amount: {
+              amount: number;
+              currency: string;
+            };
+            balance_type: string;
+          }>;
+        };
+        
+        if (balances.balances) {
+          for (const balance of balances.balances) {
+            if (balance.balance_type === "closingBooked" || balance.balance_type === "interimBooked") {
+              currentBalance = balance.balance_amount.amount;
+            }
+            if (balance.balance_type === "interimAvailable" || balance.balance_type === "expected") {
+              availableBalance = balance.balance_amount.amount;
+            }
           }
         }
+      } catch (e) {
+        console.log("[Enable Banking] Could not fetch balances:", e);
       }
       
       const iban = account.iban || account.account_id?.iban || null;
       
       const accountData = {
-        plaid_account_id: account.uid, // Using uid as unique identifier
-        plaid_item_id: sessionId,
-        bank_name: session.aspsp?.name || "Unknown Bank",
+        plaid_account_id: account.uid,
+        plaid_item_id: session.session_id,
+        bank_name: session.aspsp?.name || "Bank",
         account_name: account.name || account.product || "Conto Corrente",
         account_type: account.cash_account_type || "checking",
         iban: iban,
@@ -251,7 +265,6 @@ async function completeSession(sessionId: string): Promise<{ accounts: unknown[]
         .single();
       
       if (existingAccount) {
-        // Update existing account
         const { data: updatedAccount, error } = await supabase
           .from("bank_accounts")
           .update({
@@ -262,24 +275,15 @@ async function completeSession(sessionId: string): Promise<{ accounts: unknown[]
           .select()
           .single();
         
-        if (error) {
-          console.error("[Enable Banking] Error updating account:", error);
-        } else {
-          savedAccounts.push(updatedAccount);
-        }
+        if (!error) savedAccounts.push(updatedAccount);
       } else {
-        // Insert new account
         const { data: newAccount, error } = await supabase
           .from("bank_accounts")
           .insert(accountData)
           .select()
           .single();
         
-        if (error) {
-          console.error("[Enable Banking] Error inserting account:", error);
-        } else {
-          savedAccounts.push(newAccount);
-        }
+        if (!error) savedAccounts.push(newAccount);
       }
     }
   }
@@ -520,10 +524,10 @@ serve(async (req: Request) => {
         break;
         
       case "complete_session":
-        if (!body.session_id) {
-          throw new Error("session_id is required");
+        if (!body.code) {
+          throw new Error("code is required");
         }
-        result = await completeSession(body.session_id);
+        result = await completeSession(body.code);
         break;
         
       case "get_accounts":

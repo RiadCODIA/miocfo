@@ -15,14 +15,14 @@ export default function ContiBancari() {
   // Handle Enable Banking callback on mount
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get("session_id");
+    const authCode = urlParams.get("code");
     
-    if (sessionId) {
+    if (authCode) {
       // Remove params from URL
       window.history.replaceState({}, document.title, window.location.pathname);
       
-      // Complete the session
-      completeSession(sessionId).then(() => {
+      // Complete the session with the authorization code
+      completeSession(authCode).then(() => {
         setIsModalOpen(true);
       }).catch((error) => {
         console.error("Failed to complete session:", error);
