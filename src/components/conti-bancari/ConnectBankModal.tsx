@@ -7,8 +7,25 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle, Search } from "lucide-react";
 import { useEnableBanking, BankAccount } from "@/hooks/useEnableBanking";
+
+interface ASPSP {
+  name: string;
+  country: string;
+  logo?: string;
+  bic?: string;
+}
 
 interface ConnectBankModalProps {
   open: boolean;
@@ -16,14 +33,32 @@ interface ConnectBankModalProps {
   onConnect: (accounts: BankAccount[]) => void;
 }
 
+const COUNTRIES = [
+  { code: "IT", name: "Italia" },
+  { code: "DE", name: "Germania" },
+  { code: "FR", name: "Francia" },
+  { code: "ES", name: "Spagna" },
+  { code: "NL", name: "Paesi Bassi" },
+  { code: "BE", name: "Belgio" },
+  { code: "AT", name: "Austria" },
+  { code: "PT", name: "Portogallo" },
+  { code: "FI", name: "Finlandia" },
+  { code: "IE", name: "Irlanda" },
+];
+
 export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankModalProps) {
-  const [step, setStep] = useState<"init" | "ready" | "connecting" | "success" | "error">("init");
+  const [step, setStep] = useState<"select_bank" | "ready" | "connecting" | "success" | "error">("select_bank");
+  const [selectedCountry, setSelectedCountry] = useState<string>("IT");
+  const [banks, setBanks] = useState<ASPSP[]>([]);
+  const [filteredBanks, setFilteredBanks] = useState<ASPSP[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedBank, setSelectedBank] = useState<ASPSP | null>(null);
   const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null);
-  const [sessionId, setSessionId] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<BankAccount[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
+  const [isLoadingBanks, setIsLoadingBanks] = useState(false);
   
-  const { createSession, completeSession, isLoading } = useEnableBanking();
+  const { createSession, completeSession, getASPSPs, isLoading } = useEnableBanking();
 
   // Generate redirect URI for Enable Banking callback
   const getRedirectUri = useCallback(() => {
@@ -31,23 +66,39 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     return `${baseUrl}/conti-bancari`;
   }, []);
 
-  // Get authorization URL when modal opens
+  // Load banks when country changes
   useEffect(() => {
-    if (open && !authorizationUrl) {
-      setStep("init");
-      createSession(getRedirectUri())
-        .then((data) => {
-          setAuthorizationUrl(data.authorization_url);
-          setSessionId(data.session_id);
-          setStep("ready");
+    if (open && selectedCountry) {
+      setIsLoadingBanks(true);
+      setSelectedBank(null);
+      getASPSPs(selectedCountry)
+        .then((aspsps) => {
+          const bankList = aspsps as ASPSP[];
+          setBanks(bankList);
+          setFilteredBanks(bankList);
         })
         .catch((error) => {
-          console.error("Failed to create session:", error);
-          setErrorMessage(error.message || "Impossibile inizializzare Enable Banking");
-          setStep("error");
+          console.error("Failed to load banks:", error);
+          setBanks([]);
+          setFilteredBanks([]);
+        })
+        .finally(() => {
+          setIsLoadingBanks(false);
         });
     }
-  }, [open, authorizationUrl, createSession, getRedirectUri]);
+  }, [open, selectedCountry, getASPSPs]);
+
+  // Filter banks by search query
+  useEffect(() => {
+    if (searchQuery) {
+      const filtered = banks.filter((bank) =>
+        bank.name.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+      setFilteredBanks(filtered);
+    } else {
+      setFilteredBanks(banks);
+    }
+  }, [searchQuery, banks]);
 
   // Handle Enable Banking callback (check for code in URL on mount)
   useEffect(() => {
@@ -60,24 +111,40 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
       // Complete the session with the authorization code
       setStep("connecting");
+      onOpenChange(true); // Open modal
       completeSession(authCode)
         .then((accounts) => {
           setConnectedAccounts(accounts);
           setStep("success");
-          onOpenChange(true); // Open modal to show success
         })
         .catch((error) => {
           console.error("Failed to complete session:", error);
           setErrorMessage(error.message || "Errore nel collegamento");
           setStep("error");
-          onOpenChange(true); // Open modal to show error
         });
     }
   }, [completeSession, onOpenChange]);
 
+  const handleSelectBank = (bank: ASPSP) => {
+    setSelectedBank(bank);
+  };
+
+  const handleProceed = async () => {
+    if (!selectedBank) return;
+
+    setStep("ready");
+    try {
+      const data = await createSession(getRedirectUri(), selectedCountry, selectedBank.name);
+      setAuthorizationUrl(data.authorization_url);
+    } catch (error) {
+      console.error("Failed to create session:", error);
+      setErrorMessage(error instanceof Error ? error.message : "Impossibile inizializzare Enable Banking");
+      setStep("error");
+    }
+  };
+
   const handleOpenEnableBankingAuth = () => {
     if (authorizationUrl) {
-      // Redirect to Enable Banking authorization page
       window.location.href = authorizationUrl;
     }
   };
@@ -88,29 +155,18 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   };
 
   const handleClose = () => {
-    setStep("init");
+    setStep("select_bank");
+    setSelectedBank(null);
     setAuthorizationUrl(null);
-    setSessionId(null);
     setConnectedAccounts([]);
     setErrorMessage("");
+    setSearchQuery("");
     onOpenChange(false);
   };
 
   const handleRetry = () => {
-    setAuthorizationUrl(null);
-    setSessionId(null);
     setErrorMessage("");
-    setStep("init");
-    createSession(getRedirectUri())
-      .then((data) => {
-        setAuthorizationUrl(data.authorization_url);
-        setSessionId(data.session_id);
-        setStep("ready");
-      })
-      .catch((error) => {
-        setErrorMessage(error.message || "Impossibile inizializzare Enable Banking");
-        setStep("error");
-      });
+    setStep("select_bank");
   };
 
   return (
@@ -118,26 +174,101 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
-            {step === "init" && "Preparazione..."}
+            {step === "select_bank" && "Seleziona la tua banca"}
             {step === "ready" && "Collega un conto bancario"}
             {step === "connecting" && "Collegamento in corso..."}
             {step === "success" && "Connessione riuscita!"}
             {step === "error" && "Errore di connessione"}
           </DialogTitle>
           <DialogDescription>
-            {step === "init" && "Stiamo preparando la connessione sicura con Enable Banking"}
-            {step === "ready" && "Clicca per aprire la finestra di collegamento bancario"}
+            {step === "select_bank" && "Scegli il paese e la banca da collegare"}
+            {step === "ready" && `Clicca per collegarti a ${selectedBank?.name}`}
             {step === "connecting" && "Stiamo salvando i tuoi dati..."}
             {step === "success" && `${connectedAccounts.length} conto/i collegati con successo`}
             {step === "error" && "Si è verificato un errore durante il collegamento"}
           </DialogDescription>
         </DialogHeader>
 
-        {/* Loading State */}
-        {step === "init" && (
-          <div className="flex flex-col items-center justify-center py-12 space-y-4">
-            <Loader2 className="h-12 w-12 text-primary animate-spin" />
-            <p className="text-muted-foreground">Inizializzazione Enable Banking...</p>
+        {/* Bank Selection */}
+        {step === "select_bank" && (
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Paese</Label>
+              <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona un paese" />
+                </SelectTrigger>
+                <SelectContent>
+                  {COUNTRIES.map((country) => (
+                    <SelectItem key={country.code} value={country.code}>
+                      {country.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Cerca banca</Label>
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Input
+                  placeholder="Cerca per nome..."
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  className="pl-9"
+                />
+              </div>
+            </div>
+
+            {isLoadingBanks ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="h-6 w-6 animate-spin text-primary" />
+              </div>
+            ) : (
+              <ScrollArea className="h-[250px] rounded-md border">
+                <div className="p-2 space-y-1">
+                  {filteredBanks.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-4">
+                      Nessuna banca trovata
+                    </p>
+                  ) : (
+                    filteredBanks.map((bank) => (
+                      <button
+                        key={bank.name}
+                        onClick={() => handleSelectBank(bank)}
+                        className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
+                          selectedBank?.name === bank.name
+                            ? "bg-primary/10 border border-primary"
+                            : "hover:bg-muted/50"
+                        }`}
+                      >
+                        <Building2 className="h-5 w-5 text-primary flex-shrink-0" />
+                        <span className="font-medium text-foreground truncate">
+                          {bank.name}
+                        </span>
+                      </button>
+                    ))
+                  )}
+                </div>
+              </ScrollArea>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <Button variant="outline" onClick={handleClose} className="flex-1">
+                Annulla
+              </Button>
+              <Button
+                onClick={handleProceed}
+                disabled={!selectedBank || isLoading}
+                className="flex-1"
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : null}
+                Continua
+              </Button>
+            </div>
           </div>
         )}
 
@@ -150,10 +281,11 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
               </div>
             </div>
             <div className="text-center space-y-2">
-              <p className="text-foreground">
-                Clicca il pulsante qui sotto per selezionare la tua banca e autorizzare l'accesso.
-              </p>
+              <p className="text-foreground font-medium">{selectedBank?.name}</p>
               <p className="text-sm text-muted-foreground">
+                Clicca il pulsante qui sotto per autorizzare l'accesso ai tuoi conti.
+              </p>
+              <p className="text-xs text-muted-foreground">
                 Powered by Enable Banking - i tuoi dati sono criptati e al sicuro
               </p>
             </div>
@@ -163,15 +295,19 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
                 disabled={!authorizationUrl || isLoading}
                 className="w-full"
               >
-                <ExternalLink className="h-4 w-4 mr-2" />
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <ExternalLink className="h-4 w-4 mr-2" />
+                )}
                 Collega la tua banca
               </Button>
               <Button
                 variant="outline"
-                onClick={handleClose}
+                onClick={() => setStep("select_bank")}
                 className="w-full"
               >
-                Annulla
+                Indietro
               </Button>
             </div>
           </div>
