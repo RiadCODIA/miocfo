@@ -1,95 +1,81 @@
 
-# Landing Page per Finexa
+# Pagine Legali per Finexa
 
 ## Panoramica
-Creare una landing page moderna e professionale per Finexa, la piattaforma di gestione finanziaria per PMI. La pagina presenterà le funzionalita principali del SaaS senza includere il pricing.
+Creare le tre pagine legali richieste da Enable Banking per la registrazione Production e gia linkate nel footer della landing page.
 
-## Struttura della Landing Page
+## Pagine da Creare
 
-### 1. Header/Navbar
-- Logo Finexa a sinistra
-- Menu di navigazione (Funzionalita, Come Funziona, Contatti)
-- CTA "Accedi" e "Prova Gratis" a destra
-- Design sticky con effetto glass su scroll
+### 1. Privacy Policy (`/privacy`)
+Informativa sulla privacy conforme al GDPR con sezioni:
+- Titolare del trattamento
+- Tipologie di dati raccolti
+- Finalita del trattamento
+- Base giuridica
+- Condivisione con terze parti (Enable Banking, Supabase)
+- Diritti degli utenti
+- Conservazione dei dati
+- Contatti
 
-### 2. Hero Section
-- Titolo principale: "Gestione Finanziaria Intelligente per la Tua Azienda"
-- Sottotitolo che comunica il valore: sostituire Excel con una soluzione professionale
-- Due CTA: "Inizia Gratuitamente" e "Guarda Demo"
-- Immagine/mockup della dashboard o illustrazione astratta
-- Background con gradient decorativo (primary to accent)
-
-### 3. Sezione "Problema/Soluzione"
-- Breve descrizione del problema: gestione finanziaria frammentata in Excel
-- Come Finexa risolve il problema con una piattaforma unificata
-
-### 4. Funzionalita Principali (Feature Grid)
-6 card che mostrano le funzionalita chiave:
-- Dashboard con KPI in tempo reale
+### 2. Termini di Servizio (`/terms`)
+Condizioni generali di utilizzo con sezioni:
+- Accettazione dei termini
+- Descrizione del servizio
+- Registrazione e account
+- Obblighi dell'utente
 - Collegamento conti bancari (Enable Banking)
-- Gestione fatture con upload automatico
-- Flussi di cassa e previsioni
-- Analisi marginalita prodotti/servizi
-- Alert e notifiche automatiche
+- Limitazioni di responsabilita
+- Proprieta intellettuale
+- Modifiche ai termini
+- Legge applicabile
 
-### 5. Sezione "Come Funziona"
-3 step semplici:
-1. Registrati in pochi secondi
-2. Collega i tuoi conti bancari
-3. Monitora tutto da un'unica dashboard
-
-### 6. Sezione Testimonial/Social Proof
-- Placeholder per testimonial futuri
-- Statistiche chiave (numero aziende, transazioni gestite, etc.)
-
-### 7. CTA Finale
-- Box con gradient che invita all'azione
-- "Pronto a trasformare la gestione finanziaria della tua azienda?"
-- Pulsante principale per registrazione
-
-### 8. Footer
-- Logo e breve descrizione
-- Link utili (Privacy Policy, Terms, Contatti)
-- Social links placeholder
+### 3. Cookie Policy (`/cookies`)
+Informativa sui cookie con sezioni:
+- Cosa sono i cookie
+- Tipologie di cookie utilizzati (tecnici, analitici)
+- Cookie di terze parti
+- Gestione delle preferenze
+- Contatti
 
 ## Dettagli Tecnici
 
 ### File da Creare
-1. `src/pages/Landing.tsx` - Pagina principale della landing
-2. `src/components/landing/LandingHeader.tsx` - Header/Navbar
-3. `src/components/landing/HeroSection.tsx` - Sezione hero
-4. `src/components/landing/FeaturesSection.tsx` - Griglia funzionalita
-5. `src/components/landing/HowItWorks.tsx` - Sezione come funziona
-6. `src/components/landing/CTASection.tsx` - Call to action finale
-7. `src/components/landing/LandingFooter.tsx` - Footer
+```text
+src/pages/Privacy.tsx
+src/pages/Terms.tsx
+src/pages/Cookies.tsx
+src/components/legal/LegalPageLayout.tsx (componente riutilizzabile)
+```
 
 ### Modifiche ai File Esistenti
-- `src/App.tsx` - Aggiungere route `/landing` (o rendere la landing la home pubblica)
+- `src/App.tsx` - Aggiungere le route `/privacy`, `/terms`, `/cookies`
 
-### Stile e Design
-- Utilizzo del design system esistente (colori primary, accent, gradients)
-- Font Quicksand come definito nel progetto
-- Effetto glass per card e componenti
-- Animazioni fade-in e slide-in gia presenti nel progetto
-- Background decorativi con blur (come nella pagina Auth)
-- Responsive design per mobile, tablet e desktop
+### Design e Layout
+Ogni pagina legale avra:
+- Header con logo Finexa (riutilizza LandingHeader o versione semplificata)
+- Titolo principale della pagina
+- Data ultimo aggiornamento
+- Contenuto formattato con sezioni e sottosezioni
+- Footer (riutilizza LandingFooter)
+- Stile coerente con il design system (font Quicksand, colori primary/accent)
+- Layout responsive
 
-### Componenti UI Riutilizzati
-- Button (con varianti esistenti)
-- Card
-- Badge
-- Icone da lucide-react
+### Componente LegalPageLayout
+Un wrapper riutilizzabile che include:
+- LandingHeader (sticky)
+- Container centrato per il contenuto
+- Tipografia ottimizzata per la lettura (prose-like)
+- LandingFooter
 
-### Palette Colori
-- Primary: blu (#2563eb area)
-- Accent: viola (#9333ea area)
-- Success: verde per elementi positivi
-- Background bianco con sfumature grigie chiare
-- Gradient primary-to-accent per elementi hero e CTA
+### Stile Contenuto Legale
+- Titoli sezione: font-semibold, text-xl
+- Paragrafi: text-muted-foreground con buon line-height
+- Liste puntate per elenchi
+- Card opzionali per sezioni importanti
+- Scroll-to-top button (opzionale)
 
-## Note Implementative
-- La landing sara accessibile senza autenticazione
-- Link "Accedi" portera a `/auth`
-- Link "Prova Gratis" / "Inizia Gratuitamente" portera a `/auth` (tab registrazione)
-- Tutte le icone saranno da lucide-react (gia installato)
-- Nessuna dipendenza aggiuntiva richiesta
+## Note
+- Contenuti placeholder ma realistici e professionali
+- Menzione specifica di Enable Banking per la gestione dati bancari
+- Riferimenti al GDPR per conformita europea
+- Data di ultimo aggiornamento dinamica o placeholder "Gennaio 2026"
