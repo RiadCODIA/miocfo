@@ -9,6 +9,9 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Landing from "./pages/Landing";
+import Privacy from "./pages/Privacy";
+import Terms from "./pages/Terms";
+import Cookies from "./pages/Cookies";
 import Transazioni from "./pages/Transazioni";
 import ContiBancari from "./pages/ContiBancari";
 import Fatture from "./pages/Fatture";
@@ -60,6 +63,11 @@ const App = () => (
             
             {/* Auth route - no layout */}
             <Route path="/auth" element={<Auth />} />
+            
+            {/* Legal pages - public */}
+            <Route path="/privacy" element={<Privacy />} />
+            <Route path="/terms" element={<Terms />} />
+            <Route path="/cookies" element={<Cookies />} />
             
             {/* Protected routes with MainLayout */}
             <Route
