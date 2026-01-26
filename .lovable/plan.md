@@ -1,81 +1,67 @@
 
-# Pagine Legali per Finexa
+# Redesign Landing Page - Minimal e Moderno
 
 ## Panoramica
-Creare le tre pagine legali richieste da Enable Banking per la registrazione Production e gia linkate nel footer della landing page.
+Trasformare il design della landing page in uno stile minimal e moderno, rimuovendo tutti i riferimenti alla "prova gratuita" e semplificando l'aspetto visivo.
 
-## Pagine da Creare
+## Modifiche da Apportare
 
-### 1. Privacy Policy (`/privacy`)
-Informativa sulla privacy conforme al GDPR con sezioni:
-- Titolare del trattamento
-- Tipologie di dati raccolti
-- Finalita del trattamento
-- Base giuridica
-- Condivisione con terze parti (Enable Banking, Supabase)
-- Diritti degli utenti
-- Conservazione dei dati
-- Contatti
+### 1. LandingHeader
+- Rimuovere il pulsante "Prova Gratis"
+- Mantenere solo il pulsante "Accedi" con stile più elegante
+- Semplificare il design del header
 
-### 2. Termini di Servizio (`/terms`)
-Condizioni generali di utilizzo con sezioni:
-- Accettazione dei termini
-- Descrizione del servizio
-- Registrazione e account
-- Obblighi dell'utente
-- Collegamento conti bancari (Enable Banking)
-- Limitazioni di responsabilita
-- Proprieta intellettuale
-- Modifiche ai termini
-- Legge applicabile
+### 2. HeroSection
+- Cambiare "Inizia Gratuitamente" in "Inizia Ora"
+- Rimuovere il pulsante "Guarda Demo" (opzionale, semplifica)
+- Design piu pulito del mockup dashboard
+- Rimuovere l'elemento floating "Sync attiva" per un look piu pulito
+- Ridurre gli effetti blur di background per un aspetto piu minimal
 
-### 3. Cookie Policy (`/cookies`)
-Informativa sui cookie con sezioni:
-- Cosa sono i cookie
-- Tipologie di cookie utilizzati (tecnici, analitici)
-- Cookie di terze parti
-- Gestione delle preferenze
-- Contatti
+### 3. CTASection
+- Rimuovere il badge "Prova gratuita - Nessuna carta richiesta"
+- Cambiare "Inizia Ora Gratuitamente" in "Inizia Ora" o "Scopri Finexa"
+- Semplificare il design del box CTA
+
+### 4. HowItWorks
+- Rimuovere "Nessuna carta di credito richiesta" dalla descrizione del primo step
+- Testo piu conciso e diretto
+
+### 5. SocialProofSection (opzionale)
+- Mantenere le statistiche ma con design piu sobrio
+- Testimonial con stile piu pulito
+
+## Filosofia del Redesign
+- Piu spazio bianco (whitespace)
+- Meno gradienti appariscenti
+- Tipografia piu pulita e leggibile
+- Transizioni sottili invece di animazioni vistose
+- Focus sul contenuto, non sugli effetti
+
+## File da Modificare
+```text
+src/components/landing/LandingHeader.tsx
+src/components/landing/HeroSection.tsx
+src/components/landing/CTASection.tsx
+src/components/landing/HowItWorks.tsx
+```
 
 ## Dettagli Tecnici
 
-### File da Creare
-```text
-src/pages/Privacy.tsx
-src/pages/Terms.tsx
-src/pages/Cookies.tsx
-src/components/legal/LegalPageLayout.tsx (componente riutilizzabile)
-```
+### LandingHeader
+- Rimuovere Button "Prova Gratis" (linea 68-70)
+- Rimuovere Button mobile "Prova Gratis" (linea 112-114)
+- Stilizzare "Accedi" come CTA principale con bordo sottile
 
-### Modifiche ai File Esistenti
-- `src/App.tsx` - Aggiungere le route `/privacy`, `/terms`, `/cookies`
+### HeroSection
+- Cambiare testo CTA da "Inizia Gratuitamente" a "Inizia Ora"
+- Rimuovere o semplificare il secondo CTA "Guarda Demo"
+- Rimuovere l'elemento floating animato
+- Ridurre opacita/dimensioni dei blob di background
 
-### Design e Layout
-Ogni pagina legale avra:
-- Header con logo Finexa (riutilizza LandingHeader o versione semplificata)
-- Titolo principale della pagina
-- Data ultimo aggiornamento
-- Contenuto formattato con sezioni e sottosezioni
-- Footer (riutilizza LandingFooter)
-- Stile coerente con il design system (font Quicksand, colori primary/accent)
-- Layout responsive
+### CTASection
+- Rimuovere il div con Sparkles e "Prova gratuita"
+- Cambiare "Inizia Ora Gratuitamente" in "Inizia Ora"
 
-### Componente LegalPageLayout
-Un wrapper riutilizzabile che include:
-- LandingHeader (sticky)
-- Container centrato per il contenuto
-- Tipografia ottimizzata per la lettura (prose-like)
-- LandingFooter
-
-### Stile Contenuto Legale
-- Titoli sezione: font-semibold, text-xl
-- Paragrafi: text-muted-foreground con buon line-height
-- Liste puntate per elenchi
-- Card opzionali per sezioni importanti
-- Scroll-to-top button (opzionale)
-
-## Note
-- Contenuti placeholder ma realistici e professionali
-- Menzione specifica di Enable Banking per la gestione dati bancari
-- Riferimenti al GDPR per conformita europea
-- Data di ultimo aggiornamento dinamica o placeholder "Gennaio 2026"
+### HowItWorks
+- Step 1: Rimuovere "Nessuna carta di credito richiesta" dalla descrizione
