@@ -28,33 +28,33 @@ export function LandingHeader() {
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
         isScrolled
-          ? "glass shadow-lg py-3"
+          ? "bg-background/95 backdrop-blur-sm shadow-sm py-3"
           : "bg-transparent py-5"
       }`}
     >
       <div className="container mx-auto px-4 flex items-center justify-between">
         {/* Logo */}
         <Link to="/landing" className="flex items-center">
-          <img src={finexaLogo} alt="Finexa" className="h-8 md:h-10" />
+          <img src={finexaLogo} alt="Finexa" className="h-8 md:h-9" />
         </Link>
 
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-8">
           <button
             onClick={() => scrollToSection("funzionalita")}
-            className="text-foreground/80 hover:text-primary transition-colors font-medium"
+            className="text-muted-foreground hover:text-foreground transition-colors font-normal text-sm"
           >
             Funzionalità
           </button>
           <button
             onClick={() => scrollToSection("come-funziona")}
-            className="text-foreground/80 hover:text-primary transition-colors font-medium"
+            className="text-muted-foreground hover:text-foreground transition-colors font-normal text-sm"
           >
             Come Funziona
           </button>
           <button
             onClick={() => scrollToSection("contatti")}
-            className="text-foreground/80 hover:text-primary transition-colors font-medium"
+            className="text-muted-foreground hover:text-foreground transition-colors font-normal text-sm"
           >
             Contatti
           </button>
@@ -62,7 +62,7 @@ export function LandingHeader() {
 
         {/* Desktop CTA */}
         <div className="hidden md:flex items-center">
-          <Button asChild variant="outline" className="border-primary/20 hover:bg-primary hover:text-primary-foreground transition-all">
+          <Button asChild variant="ghost" className="text-sm font-normal border border-border hover:bg-muted">
             <Link to="/auth">Accedi</Link>
           </Button>
         </div>
@@ -73,37 +73,37 @@ export function LandingHeader() {
           onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         >
           {isMobileMenuOpen ? (
-            <X className="h-6 w-6 text-foreground" />
+            <X className="h-5 w-5 text-foreground" />
           ) : (
-            <Menu className="h-6 w-6 text-foreground" />
+            <Menu className="h-5 w-5 text-foreground" />
           )}
         </button>
       </div>
 
       {/* Mobile Menu */}
       {isMobileMenuOpen && (
-        <div className="md:hidden glass mt-2 mx-4 rounded-lg p-4 animate-fade-in">
-          <nav className="flex flex-col gap-4">
+        <div className="md:hidden bg-background border-t border-border mt-2 mx-4 rounded-lg p-4 shadow-sm">
+          <nav className="flex flex-col gap-3">
             <button
               onClick={() => scrollToSection("funzionalita")}
-              className="text-foreground/80 hover:text-primary transition-colors font-medium text-left"
+              className="text-muted-foreground hover:text-foreground transition-colors font-normal text-sm text-left py-2"
             >
               Funzionalità
             </button>
             <button
               onClick={() => scrollToSection("come-funziona")}
-              className="text-foreground/80 hover:text-primary transition-colors font-medium text-left"
+              className="text-muted-foreground hover:text-foreground transition-colors font-normal text-sm text-left py-2"
             >
               Come Funziona
             </button>
             <button
               onClick={() => scrollToSection("contatti")}
-              className="text-foreground/80 hover:text-primary transition-colors font-medium text-left"
+              className="text-muted-foreground hover:text-foreground transition-colors font-normal text-sm text-left py-2"
             >
               Contatti
             </button>
-            <div className="pt-4 border-t border-border">
-              <Button asChild className="w-full">
+            <div className="pt-3 border-t border-border">
+              <Button asChild variant="ghost" className="w-full text-sm font-normal border border-border">
                 <Link to="/auth">Accedi</Link>
               </Button>
             </div>

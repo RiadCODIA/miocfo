@@ -6,7 +6,6 @@ import {
   PieChart, 
   Bell 
 } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 
 const features = [
   {
@@ -43,38 +42,35 @@ const features = [
 
 export function FeaturesSection() {
   return (
-    <section id="funzionalita" className="py-20 scroll-mt-20">
+    <section id="funzionalita" className="py-24 scroll-mt-20">
       <div className="container mx-auto px-4">
-        <div className="text-center mb-16">
-          <h2 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
+        <div className="text-center mb-16 max-w-2xl mx-auto">
+          <h2 className="text-3xl md:text-4xl font-semibold text-foreground mb-4">
             Tutto ciò di cui hai bisogno per{" "}
-            <span className="text-gradient">gestire le finanze</span>
+            <span className="text-primary">gestire le finanze</span>
           </h2>
-          <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
+          <p className="text-base text-muted-foreground font-normal leading-relaxed">
             Finexa integra tutti gli strumenti necessari per la gestione finanziaria 
             della tua PMI in un'unica piattaforma intuitiva.
           </p>
         </div>
 
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {features.map((feature, index) => (
-            <Card 
+        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8">
+          {features.map((feature) => (
+            <div 
               key={feature.title} 
-              className="group glass hover:shadow-xl transition-all duration-300 hover:-translate-y-1 animate-fade-in"
-              style={{ animationDelay: `${index * 0.1}s` }}
+              className="bg-background border border-border/30 rounded-2xl p-6 shadow-sm hover:shadow-md transition-shadow duration-300"
             >
-              <CardContent className="p-6">
-                <div className="w-14 h-14 rounded-xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform">
-                  <feature.icon className="h-7 w-7 text-primary" />
-                </div>
-                <h3 className="text-xl font-semibold text-foreground mb-2">
-                  {feature.title}
-                </h3>
-                <p className="text-muted-foreground">
-                  {feature.description}
-                </p>
-              </CardContent>
-            </Card>
+              <div className="w-12 h-12 rounded-xl bg-muted flex items-center justify-center mb-4">
+                <feature.icon className="h-6 w-6 text-primary" />
+              </div>
+              <h3 className="text-lg font-medium text-foreground mb-2">
+                {feature.title}
+              </h3>
+              <p className="text-sm text-muted-foreground font-normal leading-relaxed">
+                {feature.description}
+              </p>
+            </div>
           ))}
         </div>
       </div>
