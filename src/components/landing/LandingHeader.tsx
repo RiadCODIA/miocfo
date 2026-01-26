@@ -60,13 +60,10 @@ export function LandingHeader() {
           </button>
         </nav>
 
-        {/* Desktop CTAs */}
-        <div className="hidden md:flex items-center gap-3">
-          <Button variant="ghost" asChild>
+        {/* Desktop CTA */}
+        <div className="hidden md:flex items-center">
+          <Button asChild variant="outline" className="border-primary/20 hover:bg-primary hover:text-primary-foreground transition-all">
             <Link to="/auth">Accedi</Link>
-          </Button>
-          <Button asChild className="bg-gradient-to-r from-primary to-accent hover:opacity-90">
-            <Link to="/auth">Prova Gratis</Link>
           </Button>
         </div>
 
@@ -105,12 +102,9 @@ export function LandingHeader() {
             >
               Contatti
             </button>
-            <div className="flex flex-col gap-2 pt-4 border-t border-border">
-              <Button variant="outline" asChild className="w-full">
+            <div className="pt-4 border-t border-border">
+              <Button asChild className="w-full">
                 <Link to="/auth">Accedi</Link>
-              </Button>
-              <Button asChild className="w-full bg-gradient-to-r from-primary to-accent">
-                <Link to="/auth">Prova Gratis</Link>
               </Button>
             </div>
           </nav>
