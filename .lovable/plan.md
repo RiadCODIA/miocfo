@@ -1,67 +1,76 @@
 
-# Redesign Landing Page - Minimal e Moderno
+# Redesign Sezione Problema/Soluzione
 
 ## Panoramica
-Trasformare il design della landing page in uno stile minimal e moderno, rimuovendo tutti i riferimenti alla "prova gratuita" e semplificando l'aspetto visivo.
+Ridisegnare la sezione "Problema/Soluzione" con un design più moderno, minimal e visivamente accattivante, seguendo lo stile dello screenshot ma migliorandolo ulteriormente.
 
-## Modifiche da Apportare
+## Miglioramenti Proposti
 
-### 1. LandingHeader
-- Rimuovere il pulsante "Prova Gratis"
-- Mantenere solo il pulsante "Accedi" con stile più elegante
-- Semplificare il design del header
+### Design Attuale vs Nuovo Design
 
-### 2. HeroSection
-- Cambiare "Inizia Gratuitamente" in "Inizia Ora"
-- Rimuovere il pulsante "Guarda Demo" (opzionale, semplifica)
-- Design piu pulito del mockup dashboard
-- Rimuovere l'elemento floating "Sync attiva" per un look piu pulito
-- Ridurre gli effetti blur di background per un aspetto piu minimal
+**Problemi del design attuale:**
+- Card troppo piccole e con poco padding
+- Background grigio della sezione poco elegante
+- Icone standard senza personalità
+- Bordi troppo sottili
 
-### 3. CTASection
-- Rimuovere il badge "Prova gratuita - Nessuna carta richiesta"
-- Cambiare "Inizia Ora Gratuitamente" in "Inizia Ora" o "Scopri Finexa"
-- Semplificare il design del box CTA
+**Nuovo design:**
+- Background bianco per la sezione (più pulito)
+- Card più grandi con padding generoso (p-10 o p-12)
+- Card con ombre morbide invece di bordi evidenti
+- Icone più grandi e stilizzate
+- Freccia centrale più prominente e moderna
+- Migliore spacing verticale tra elementi
 
-### 4. HowItWorks
-- Rimuovere "Nessuna carta di credito richiesta" dalla descrizione del primo step
-- Testo piu conciso e diretto
+### Specifiche Tecniche
 
-### 5. SocialProofSection (opzionale)
-- Mantenere le statistiche ma con design piu sobrio
-- Testimonial con stile piu pulito
+**Card Problema (sinistra):**
+- Background: rosa/rosso molto chiaro (`bg-red-50`)
+- Bordo: sottile rosa (`border border-red-100`)
+- Ombra morbida (`shadow-lg shadow-red-100/50`)
+- Icona: FileSpreadsheet più grande (h-20 w-20), colore rosso/corallo
+- Bordi arrotondati: `rounded-3xl`
 
-## Filosofia del Redesign
-- Piu spazio bianco (whitespace)
-- Meno gradienti appariscenti
-- Tipografia piu pulita e leggibile
-- Transizioni sottili invece di animazioni vistose
-- Focus sul contenuto, non sugli effetti
+**Freccia Centrale:**
+- Cerchio con gradient primary → accent
+- Dimensione: w-16 h-16
+- Ombra: glow effect sottile
+- Posizionamento centrale perfetto
+
+**Card Soluzione (destra):**
+- Background: verde molto chiaro (`bg-emerald-50` o `bg-green-50`)
+- Bordo: sottile verde (`border border-emerald-100`)
+- Ombra morbida (`shadow-lg shadow-emerald-100/50`)
+- Icona: LayoutDashboard o Grid più grande (h-20 w-20), colore verde
+- Bordi arrotondati: `rounded-3xl`
+
+### Layout
+- Grid 3 colonne: `grid md:grid-cols-[1fr_auto_1fr]`
+- Gap generoso: `gap-8 md:gap-12`
+- Sezione con `py-24` per più respiro
+- Container con max-width per centrare bene
+
+### Typography
+- Titoli: `text-2xl font-bold`
+- Descrizioni: `text-base leading-relaxed`
+- Colore titoli: foreground puro
+- Colore descrizioni: muted-foreground
+
+### Responsive Mobile
+- Stack verticale su mobile
+- Freccia ruotata verso il basso su mobile
+- Padding ridotto su schermi piccoli
 
 ## File da Modificare
 ```text
-src/components/landing/LandingHeader.tsx
-src/components/landing/HeroSection.tsx
-src/components/landing/CTASection.tsx
-src/components/landing/HowItWorks.tsx
+src/components/landing/ProblemSolutionSection.tsx
 ```
 
-## Dettagli Tecnici
+## Codice Proposto
 
-### LandingHeader
-- Rimuovere Button "Prova Gratis" (linea 68-70)
-- Rimuovere Button mobile "Prova Gratis" (linea 112-114)
-- Stilizzare "Accedi" come CTA principale con bordo sottile
-
-### HeroSection
-- Cambiare testo CTA da "Inizia Gratuitamente" a "Inizia Ora"
-- Rimuovere o semplificare il secondo CTA "Guarda Demo"
-- Rimuovere l'elemento floating animato
-- Ridurre opacita/dimensioni dei blob di background
-
-### CTASection
-- Rimuovere il div con Sparkles e "Prova gratuita"
-- Cambiare "Inizia Ora Gratuitamente" in "Inizia Ora"
-
-### HowItWorks
-- Step 1: Rimuovere "Nessuna carta di credito richiesta" dalla descrizione
+Il componente verrà riscritto con:
+- Layout migliorato con flexbox/grid ottimizzato
+- Card con stile glassmorphism leggero
+- Animazioni hover sottili (scale e shadow)
+- Icone più espressive
+- Background section pulito (bianco o quasi bianco)
