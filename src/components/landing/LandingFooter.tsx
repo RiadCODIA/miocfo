@@ -4,54 +4,54 @@ import finexaLogo from "@/assets/finexa-logo.png";
 
 export function LandingFooter() {
   return (
-    <footer id="contatti" className="bg-muted/50 pt-16 pb-8 scroll-mt-20">
+    <footer id="contatti" className="bg-background border-t border-border pt-12 pb-8 scroll-mt-20">
       <div className="container mx-auto px-4">
-        <div className="grid md:grid-cols-4 gap-8 mb-12">
+        <div className="grid md:grid-cols-4 gap-8 mb-10">
           {/* Brand */}
           <div className="md:col-span-2">
-            <img src={finexaLogo} alt="Finexa" className="h-8 mb-4" />
-            <p className="text-muted-foreground max-w-sm mb-4">
+            <img src={finexaLogo} alt="Finexa" className="h-7 mb-4" />
+            <p className="text-sm text-muted-foreground max-w-sm mb-4 leading-relaxed">
               La piattaforma di gestione finanziaria intelligente per le PMI. 
               Monitora, analizza e ottimizza le finanze della tua azienda in tempo reale.
             </p>
-            <div className="flex gap-4">
+            <div className="flex gap-3">
               <a 
                 href="#" 
-                className="w-10 h-10 rounded-full bg-muted flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors"
+                className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
               >
-                <Linkedin className="h-5 w-5" />
+                <Linkedin className="h-4 w-4 text-muted-foreground" />
               </a>
               <a 
                 href="#" 
-                className="w-10 h-10 rounded-full bg-muted flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors"
+                className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
               >
-                <Twitter className="h-5 w-5" />
+                <Twitter className="h-4 w-4 text-muted-foreground" />
               </a>
               <a 
                 href="mailto:info@finexa.it" 
-                className="w-10 h-10 rounded-full bg-muted flex items-center justify-center hover:bg-primary hover:text-primary-foreground transition-colors"
+                className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
               >
-                <Mail className="h-5 w-5" />
+                <Mail className="h-4 w-4 text-muted-foreground" />
               </a>
             </div>
           </div>
 
           {/* Links */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4">Prodotto</h4>
+            <h4 className="text-sm font-medium text-foreground mb-4">Prodotto</h4>
             <ul className="space-y-2">
               <li>
-                <a href="#funzionalita" className="text-muted-foreground hover:text-primary transition-colors">
+                <a href="#funzionalita" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Funzionalità
                 </a>
               </li>
               <li>
-                <a href="#come-funziona" className="text-muted-foreground hover:text-primary transition-colors">
+                <a href="#come-funziona" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Come Funziona
                 </a>
               </li>
               <li>
-                <Link to="/auth" className="text-muted-foreground hover:text-primary transition-colors">
+                <Link to="/auth" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Accedi
                 </Link>
               </li>
@@ -60,20 +60,20 @@ export function LandingFooter() {
 
           {/* Legal */}
           <div>
-            <h4 className="font-semibold text-foreground mb-4">Legale</h4>
+            <h4 className="text-sm font-medium text-foreground mb-4">Legale</h4>
             <ul className="space-y-2">
               <li>
-                <Link to="/privacy" className="text-muted-foreground hover:text-primary transition-colors">
+                <Link to="/privacy" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Privacy Policy
                 </Link>
               </li>
               <li>
-                <Link to="/terms" className="text-muted-foreground hover:text-primary transition-colors">
+                <Link to="/terms" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Termini di Servizio
                 </Link>
               </li>
               <li>
-                <Link to="/cookies" className="text-muted-foreground hover:text-primary transition-colors">
+                <Link to="/cookies" className="text-sm text-muted-foreground hover:text-foreground transition-colors">
                   Cookie Policy
                 </Link>
               </li>
@@ -82,8 +82,8 @@ export function LandingFooter() {
         </div>
 
         {/* Bottom */}
-        <div className="pt-8 border-t border-border text-center">
-          <p className="text-sm text-muted-foreground">
+        <div className="pt-6 border-t border-border text-center">
+          <p className="text-xs text-muted-foreground">
             © {new Date().getFullYear()} Finexa. Tutti i diritti riservati.
           </p>
         </div>
