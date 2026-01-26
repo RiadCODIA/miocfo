@@ -8,6 +8,7 @@ import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { MainLayout } from "@/components/layout/MainLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
+import Landing from "./pages/Landing";
 import Transazioni from "./pages/Transazioni";
 import ContiBancari from "./pages/ContiBancari";
 import Fatture from "./pages/Fatture";
@@ -54,6 +55,9 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
+            {/* Landing page - public */}
+            <Route path="/landing" element={<Landing />} />
+            
             {/* Auth route - no layout */}
             <Route path="/auth" element={<Auth />} />
             
