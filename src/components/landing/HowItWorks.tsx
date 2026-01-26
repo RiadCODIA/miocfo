@@ -5,7 +5,7 @@ const steps = [
     icon: UserPlus,
     step: "01",
     title: "Registrati in pochi secondi",
-    description: "Crea il tuo account gratuitamente e accedi subito alla piattaforma. Nessuna carta di credito richiesta.",
+    description: "Crea il tuo account e accedi subito alla piattaforma.",
   },
   {
     icon: Link2,

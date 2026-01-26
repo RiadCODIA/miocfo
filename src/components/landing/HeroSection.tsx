@@ -1,15 +1,14 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Play, BarChart3, TrendingUp, Wallet } from "lucide-react";
+import { ArrowRight, BarChart3, TrendingUp, Wallet } from "lucide-react";
 
 export function HeroSection() {
   return (
     <section className="relative min-h-screen flex items-center pt-20 overflow-hidden">
-      {/* Background decorations */}
+      {/* Background decorations - minimal */}
       <div className="absolute inset-0 -z-10">
-        <div className="absolute top-20 left-10 w-72 h-72 bg-primary/20 rounded-full blur-3xl" />
-        <div className="absolute bottom-20 right-10 w-96 h-96 bg-accent/20 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-br from-primary/10 to-accent/10 rounded-full blur-3xl" />
+        <div className="absolute top-20 left-10 w-48 h-48 bg-primary/10 rounded-full blur-3xl" />
+        <div className="absolute bottom-20 right-10 w-64 h-64 bg-accent/10 rounded-full blur-3xl" />
       </div>
 
       <div className="container mx-auto px-4 py-16 md:py-24">
@@ -26,24 +25,16 @@ export function HeroSection() {
               professionale per monitorare, analizzare e ottimizzare le finanze 
               della tua PMI in tempo reale.
             </p>
-            <div className="flex flex-col sm:flex-row gap-4 justify-center lg:justify-start">
+            <div className="flex justify-center lg:justify-start">
               <Button
                 size="lg"
                 asChild
-                className="bg-gradient-to-r from-primary to-accent hover:opacity-90 text-lg px-8"
-              >
-                <Link to="/auth">
-                  Inizia Gratuitamente
-                  <ArrowRight className="ml-2 h-5 w-5" />
-                </Link>
-              </Button>
-              <Button
-                size="lg"
-                variant="outline"
                 className="text-lg px-8"
               >
-                <Play className="mr-2 h-5 w-5" />
-                Guarda Demo
+                <Link to="/auth">
+                  Inizia Ora
+                  <ArrowRight className="ml-2 h-5 w-5" />
+                </Link>
               </Button>
             </div>
           </div>
@@ -97,13 +88,6 @@ export function HeroSection() {
               </div>
             </div>
 
-            {/* Floating elements */}
-            <div className="absolute -top-4 -right-4 glass rounded-lg p-3 shadow-lg animate-pulse-glow">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-success" />
-                <span className="text-sm font-medium">Sync attiva</span>
-              </div>
-            </div>
           </div>
         </div>
       </div>
