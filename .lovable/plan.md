@@ -1,54 +1,51 @@
 
+## Piano: Ristrutturare il layout del modal ConnectBankModal
 
-# Fix Enable Banking Integration - Wrong Signature Error
+### Problema
+Il selettore del paese, il campo di ricerca e la lista delle banche sono visualmente al di fuori di un contenitore coesivo. La struttura attuale ha questi elementi "liberi" nel modal senza un bordo o sfondo che li raggruppi come un form.
 
-## Problem Identified
+### Soluzione
+Avvolgere l'area di input (paese, ricerca banca, lista banche) in un contenitore con bordo e sfondo che le raggruppi visivamente come un "form", mantenendo i pulsanti di azione (Annulla/Continua) fuori da questo contenitore.
 
-The Enable Banking API is returning a `401 - Wrong signature` error when trying to fetch the list of banks (ASPSPs). After reviewing the edge function code and the official Enable Banking documentation, I found the root cause.
+### Modifiche Tecniche
 
-## Root Cause
+**File: `src/components/conti-bancari/ConnectBankModal.tsx`**
 
-The JWT (JSON Web Token) used for authentication has an **incorrect `iss` (issuer) claim**:
+Ristrutturare il blocco `step === "select_bank"` (righe 199-283):
 
-| Field | Current Value | Required Value |
-|-------|---------------|----------------|
-| `iss` | `"enablebanking"` | `"enablebanking.com"` |
+```
+Struttura attuale:
+<div className="flex flex-col h-[450px]">
+  <div className="space-y-4 py-4 flex-1 flex flex-col min-h-0">
+    - Paese (Select)
+    - Cerca banca (Input)
+    - ScrollArea con lista banche
+  </div>
+  <div className="flex gap-3 pt-4 flex-shrink-0 border-t">
+    - Pulsanti Annulla/Continua
+  </div>
+</div>
 
-According to Enable Banking's documentation, the JWT body must contain:
-- `"iss": "enablebanking.com"` (always the same)
-- `"aud": "api.enablebanking.com"` (this is correct in current code)
-
-## Solution
-
-Update the `createJWT` function in the edge function to use the correct issuer value.
-
-## File to Modify
-
-```text
-supabase/functions/enable-banking/index.ts
+Nuova struttura:
+<div className="flex flex-col h-[450px]">
+  <div className="flex-1 flex flex-col min-h-0 border rounded-lg p-4 bg-muted/30">
+    - Paese (Select)
+    - Cerca banca (Input)  
+    - ScrollArea con lista banche (senza bordo proprio)
+  </div>
+  <div className="flex gap-3 pt-4 flex-shrink-0">
+    - Pulsanti Annulla/Continua
+  </div>
+</div>
 ```
 
-## Technical Change
+Modifiche specifiche:
+1. Aggiungere `border rounded-lg p-4 bg-muted/30` al contenitore degli input
+2. Rimuovere `py-4` dal contenitore interno (ora gestito dal padding del form)
+3. Rimuovere `rounded-md border` dalla ScrollArea (il bordo è ora sul form esterno)
+4. Rimuovere `border-t` dalla riga dei pulsanti (non più necessario)
 
-**Line 44 - Change from:**
-```javascript
-iss: "enablebanking",
-```
-
-**To:**
-```javascript
-iss: "enablebanking.com",
-```
-
-## Additional Notes
-
-1. The secrets `ENABLE_BANKING_APP_ID` and `ENABLE_BANKING_PRIVATE_KEY` are already configured correctly
-2. The rest of the JWT structure (header with `kid`, payload with `aud`, `iat`, `exp`) follows the correct format
-3. Once this fix is deployed, the API should successfully authenticate and return the list of Italian banks
-
-## Expected Result
-
-After this fix:
-- Selecting "Italia" as the country will fetch and display available Italian banks
-- Users will be able to proceed with bank connection via Enable Banking OAuth flow
-
+### Risultato Visivo
+- Paese, ricerca e lista banche saranno raggruppati in un riquadro con bordo e sfondo leggero
+- I pulsanti di azione rimarranno fuori dal form, ancorati in basso
+- Layout più pulito e coerente con il design di un form
