@@ -197,70 +197,74 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
         {/* Bank Selection */}
         {step === "select_bank" && (
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Paese</Label>
-              <Select value={selectedCountry} onValueChange={setSelectedCountry}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Seleziona un paese" />
-                </SelectTrigger>
-                <SelectContent>
-                  {COUNTRIES.map((country) => (
-                    <SelectItem key={country.code} value={country.code}>
-                      {country.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Cerca banca</Label>
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Cerca per nome..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-9"
-                />
+          <div className="flex flex-col h-[450px]">
+            <div className="space-y-4 py-4 flex-1 flex flex-col min-h-0">
+              <div className="space-y-2 flex-shrink-0">
+                <Label>Paese</Label>
+                <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Seleziona un paese" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {COUNTRIES.map((country) => (
+                      <SelectItem key={country.code} value={country.code}>
+                        {country.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-            </div>
 
-            {isLoadingBanks ? (
-              <div className="flex items-center justify-center py-8">
-                <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              </div>
-            ) : (
-              <ScrollArea className="h-[250px] rounded-md border">
-                <div className="p-2 space-y-1">
-                  {filteredBanks.length === 0 ? (
-                    <p className="text-center text-muted-foreground py-4">
-                      Nessuna banca trovata
-                    </p>
-                  ) : (
-                    filteredBanks.map((bank) => (
-                      <button
-                        key={bank.name}
-                        onClick={() => handleSelectBank(bank)}
-                        className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
-                          selectedBank?.name === bank.name
-                            ? "bg-primary/10 border border-primary"
-                            : "hover:bg-muted/50"
-                        }`}
-                      >
-                        <Building2 className="h-5 w-5 text-primary flex-shrink-0" />
-                        <span className="font-medium text-foreground truncate">
-                          {bank.name}
-                        </span>
-                      </button>
-                    ))
-                  )}
+              <div className="space-y-2 flex-shrink-0">
+                <Label>Cerca banca</Label>
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Cerca per nome..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-9"
+                  />
                 </div>
-              </ScrollArea>
-            )}
+              </div>
 
-            <div className="flex gap-3 pt-2">
+              <div className="flex-1 min-h-0">
+                {isLoadingBanks ? (
+                  <div className="flex items-center justify-center py-8 h-full">
+                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                  </div>
+                ) : (
+                  <ScrollArea className="h-full rounded-md border">
+                    <div className="p-2 space-y-1">
+                      {filteredBanks.length === 0 ? (
+                        <p className="text-center text-muted-foreground py-4">
+                          Nessuna banca trovata
+                        </p>
+                      ) : (
+                        filteredBanks.map((bank) => (
+                          <button
+                            key={bank.name}
+                            onClick={() => handleSelectBank(bank)}
+                            className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
+                              selectedBank?.name === bank.name
+                                ? "bg-primary/10 border border-primary"
+                                : "hover:bg-muted/50"
+                            }`}
+                          >
+                            <Building2 className="h-5 w-5 text-primary flex-shrink-0" />
+                            <span className="font-medium text-foreground truncate">
+                              {bank.name}
+                            </span>
+                          </button>
+                        ))
+                      )}
+                    </div>
+                  </ScrollArea>
+                )}
+              </div>
+            </div>
+
+            <div className="flex gap-3 pt-4 flex-shrink-0 border-t">
               <Button variant="outline" onClick={handleClose} className="flex-1">
                 Annulla
               </Button>
