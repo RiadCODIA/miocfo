@@ -228,13 +228,13 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
                 </div>
               </div>
 
-              <div className="flex-1 min-h-0">
+              <div className="flex-1 min-h-0 overflow-hidden">
                 {isLoadingBanks ? (
                   <div className="flex items-center justify-center py-8 h-full">
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                   </div>
                 ) : (
-                  <ScrollArea className="h-full">
+                  <ScrollArea className="h-full rounded-md">
                     <div className="space-y-1">
                       {filteredBanks.length === 0 ? (
                         <p className="text-center text-muted-foreground py-4">
