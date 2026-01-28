@@ -198,7 +198,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
         {/* Bank Selection */}
         {step === "select_bank" && (
           <div className="flex flex-col h-[450px]">
-            <div className="space-y-4 py-4 flex-1 flex flex-col min-h-0">
+            <div className="flex-1 flex flex-col min-h-0 space-y-4 border rounded-lg p-4 bg-muted/30">
               <div className="space-y-2 flex-shrink-0">
                 <Label>Paese</Label>
                 <Select value={selectedCountry} onValueChange={setSelectedCountry}>
@@ -234,8 +234,8 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
                     <Loader2 className="h-6 w-6 animate-spin text-primary" />
                   </div>
                 ) : (
-                  <ScrollArea className="h-full rounded-md border">
-                    <div className="p-2 space-y-1">
+                  <ScrollArea className="h-full">
+                    <div className="space-y-1">
                       {filteredBanks.length === 0 ? (
                         <p className="text-center text-muted-foreground py-4">
                           Nessuna banca trovata
@@ -264,7 +264,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
               </div>
             </div>
 
-            <div className="flex gap-3 pt-4 flex-shrink-0 border-t">
+            <div className="flex gap-3 pt-4 flex-shrink-0">
               <Button variant="outline" onClick={handleClose} className="flex-1">
                 Annulla
               </Button>
