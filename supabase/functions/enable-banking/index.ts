@@ -54,7 +54,16 @@ async function createJWT(): Promise<string> {
   const unsignedToken = `${encodedHeader}.${encodedPayload}`;
   
   // Import the private key and sign
-  const privateKeyPem = ENABLE_BANKING_PRIVATE_KEY.replace(/\\n/g, "\n");
+  // Handle newlines that are stored as literal \\n or actual \n
+  const privateKeyPem = ENABLE_BANKING_PRIVATE_KEY
+    .replace(/\\n/g, "\n")
+    .replace(/\\r/g, "")
+    .trim();
+  
+  // Debug: log first 50 chars to see how the key looks
+  console.log("[Enable Banking] Private key prefix (first 50 chars):", privateKeyPem.substring(0, 50));
+  console.log("[Enable Banking] Key contains BEGIN PRIVATE KEY:", privateKeyPem.includes("BEGIN PRIVATE KEY"));
+  console.log("[Enable Banking] Key contains BEGIN RSA PRIVATE KEY:", privateKeyPem.includes("BEGIN RSA PRIVATE KEY"));
   
   // Parse PEM to get the key data
   const pemHeader = "-----BEGIN PRIVATE KEY-----";
