@@ -11,8 +11,8 @@ const ENABLE_BANKING_PRIVATE_KEY = Deno.env.get("ENABLE_BANKING_PRIVATE_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-// Enable Banking TPP API (v1) base URL
-const ENABLE_BANKING_API_URL = "https://api.enablebanking.com/api/v1";
+// Enable Banking API base URL
+const ENABLE_BANKING_API_URL = "https://api.enablebanking.com";
 
 interface EnableBankingRequest {
   action: string;
@@ -35,6 +35,8 @@ function base64UrlEncode(data: Uint8Array): string {
 async function createJWT(): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   
+  console.log("[Enable Banking] App ID (kid):", ENABLE_BANKING_APP_ID);
+  
   const header = {
     alg: "RS256",
     typ: "JWT",
@@ -48,6 +50,9 @@ async function createJWT(): Promise<string> {
     iat: now,
     exp: now + 3600, // 1 hour expiry
   };
+  
+  console.log("[Enable Banking] JWT header:", JSON.stringify(header));
+  console.log("[Enable Banking] JWT payload:", JSON.stringify(payload));
   
   const encodedHeader = base64UrlEncode(new TextEncoder().encode(JSON.stringify(header)));
   const encodedPayload = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)));
