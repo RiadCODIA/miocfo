@@ -11,7 +11,8 @@ const ENABLE_BANKING_PRIVATE_KEY = Deno.env.get("ENABLE_BANKING_PRIVATE_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-const ENABLE_BANKING_API_URL = "https://api.enablebanking.com";
+// Enable Banking TPP API (v1) base URL
+const ENABLE_BANKING_API_URL = "https://api.enablebanking.com/api/v1";
 
 interface EnableBankingRequest {
   action: string;
@@ -42,7 +43,8 @@ async function createJWT(): Promise<string> {
   
   const payload = {
     iss: "enablebanking.com",
-    aud: "api.enablebanking.com",
+    // Per doc ufficiale Enable Banking (ex Tilisy), l'audience atteso è ancora api.tilisy.com
+    aud: "api.tilisy.com",
     iat: now,
     exp: now + 3600, // 1 hour expiry
   };
@@ -492,7 +494,8 @@ async function removeConnection(accountId: string): Promise<{ success: boolean; 
 
 // Get available ASPSPs (banks) for a country
 async function getASPSPs(country: string): Promise<{ aspsps: unknown[] }> {
-  const response = await enableBankingRequest(`/aspsps?country=${country}`) as {
+  // Per doc: country + service sono richiesti
+  const response = await enableBankingRequest(`/aspsps?country=${country}&service=AIS`) as {
     aspsps: unknown[];
   };
   
