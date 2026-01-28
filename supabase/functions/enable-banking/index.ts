@@ -17,13 +17,13 @@ const ENABLE_BANKING_API_URL = "https://api.enablebanking.com";
 interface EnableBankingRequest {
   action: string;
   redirect_uri?: string;
-  code?: string; // Authorization code from callback
+  code?: string;
   account_id?: string;
   start_date?: string;
   end_date?: string;
   aspsp_country?: string;
   aspsp_name?: string;
-  user_id?: string; // User ID from the authenticated client
+  user_id?: string;
 }
 
 // Base64URL encode function
@@ -41,15 +41,14 @@ async function createJWT(): Promise<string> {
   const header = {
     alg: "RS256",
     typ: "JWT",
-    kid: ENABLE_BANKING_APP_ID, // Application ID as Key ID
+    kid: ENABLE_BANKING_APP_ID,
   };
   
   const payload = {
     iss: "enablebanking.com",
-    // Per doc ufficiale Enable Banking (ex Tilisy), l'audience atteso è ancora api.tilisy.com
     aud: "api.tilisy.com",
     iat: now,
-    exp: now + 3600, // 1 hour expiry
+    exp: now + 3600,
   };
   
   console.log("[Enable Banking] JWT header:", JSON.stringify(header));
@@ -59,19 +58,15 @@ async function createJWT(): Promise<string> {
   const encodedPayload = base64UrlEncode(new TextEncoder().encode(JSON.stringify(payload)));
   const unsignedToken = `${encodedHeader}.${encodedPayload}`;
   
-  // Import the private key and sign
-  // Handle newlines that are stored as literal \\n or actual \n
   const privateKeyPem = ENABLE_BANKING_PRIVATE_KEY
     .replace(/\\n/g, "\n")
     .replace(/\\r/g, "")
     .trim();
   
-  // Debug: log first 50 chars to see how the key looks
   console.log("[Enable Banking] Private key prefix (first 50 chars):", privateKeyPem.substring(0, 50));
   console.log("[Enable Banking] Key contains BEGIN PRIVATE KEY:", privateKeyPem.includes("BEGIN PRIVATE KEY"));
   console.log("[Enable Banking] Key contains BEGIN RSA PRIVATE KEY:", privateKeyPem.includes("BEGIN RSA PRIVATE KEY"));
   
-  // Parse PEM to get the key data
   const pemHeader = "-----BEGIN PRIVATE KEY-----";
   const pemFooter = "-----END PRIVATE KEY-----";
   let keyData = privateKeyPem;
@@ -79,16 +74,13 @@ async function createJWT(): Promise<string> {
   if (keyData.includes(pemHeader)) {
     keyData = keyData.replace(pemHeader, "").replace(pemFooter, "").replace(/\s/g, "");
   } else {
-    // Try RSA format
     const rsaPemHeader = "-----BEGIN RSA PRIVATE KEY-----";
     const rsaPemFooter = "-----END RSA PRIVATE KEY-----";
     keyData = keyData.replace(rsaPemHeader, "").replace(rsaPemFooter, "").replace(/\s/g, "");
   }
   
-  // Decode base64 key
   const binaryKey = Uint8Array.from(atob(keyData), c => c.charCodeAt(0));
   
-  // Import key for signing
   const cryptoKey = await crypto.subtle.importKey(
     "pkcs8",
     binaryKey,
@@ -100,7 +92,6 @@ async function createJWT(): Promise<string> {
     ["sign"]
   );
   
-  // Sign the token
   const signature = await crypto.subtle.sign(
     "RSASSA-PKCS1-v1_5",
     cryptoKey,
@@ -153,8 +144,6 @@ async function createSession(
   aspspCountry: string,
   aspspName: string
 ): Promise<{ session_id: string; authorization_url: string }> {
-  // For Enable Banking, we use /auth endpoint to start the authorization flow
-  // valid_until needs full ISO datetime with timezone
   const validUntil = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
   
   const authData = {
@@ -172,18 +161,29 @@ async function createSession(
   
   console.log("[Enable Banking] Creating auth request with data:", JSON.stringify(authData));
   
-  // Use /auth endpoint to get the authorization URL
   const response = await enableBankingRequest("/auth", "POST", authData) as {
     url: string;
   };
   
   console.log("[Enable Banking] Auth response received, URL:", response.url?.substring(0, 50) + "...");
   
-  // Return the state as session_id (it will be returned in the callback)
   return {
     session_id: authData.state as string,
     authorization_url: response.url,
   };
+}
+
+// Account type from Enable Banking API
+interface EnableBankingAccount {
+  uid: string;
+  iban?: string;
+  account_id?: {
+    iban?: string;
+  };
+  name?: string;
+  currency?: string;
+  product?: string;
+  cash_account_type?: string;
 }
 
 // Complete the authorization after user returns with code
@@ -191,9 +191,15 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
   console.log(`[Enable Banking] Completing session with code: ${code.substring(0, 20)}...`);
   console.log(`[Enable Banking] User ID: ${userId || "not provided"}`);
   
+  if (!userId) {
+    throw new Error("user_id is required to save accounts");
+  }
+  
   // Exchange the authorization code for a session
+  // The POST /sessions endpoint returns session_id AND accounts directly
   const session = await enableBankingRequest("/sessions", "POST", { code }) as {
     session_id: string;
+    accounts?: EnableBankingAccount[];
     access?: {
       valid_until: string;
     };
@@ -204,116 +210,137 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
   };
   
   console.log("[Enable Banking] Session created:", session.session_id);
+  console.log("[Enable Banking] Accounts in response:", session.accounts?.length || 0);
   
-  // Fetch accounts for this session
-  const accountsResponse = await enableBankingRequest(`/sessions/${session.session_id}/accounts`) as {
-    accounts: Array<{
-      uid: string;
-      iban?: string;
-      account_id?: {
-        iban?: string;
+  // Get accounts from the session response directly
+  let accounts: EnableBankingAccount[] = session.accounts || [];
+  
+  // Fallback: if accounts are not in the initial response, fetch session details
+  if (accounts.length === 0) {
+    console.log("[Enable Banking] No accounts in session response, fetching session details...");
+    
+    try {
+      const sessionDetails = await enableBankingRequest(`/sessions/${session.session_id}`) as {
+        accounts?: string[];
+        aspsp?: {
+          name: string;
+          country: string;
+        };
       };
-      name?: string;
-      currency?: string;
-      product?: string;
-      cash_account_type?: string;
-    }>;
-  };
+      
+      console.log("[Enable Banking] Session details accounts:", sessionDetails.accounts?.length || 0);
+      
+      // If we have account IDs, fetch details for each
+      if (sessionDetails.accounts && sessionDetails.accounts.length > 0) {
+        for (const accountId of sessionDetails.accounts) {
+          try {
+            const accountDetails = await enableBankingRequest(`/accounts/${accountId}/details`) as EnableBankingAccount;
+            if (accountDetails) {
+              accounts.push({
+                ...accountDetails,
+                uid: accountDetails.uid || accountId,
+              });
+            }
+          } catch (e) {
+            console.log(`[Enable Banking] Could not fetch details for account ${accountId}:`, e);
+            // Still add basic account info
+            accounts.push({ uid: accountId });
+          }
+        }
+      }
+    } catch (e) {
+      console.error("[Enable Banking] Error fetching session details:", e);
+    }
+  }
   
-  console.log(`[Enable Banking] Found ${accountsResponse.accounts?.length || 0} accounts`);
+  console.log(`[Enable Banking] Processing ${accounts.length} accounts`);
   
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const savedAccounts: unknown[] = [];
   
-  if (accountsResponse.accounts) {
-    for (const account of accountsResponse.accounts) {
-      // Get account balances
-      let currentBalance = 0;
-      let availableBalance = 0;
-      
-      try {
-        const balances = await enableBankingRequest(`/accounts/${account.uid}/balances`) as {
-          balances: Array<{
-            balance_amount: {
-              amount: number;
-              currency: string;
-            };
-            balance_type: string;
-          }>;
-        };
-        
-        if (balances.balances) {
-          for (const balance of balances.balances) {
-            if (balance.balance_type === "closingBooked" || balance.balance_type === "interimBooked") {
-              currentBalance = balance.balance_amount.amount;
-            }
-            if (balance.balance_type === "interimAvailable" || balance.balance_type === "expected") {
-              availableBalance = balance.balance_amount.amount;
-            }
-          }
-        }
-      } catch (e) {
-        console.log("[Enable Banking] Could not fetch balances:", e);
-      }
-      
-      const iban = account.iban || account.account_id?.iban || null;
-      
-      const accountData = {
-        user_id: userId || null, // Associate with the authenticated user
-        plaid_account_id: account.uid,
-        plaid_item_id: session.session_id,
-        bank_name: session.aspsp?.name || "Bank",
-        account_name: account.name || account.product || "Conto Corrente",
-        account_type: account.cash_account_type || "checking",
-        iban: iban,
-        currency: account.currency || "EUR",
-        current_balance: currentBalance,
-        available_balance: availableBalance || currentBalance,
-        status: "active",
-        source: "enable_banking",
-        last_sync_at: new Date().toISOString(),
+  for (const account of accounts) {
+    // Get account balances
+    let currentBalance = 0;
+    let availableBalance = 0;
+    
+    try {
+      const balances = await enableBankingRequest(`/accounts/${account.uid}/balances`) as {
+        balances: Array<{
+          balance_amount: {
+            amount: number;
+            currency: string;
+          };
+          balance_type: string;
+        }>;
       };
       
-      // Check if account already exists for this user
-      let existingAccountQuery = supabase
-        .from("bank_accounts")
-        .select("id")
-        .eq("plaid_account_id", account.uid);
-      
-      if (userId) {
-        existingAccountQuery = existingAccountQuery.eq("user_id", userId);
+      if (balances.balances) {
+        for (const balance of balances.balances) {
+          if (balance.balance_type === "closingBooked" || balance.balance_type === "interimBooked") {
+            currentBalance = balance.balance_amount.amount;
+          }
+          if (balance.balance_type === "interimAvailable" || balance.balance_type === "expected") {
+            availableBalance = balance.balance_amount.amount;
+          }
+        }
       }
+    } catch (e) {
+      console.log("[Enable Banking] Could not fetch balances:", e);
+    }
+    
+    const iban = account.iban || account.account_id?.iban || null;
+    
+    const accountData = {
+      user_id: userId,
+      plaid_account_id: account.uid,
+      plaid_item_id: session.session_id,
+      bank_name: session.aspsp?.name || "Bank",
+      account_name: account.name || account.product || "Conto Corrente",
+      account_type: account.cash_account_type || "checking",
+      iban: iban,
+      currency: account.currency || "EUR",
+      current_balance: currentBalance,
+      available_balance: availableBalance || currentBalance,
+      status: "active",
+      source: "enable_banking",
+      last_sync_at: new Date().toISOString(),
+    };
+    
+    // Check if account already exists for this user
+    const { data: existingAccount } = await supabase
+      .from("bank_accounts")
+      .select("id")
+      .eq("plaid_account_id", account.uid)
+      .eq("user_id", userId)
+      .single();
+    
+    if (existingAccount) {
+      const { data: updatedAccount, error } = await supabase
+        .from("bank_accounts")
+        .update({
+          ...accountData,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", existingAccount.id)
+        .select()
+        .single();
       
-      const { data: existingAccount } = await existingAccountQuery.single();
-      
-      if (existingAccount) {
-        const { data: updatedAccount, error } = await supabase
-          .from("bank_accounts")
-          .update({
-            ...accountData,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingAccount.id)
-          .select()
-          .single();
-        
-        if (error) {
-          console.error("[Enable Banking] Error updating account:", error);
-        } else {
-          savedAccounts.push(updatedAccount);
-        }
+      if (error) {
+        console.error("[Enable Banking] Error updating account:", error);
       } else {
-        const { data: newAccount, error } = await supabase
-          .from("bank_accounts")
-          .insert(accountData)
-          .select()
-          .single();
-        
-        if (error) {
-          console.error("[Enable Banking] Error inserting account:", error);
-        } else {
-          savedAccounts.push(newAccount);
-        }
+        savedAccounts.push(updatedAccount);
+      }
+    } else {
+      const { data: newAccount, error } = await supabase
+        .from("bank_accounts")
+        .insert(accountData)
+        .select()
+        .single();
+      
+      if (error) {
+        console.error("[Enable Banking] Error inserting account:", error);
+      } else {
+        savedAccounts.push(newAccount);
       }
     }
   }
@@ -323,14 +350,21 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
   return { accounts: savedAccounts };
 }
 
-// Get accounts from database
-async function getAccounts(): Promise<{ accounts: unknown[] }> {
+// Get accounts from database (filtered by user_id)
+async function getAccounts(userId?: string | null): Promise<{ accounts: unknown[] }> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   
-  const { data: accounts, error } = await supabase
+  let query = supabase
     .from("bank_accounts")
     .select("*")
     .order("created_at", { ascending: false });
+  
+  // Filter by user if provided
+  if (userId) {
+    query = query.eq("user_id", userId);
+  }
+  
+  const { data: accounts, error } = await query;
   
   if (error) {
     console.error("[Enable Banking] Error fetching accounts:", error);
@@ -340,9 +374,34 @@ async function getAccounts(): Promise<{ accounts: unknown[] }> {
   return { accounts: accounts || [] };
 }
 
+// Verify account belongs to user
+// deno-lint-ignore no-explicit-any
+async function verifyAccountOwnership(supabase: any, accountId: string, userId: string): Promise<boolean> {
+  const { data: account, error } = await supabase
+    .from("bank_accounts")
+    .select("id")
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .single();
+  
+  if (error || !account) {
+    console.error(`[Enable Banking] Account ${accountId} does not belong to user ${userId}`);
+    return false;
+  }
+  return true;
+}
+
 // Sync account data (balance and transactions)
-async function syncAccount(accountId: string): Promise<{ account: unknown; transactions_synced: number }> {
+async function syncAccount(accountId: string, userId?: string | null): Promise<{ account: unknown; transactions_synced: number }> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  
+  // Verify ownership if userId provided
+  if (userId) {
+    const isOwner = await verifyAccountOwnership(supabase, accountId, userId);
+    if (!isOwner) {
+      throw new Error("Account not found or access denied");
+    }
+  }
   
   // Get account from database
   const { data: account, error: accountError } = await supabase
@@ -355,8 +414,6 @@ async function syncAccount(accountId: string): Promise<{ account: unknown; trans
     throw new Error("Account not found");
   }
   
-  // For Enable Banking, we need to get fresh data from the API
-  // The plaid_account_id is the Enable Banking account UID
   const accountUid = account.plaid_account_id;
   
   try {
@@ -420,7 +477,6 @@ async function syncAccount(accountId: string): Promise<{ account: unknown; trans
           pending: false,
         };
         
-        // Upsert transaction
         const { error } = await supabase
           .from("bank_transactions")
           .upsert(transactionData, { 
@@ -454,7 +510,6 @@ async function syncAccount(accountId: string): Promise<{ account: unknown; trans
   } catch (error) {
     console.error("[Enable Banking] Sync error:", error);
     
-    // If the session expired, update account status
     const { data: updatedAccount } = await supabase
       .from("bank_accounts")
       .update({
@@ -472,10 +527,19 @@ async function syncAccount(accountId: string): Promise<{ account: unknown; trans
 // Get transactions for an account
 async function getTransactions(
   accountId: string,
+  userId?: string | null,
   startDate?: string,
   endDate?: string
 ): Promise<{ transactions: unknown[] }> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  
+  // Verify ownership if userId provided
+  if (userId) {
+    const isOwner = await verifyAccountOwnership(supabase, accountId, userId);
+    if (!isOwner) {
+      throw new Error("Account not found or access denied");
+    }
+  }
   
   let query = supabase
     .from("bank_transactions")
@@ -500,8 +564,16 @@ async function getTransactions(
 }
 
 // Remove account connection
-async function removeConnection(accountId: string): Promise<{ success: boolean; deleted_count: number }> {
+async function removeConnection(accountId: string, userId?: string | null): Promise<{ success: boolean; deleted_count: number }> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  
+  // Verify ownership if userId provided
+  if (userId) {
+    const isOwner = await verifyAccountOwnership(supabase, accountId, userId);
+    if (!isOwner) {
+      throw new Error("Account not found or access denied");
+    }
+  }
   
   // Delete transactions first
   await supabase
@@ -524,7 +596,6 @@ async function removeConnection(accountId: string): Promise<{ success: boolean; 
 
 // Get available ASPSPs (banks) for a country
 async function getASPSPs(country: string): Promise<{ aspsps: unknown[] }> {
-  // Per doc: country + service sono richiesti
   const response = await enableBankingRequest(`/aspsps?country=${country}&service=AIS`) as {
     aspsps: unknown[];
   };
@@ -540,9 +611,9 @@ serve(async (req: Request) => {
   
   try {
     const body: EnableBankingRequest = await req.json();
-    const { action } = body;
+    const { action, user_id: userId } = body;
     
-    console.log(`[Enable Banking] Action: ${action}`);
+    console.log(`[Enable Banking] Action: ${action}, User: ${userId || "anonymous"}`);
     
     let result: unknown;
     
@@ -561,33 +632,35 @@ serve(async (req: Request) => {
         if (!body.code) {
           throw new Error("code is required");
         }
-        // Pass user_id from the client to associate accounts with the user
-        result = await completeSession(body.code, body.user_id);
+        if (!userId) {
+          throw new Error("user_id is required");
+        }
+        result = await completeSession(body.code, userId);
         break;
         
       case "get_accounts":
-        result = await getAccounts();
+        result = await getAccounts(userId);
         break;
         
       case "sync_account":
         if (!body.account_id) {
           throw new Error("account_id is required");
         }
-        result = await syncAccount(body.account_id);
+        result = await syncAccount(body.account_id, userId);
         break;
         
       case "get_transactions":
         if (!body.account_id) {
           throw new Error("account_id is required");
         }
-        result = await getTransactions(body.account_id, body.start_date, body.end_date);
+        result = await getTransactions(body.account_id, userId, body.start_date, body.end_date);
         break;
         
       case "remove_connection":
         if (!body.account_id) {
           throw new Error("account_id is required");
         }
-        result = await removeConnection(body.account_id);
+        result = await removeConnection(body.account_id, userId);
         break;
         
       case "get_aspsps":

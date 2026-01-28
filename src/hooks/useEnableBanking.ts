@@ -56,7 +56,37 @@ export function useEnableBanking() {
 
       if (error) {
         console.error("[useEnableBanking] Function error:", error);
-        throw new Error(error.message || "Errore nella chiamata Enable Banking");
+        
+        // Try to extract the real error message from the response
+        let errorMessage = "Errore nella chiamata Enable Banking";
+        
+        // The error.context may contain the response body with the actual error
+        try {
+          if (error.context && typeof error.context === "object") {
+            const ctx = error.context as { body?: string };
+            if (ctx.body) {
+              const parsed = JSON.parse(ctx.body);
+              if (parsed.error) {
+                errorMessage = parsed.error;
+              }
+            }
+          } else if (error.message) {
+            // Try to parse error message if it's JSON
+            if (error.message.startsWith("{")) {
+              const parsed = JSON.parse(error.message);
+              if (parsed.error) {
+                errorMessage = parsed.error;
+              }
+            } else {
+              errorMessage = error.message;
+            }
+          }
+        } catch {
+          // Keep default message if parsing fails
+          console.log("[useEnableBanking] Could not parse error details");
+        }
+        
+        throw new Error(errorMessage);
       }
 
       if (data?.error) {
