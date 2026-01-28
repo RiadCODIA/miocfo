@@ -1,51 +1,37 @@
 
-## Piano: Ristrutturare il layout del modal ConnectBankModal
 
-### Problema
-Il selettore del paese, il campo di ricerca e la lista delle banche sono visualmente al di fuori di un contenitore coesivo. La struttura attuale ha questi elementi "liberi" nel modal senza un bordo o sfondo che li raggruppi come un form.
+## Piano: Correggere il Layout del Form ConnectBankModal
+
+### Problema Identificato
+Dalla screenshot, la lista delle banche sta fuoriuscendo visivamente dal contenitore del form con bordo. Il problema principale e che il contenitore `flex-1 min-h-0` che contiene la `ScrollArea` non ha `overflow-hidden`, permettendo ai contenuti di apparire fuori dal box.
 
 ### Soluzione
-Avvolgere l'area di input (paese, ricerca banca, lista banche) in un contenitore con bordo e sfondo che le raggruppi visivamente come un "form", mantenendo i pulsanti di azione (Annulla/Continua) fuori da questo contenitore.
+Aggiungere `overflow-hidden` al contenitore della lista e assicurarsi che la `ScrollArea` sia correttamente contenuta all'interno del form con bordo.
 
 ### Modifiche Tecniche
 
 **File: `src/components/conti-bancari/ConnectBankModal.tsx`**
 
-Ristrutturare il blocco `step === "select_bank"` (righe 199-283):
+1. **Linea 231** - Aggiungere `overflow-hidden` al div contenitore della ScrollArea:
+   ```tsx
+   // Da:
+   <div className="flex-1 min-h-0">
+   
+   // A:
+   <div className="flex-1 min-h-0 overflow-hidden">
+   ```
 
-```
-Struttura attuale:
-<div className="flex flex-col h-[450px]">
-  <div className="space-y-4 py-4 flex-1 flex flex-col min-h-0">
-    - Paese (Select)
-    - Cerca banca (Input)
-    - ScrollArea con lista banche
-  </div>
-  <div className="flex gap-3 pt-4 flex-shrink-0 border-t">
-    - Pulsanti Annulla/Continua
-  </div>
-</div>
+2. **Linea 237** - Aggiungere `rounded-md` alla ScrollArea per consistenza visiva interna:
+   ```tsx
+   // Da:
+   <ScrollArea className="h-full">
+   
+   // A:
+   <ScrollArea className="h-full rounded-md">
+   ```
 
-Nuova struttura:
-<div className="flex flex-col h-[450px]">
-  <div className="flex-1 flex flex-col min-h-0 border rounded-lg p-4 bg-muted/30">
-    - Paese (Select)
-    - Cerca banca (Input)  
-    - ScrollArea con lista banche (senza bordo proprio)
-  </div>
-  <div className="flex gap-3 pt-4 flex-shrink-0">
-    - Pulsanti Annulla/Continua
-  </div>
-</div>
-```
+### Risultato Atteso
+- La lista delle banche sara correttamente contenuta all'interno del box con bordo arrotondato
+- Lo scroll funzionera solo all'interno del contenitore designato
+- Non ci saranno elementi visivamente al di fuori del form
 
-Modifiche specifiche:
-1. Aggiungere `border rounded-lg p-4 bg-muted/30` al contenitore degli input
-2. Rimuovere `py-4` dal contenitore interno (ora gestito dal padding del form)
-3. Rimuovere `rounded-md border` dalla ScrollArea (il bordo è ora sul form esterno)
-4. Rimuovere `border-t` dalla riga dei pulsanti (non più necessario)
-
-### Risultato Visivo
-- Paese, ricerca e lista banche saranno raggruppati in un riquadro con bordo e sfondo leggero
-- I pulsanti di azione rimarranno fuori dal form, ancorati in basso
-- Layout più pulito e coerente con il design di un form
