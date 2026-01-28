@@ -12,26 +12,10 @@ export default function ContiBancari() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const { accounts, isLoading, fetchAccounts, syncAccount, removeAccount, completeSession } = useEnableBanking();
 
-  // Handle Enable Banking callback on mount
+  // Fetch accounts on mount (callback handling is done by ConnectBankModal)
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const authCode = urlParams.get("code");
-    
-    if (authCode) {
-      // Remove params from URL
-      window.history.replaceState({}, document.title, window.location.pathname);
-      
-      // Complete the session with the authorization code
-      completeSession(authCode).then(() => {
-        setIsModalOpen(true);
-      }).catch((error) => {
-        console.error("Failed to complete session:", error);
-        setIsModalOpen(true);
-      });
-    } else {
-      fetchAccounts();
-    }
-  }, [fetchAccounts, completeSession]);
+    fetchAccounts();
+  }, [fetchAccounts]);
 
   const handleSync = async (id: string) => {
     await syncAccount(id);

@@ -23,6 +23,7 @@ interface EnableBankingRequest {
   end_date?: string;
   aspsp_country?: string;
   aspsp_name?: string;
+  user_id?: string; // User ID from the authenticated client
 }
 
 // Base64URL encode function
@@ -186,8 +187,9 @@ async function createSession(
 }
 
 // Complete the authorization after user returns with code
-async function completeSession(code: string): Promise<{ accounts: unknown[] }> {
+async function completeSession(code: string, userId?: string | null): Promise<{ accounts: unknown[] }> {
   console.log(`[Enable Banking] Completing session with code: ${code.substring(0, 20)}...`);
+  console.log(`[Enable Banking] User ID: ${userId || "not provided"}`);
   
   // Exchange the authorization code for a session
   const session = await enableBankingRequest("/sessions", "POST", { code }) as {
@@ -257,6 +259,7 @@ async function completeSession(code: string): Promise<{ accounts: unknown[] }> {
       const iban = account.iban || account.account_id?.iban || null;
       
       const accountData = {
+        user_id: userId || null, // Associate with the authenticated user
         plaid_account_id: account.uid,
         plaid_item_id: session.session_id,
         bank_name: session.aspsp?.name || "Bank",
@@ -271,12 +274,17 @@ async function completeSession(code: string): Promise<{ accounts: unknown[] }> {
         last_sync_at: new Date().toISOString(),
       };
       
-      // Check if account already exists
-      const { data: existingAccount } = await supabase
+      // Check if account already exists for this user
+      let existingAccountQuery = supabase
         .from("bank_accounts")
         .select("id")
-        .eq("plaid_account_id", account.uid)
-        .single();
+        .eq("plaid_account_id", account.uid);
+      
+      if (userId) {
+        existingAccountQuery = existingAccountQuery.eq("user_id", userId);
+      }
+      
+      const { data: existingAccount } = await existingAccountQuery.single();
       
       if (existingAccount) {
         const { data: updatedAccount, error } = await supabase
@@ -289,7 +297,11 @@ async function completeSession(code: string): Promise<{ accounts: unknown[] }> {
           .select()
           .single();
         
-        if (!error) savedAccounts.push(updatedAccount);
+        if (error) {
+          console.error("[Enable Banking] Error updating account:", error);
+        } else {
+          savedAccounts.push(updatedAccount);
+        }
       } else {
         const { data: newAccount, error } = await supabase
           .from("bank_accounts")
@@ -297,12 +309,16 @@ async function completeSession(code: string): Promise<{ accounts: unknown[] }> {
           .select()
           .single();
         
-        if (!error) savedAccounts.push(newAccount);
+        if (error) {
+          console.error("[Enable Banking] Error inserting account:", error);
+        } else {
+          savedAccounts.push(newAccount);
+        }
       }
     }
   }
   
-  console.log(`[Enable Banking] Saved ${savedAccounts.length} accounts`);
+  console.log(`[Enable Banking] Saved ${savedAccounts.length} accounts for user ${userId}`);
   
   return { accounts: savedAccounts };
 }
@@ -545,7 +561,8 @@ serve(async (req: Request) => {
         if (!body.code) {
           throw new Error("code is required");
         }
-        result = await completeSession(body.code);
+        // Pass user_id from the client to associate accounts with the user
+        result = await completeSession(body.code, body.user_id);
         break;
         
       case "get_accounts":

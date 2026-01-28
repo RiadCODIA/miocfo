@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 
 interface ProtectedRouteProps {
@@ -7,6 +7,11 @@ interface ProtectedRouteProps {
 
 export function ProtectedRoute({ children }: ProtectedRouteProps) {
   const { user, loading, isDemoMode } = useAuth();
+  const location = useLocation();
+
+  // Check if this is an OAuth callback (Enable Banking returns with ?code=)
+  const urlParams = new URLSearchParams(location.search);
+  const hasOAuthCode = urlParams.has("code");
 
   if (loading) {
     return (
@@ -19,7 +24,8 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     );
   }
 
-  if (!user && !isDemoMode) {
+  // Allow temporary access if OAuth callback is in progress (session may still be restoring)
+  if (!user && !isDemoMode && !hasOAuthCode) {
     return <Navigate to="/auth" replace />;
   }
 
