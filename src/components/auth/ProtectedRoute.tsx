@@ -18,7 +18,9 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
       <div className="min-h-screen flex items-center justify-center bg-background">
         <div className="flex flex-col items-center gap-4">
           <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-muted-foreground text-sm">Caricamento...</p>
+          <p className="text-muted-foreground text-sm">
+            {hasOAuthCode ? "Collegamento banca in corso..." : "Caricamento..."}
+          </p>
         </div>
       </div>
     );

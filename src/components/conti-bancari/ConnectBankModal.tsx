@@ -62,14 +62,10 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   // Generate redirect URI for Enable Banking callback
   const getRedirectUri = useCallback(() => {
-    // Enable Banking requires the redirect URL to be pre-whitelisted.
-    // The Lovable preview domain (lovableproject.com) is often not whitelisted,
-    // so we prefer a stable public URL when configured.
-    const origin = window.location.origin;
-    const configuredBase = (import.meta as any).env?.VITE_PUBLIC_APP_URL as string | undefined;
-    const shouldUseOrigin = origin.includes(".lovable.app");
-    const baseUrl = (shouldUseOrigin ? origin : configuredBase?.trim()) || origin;
-    return `${baseUrl.replace(/\/$/, "")}/conti-bancari`;
+    // Enable Banking richiede che il redirect_url sia pre-whitelisted.
+    // Usiamo SEMPRE la URL pubblicata per garantire compatibilità.
+    const PUBLISHED_URL = "https://insight-buddy-09.lovable.app";
+    return `${PUBLISHED_URL}/conti-bancari`;
   }, []);
 
   // Load banks when country changes
@@ -112,22 +108,36 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     const authCode = urlParams.get("code");
 
     if (authCode) {
-      // Remove params from URL
+      // Remove params from URL immediately
       window.history.replaceState({}, document.title, window.location.pathname);
 
       // Complete the session with the authorization code
       setStep("connecting");
       onOpenChange(true); // Open modal
-      completeSession(authCode)
-        .then((accounts) => {
+
+      // Funzione per completare con retry (la sessione potrebbe non essere ancora pronta)
+      const completeWithRetry = async (retries = 3) => {
+        try {
+          const accounts = await completeSession(authCode);
           setConnectedAccounts(accounts);
           setStep("success");
-        })
-        .catch((error) => {
+        } catch (error) {
           console.error("Failed to complete session:", error);
-          setErrorMessage(error.message || "Errore nel collegamento");
+          
+          // Se l'errore è dovuto alla sessione non pronta, riprova
+          if (retries > 0 && error instanceof Error && 
+              (error.message.includes("session") || error.message.includes("auth") || error.message.includes("user"))) {
+            console.log(`Retrying in 1 second... (${retries} retries left)`);
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            return completeWithRetry(retries - 1);
+          }
+          
+          setErrorMessage(error instanceof Error ? error.message : "Errore nel collegamento");
           setStep("error");
-        });
+        }
+      };
+
+      completeWithRetry();
     }
   }, [completeSession, onOpenChange]);
 
