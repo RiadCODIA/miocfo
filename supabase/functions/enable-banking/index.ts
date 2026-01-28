@@ -41,7 +41,7 @@ async function createJWT(): Promise<string> {
   };
   
   const payload = {
-    iss: "enablebanking",
+    iss: "enablebanking.com",
     aud: "api.enablebanking.com",
     iat: now,
     exp: now + 3600, // 1 hour expiry
