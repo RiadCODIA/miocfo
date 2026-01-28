@@ -46,8 +46,12 @@ export function useEnableBanking() {
 
   const callEnableBankingFunction = useCallback(
     async (action: string, params: Record<string, unknown> = {}) => {
+      // Get the current session to include user_id
+      const { data: { session } } = await supabase.auth.getSession();
+      const userId = session?.user?.id;
+
       const { data, error } = await supabase.functions.invoke("enable-banking", {
-        body: { action, ...params },
+        body: { action, user_id: userId, ...params },
       });
 
       if (error) {
