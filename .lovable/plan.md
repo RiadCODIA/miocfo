@@ -1,136 +1,80 @@
 
+Obiettivo: risolvere l’errore mostrato dopo il rientro da Enable Banking (“Edge Function returned a non-2xx status code”) e far comparire correttamente i conti collegati.
 
-## Piano: Correggere il Flusso Enable Banking - Redirect al Login
+## Diagnosi (cosa sta succedendo)
+Dai log della Edge Function `enable-banking` risulta:
+- durante `complete_session` viene chiamato **GET** `https://api.enablebanking.com/sessions/{session_id}/accounts`
+- la risposta è **404 Not Found** (`{"detail":"Not Found"}`)
 
-### Problema Identificato
+Questo indica che quell’endpoint non è valido. Da documentazione Enable Banking:
+- l’endpoint **POST `/sessions`** (con `{ code }`) restituisce già `session_id` e anche la lista `accounts` (dettagli “mostrati solo una volta”)
+- quindi non bisogna chiamare `/sessions/{session_id}/accounts`.
 
-Ci sono due problemi principali che causano il redirect alla pagina di login dopo la connessione bancaria:
+Il frontend vede un errore generico perché `supabase.functions.invoke` in caso di HTTP non-2xx solleva `FunctionsHttpError` con messaggio standard.
 
-1. **URL di Redirect Non Consentito**: Quando l'utente e sulla URL di preview (`id-preview--xxx.lovable.app`), l'app invia questa URL a Enable Banking come redirect_uri. Ma solo la URL pubblicata (`insight-buddy-09.lovable.app/conti-bancari`) e whitelisted nel dashboard di Enable Banking. Questo causa l'errore `REDIRECT_URI_NOT_ALLOWED`.
+## Cosa implementerò (fix principale)
+### 1) Correzione `completeSession` nella Edge Function (rimuovere chiamata 404)
+**File:** `supabase/functions/enable-banking/index.ts`
 
-2. **Race Condition nella Sessione**: Anche quando il flusso funziona (dalla URL pubblicata), quando l'utente torna dalla banca:
-   - La pagina fa un full reload
-   - Supabase deve ripristinare la sessione dal localStorage
-   - Il `ProtectedRoute` potrebbe controllare `user` prima che la sessione sia ripristinata
-   - Se `user` e `null` durante questo momento, l'utente viene reindirizzato a `/auth`
+Modifica della logica:
+- `POST /sessions` con `{ code }` → salva la risposta in `session`
+- ricava i conti da `session.accounts` (quando presente) invece di chiamare `/sessions/{id}/accounts`
+- per ogni account:
+  - usa `account.uid` come account id per le chiamate successive
+  - chiama `/accounts/{uid}/balances` (come già fai)
+  - salva su DB in `bank_accounts`
 
-### Soluzione
+### 1b) Fallback robusto (se alcune banche non restituiscono `accounts` al POST /sessions)
+Sempre in `completeSession`:
+- se `session.accounts` è vuoto/assente:
+  - chiama `GET /sessions/{session_id}` (endpoint valido) per ottenere `accounts` (lista di id)
+  - per ciascun id, chiama `GET /accounts/{account_id}/details` per ottenere i dettagli (incluso `uid`)
+  - prosegui con bilanci + salvataggio DB
 
-#### 1. Forzare l'uso della URL Pubblicata per Enable Banking
-**File: `src/components/conti-bancari/ConnectBankModal.tsx`**
+Risultato atteso: `complete_session` non andrà più in 404 e la function tornerà 200 con `accounts`.
 
-Modificare `getRedirectUri()` per usare sempre la URL pubblicata, non la URL corrente:
+## Migliorie necessarie per evitare errori “misteriosi” lato UI
+### 2) Mostrare il messaggio reale dell’errore (non quello generico)
+**File:** `src/hooks/useEnableBanking.ts`
 
-```tsx
-const getRedirectUri = useCallback(() => {
-  // Enable Banking richiede che il redirect_url sia pre-whitelisted.
-  // Usiamo sempre la URL pubblicata per garantire compatibilita.
-  const PUBLISHED_URL = "https://insight-buddy-09.lovable.app";
-  return `${PUBLISHED_URL}/conti-bancari`;
-}, []);
-```
+Aggiornamento di `callEnableBankingFunction`:
+- quando `supabase.functions.invoke` ritorna `error` di tipo `FunctionsHttpError`:
+  - estrarre e parsare il body della response (`error.context`) se possibile
+  - se nel body c’è `{ error: "..." }`, usare quello come messaggio mostrato all’utente
+- fallback: mantenere il messaggio standard solo se non è possibile leggere il body
 
-#### 2. Migliorare il ProtectedRoute per OAuth Callback
-**File: `src/components/auth/ProtectedRoute.tsx`**
+Risultato atteso: se la function fallisce, il modal mostra l’errore vero (es. “Enable Banking API error: ...”), facilitando supporto e debug.
 
-Il problema attuale e che `hasOAuthCode` viene verificato DOPO `loading`, ma potrebbe comunque fallire se la sessione non e ancora pronta. Migliorare la logica:
+## (Consigliato) Hardening sicurezza + correttezza dati
+Questa parte non è necessaria per “far funzionare” il collegamento, ma evita problemi seri in produzione.
 
-```tsx
-export function ProtectedRoute({ children }: ProtectedRouteProps) {
-  const { user, loading, isDemoMode } = useAuth();
-  const location = useLocation();
+### 3) Filtrare i dati per utente nelle actions “get_accounts / get_transactions / sync_account / remove_connection”
+**File:** `supabase/functions/enable-banking/index.ts`
 
-  // Check if this is an OAuth callback (Enable Banking returns with ?code=)
-  const urlParams = new URLSearchParams(location.search);
-  const hasOAuthCode = urlParams.has("code");
+Problema attuale: `getAccounts()` usa service role e fa `select(*)` su tutta la tabella, quindi potrebbe restituire conti di altri utenti (bypass RLS).
 
-  // Durante il loading, mostra sempre lo spinner
-  // Questo e critico per i callback OAuth dove la sessione sta venendo ripristinata
-  if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-4">
-          <div className="h-8 w-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-          <p className="text-muted-foreground text-sm">
-            {hasOAuthCode ? "Collegamento banca in corso..." : "Caricamento..."}
-          </p>
-        </div>
-      </div>
-    );
-  }
+Soluzione:
+- richiedere sempre un `user_id` valido per le operazioni “utente”
+- filtrare le query con `.eq("user_id", userId)`
+- per `sync_account`, `remove_connection`, `get_transactions`: verificare che l’`accountId` appartenga a `userId` prima di procedere
 
-  // Se c'e un OAuth code, permettere l'accesso anche senza user
-  // Il ConnectBankModal gestiira il code e completera la sessione
-  if (!user && !isDemoMode && !hasOAuthCode) {
-    return <Navigate to="/auth" replace />;
-  }
+Nota: l’estrazione di `userId` ideale è dal token (`Authorization` header), non dal body. Se manteniamo `verify_jwt=false`, implementerò la validazione server-side (leggere token e derivare user_id) così non ci si fida del client.
 
-  return <>{children}</>;
-}
-```
+## Test (end-to-end) dopo le modifiche
+1. Aprire la URL pubblicata `https://insight-buddy-09.lovable.app`
+2. Login
+3. Conti Bancari → Collega nuovo conto → completare flusso in banca
+4. Al rientro:
+   - il modal deve passare a “Connessione riuscita!”
+   - devono apparire i conti collegati (e `Aggiorna` deve mostrare lo stesso)
+5. Se qualcosa fallisce:
+   - verificare nei log `enable-banking` che non esista più la chiamata `/sessions/{id}/accounts`
+   - verificare che l’errore mostrato nel modal sia dettagliato (non più “non-2xx” generico)
 
-#### 3. Gestire il Callback OAuth nel ConnectBankModal con Retry
-**File: `src/components/conti-bancari/ConnectBankModal.tsx`**
+## File coinvolti
+- `supabase/functions/enable-banking/index.ts` (fix endpoint + fallback + optional hardening)
+- `src/hooks/useEnableBanking.ts` (error handling migliore)
 
-Migliorare la gestione del callback per aspettare che la sessione sia disponibile:
-
-```tsx
-useEffect(() => {
-  const urlParams = new URLSearchParams(window.location.search);
-  const authCode = urlParams.get("code");
-
-  if (authCode) {
-    // Remove params from URL immediately
-    window.history.replaceState({}, document.title, window.location.pathname);
-
-    // Complete the session with the authorization code
-    setStep("connecting");
-    onOpenChange(true);
-
-    // Funzione per completare con retry
-    const completeWithRetry = async (retries = 3) => {
-      try {
-        const accounts = await completeSession(authCode);
-        setConnectedAccounts(accounts);
-        setStep("success");
-      } catch (error) {
-        console.error("Failed to complete session:", error);
-        
-        // Se l'errore e dovuto alla sessione non pronta, riprova
-        if (retries > 0 && error instanceof Error && 
-            (error.message.includes("session") || error.message.includes("auth"))) {
-          console.log(`Retrying in 1 second... (${retries} retries left)`);
-          await new Promise(resolve => setTimeout(resolve, 1000));
-          return completeWithRetry(retries - 1);
-        }
-        
-        setErrorMessage(error instanceof Error ? error.message : "Errore nel collegamento");
-        setStep("error");
-      }
-    };
-
-    completeWithRetry();
-  }
-}, [completeSession, onOpenChange]);
-```
-
-### Riepilogo Modifiche
-
-| File | Modifica |
-|------|----------|
-| `ConnectBankModal.tsx` | Usare URL pubblicata fissa per redirect_uri |
-| `ConnectBankModal.tsx` | Aggiungere retry logic per callback OAuth |
-| `ProtectedRoute.tsx` | Mostrare messaggio specifico durante callback OAuth |
-
-### Risultato Atteso
-
-1. Il redirect_uri sara sempre `https://insight-buddy-09.lovable.app/conti-bancari` (whitelisted)
-2. Dopo l'autenticazione bancaria, l'utente tornera alla URL pubblicata
-3. Il modal mostrera "Collegamento banca in corso..." mentre la sessione viene ripristinata
-4. I conti verranno salvati con l'user_id corretto
-5. L'utente vedra i suoi conti collegati senza essere reindirizzato al login
-
-### Nota Importante per l'Utente
-
-Dopo questa modifica, il flusso Enable Banking funzionera solo dalla **URL pubblicata** (`insight-buddy-09.lovable.app`). Se testi dalla preview, sarai comunque reindirizzato alla URL pubblicata dopo l'autenticazione bancaria.
-
+## Rischi / note
+- Alcune banche possono comportarsi diversamente: il fallback `GET /sessions/{id}` + `/accounts/{id}/details` copre la casistica.
+- Se l’utente avvia il flusso dalla preview e viene reindirizzato al dominio pubblicato, la sessione Supabase non è condivisa tra domini: per questo il collegamento va testato/effettuato dalla URL pubblicata.
