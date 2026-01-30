@@ -1,69 +1,96 @@
 
-## Problema: Redirect Enable Banking non funziona con dominio custom
 
-### Cosa sta succedendo
-Quando inizi il collegamento bancario dal tuo dominio custom, il sistema invia a Enable Banking un redirect URL fisso (`https://insight-buddy-09.lovable.app/conti-bancari`). Dopo l'autenticazione in banca:
+## Piano: Migliorare la Gestione degli Errori Enable Banking
 
-1. La banca ti reindirizza verso `insight-buddy-09.lovable.app` (non il tuo dominio)
-2. Ma tu eri loggato sul tuo dominio custom → la sessione Supabase non è condivisa tra domini diversi
-3. Oppure la banca blocca il redirect perché il tuo dominio custom non è nella loro whitelist
+### Problema Identificato
 
-### Soluzione
-Aggiornare l'applicazione per usare **dinamicamente l'URL corrente** come redirect, e registrare il tuo dominio custom nel dashboard Enable Banking.
+Il collegamento della banca funziona (il conto viene creato), ma:
+1. Il saldo rimane a 0€ perché l'errore nel recupero saldi viene ignorato silenziosamente
+2. Lo status diventa "Errore" quando provi a sincronizzare perché la banca restituisce `ASPSP_ERROR`
 
----
+### Causa Probabile
 
-## Modifiche tecniche richieste
+L'errore `ASPSP_ERROR` da Enable Banking indica un problema di comunicazione con la banca BCC di Cherasco. Potrebbe essere:
+- Consenso PSD2 non completato correttamente
+- Problemi temporanei dell'API della banca
+- La banca potrebbe richiedere autenticazione SCA aggiuntiva per accedere ai saldi
 
-### 1. Modificare `ConnectBankModal.tsx` per usare l'URL dinamico
+### Soluzione Proposta
 
-**File:** `src/components/conti-bancari/ConnectBankModal.tsx`
-
-Il codice attuale usa un URL hardcoded:
-```typescript
-const PUBLISHED_URL = "https://insight-buddy-09.lovable.app";
-return `${PUBLISHED_URL}/conti-bancari`;
-```
-
-Modifica per usare l'origin corrente:
-```typescript
-const getRedirectUri = useCallback(() => {
-  // Usa l'URL corrente (supporta dominio custom, preview e published)
-  return `${window.location.origin}/conti-bancari`;
-}, []);
-```
-
-### 2. Azione manuale richiesta: Registrare il dominio custom in Enable Banking
-
-Devi accedere al **dashboard Enable Banking** e aggiungere il tuo dominio custom alla whitelist dei redirect URL:
-
-1. Vai su [Enable Banking Dashboard](https://enablebanking.com/)
-2. Accedi con le credenziali della tua applicazione
-3. Trova la sezione **Redirect URLs** o **Allowed Origins**
-4. Aggiungi: `https://TUODOMINIO.COM/conti-bancari` (sostituisci con il tuo dominio reale)
-5. Salva le modifiche
-
-**Nota:** Senza questa registrazione, Enable Banking bloccherà i redirect verso il tuo dominio custom.
+Migliorare il codice per:
+1. Loggare chiaramente quando il recupero saldi fallisce durante `complete_session`
+2. Mostrare all'utente un messaggio più utile invece di "Errore"
+3. Aggiungere un pulsante "Ricollega" quando la connessione è scaduta/invalida
 
 ---
 
-## Riepilogo file coinvolti
+## Modifiche Tecniche
+
+### 1. Edge Function: Migliorare logging e gestione errori
+
+**File:** `supabase/functions/enable-banking/index.ts`
+
+Modificare la funzione `completeSession` per loggare esplicitamente quando il recupero saldi fallisce:
+
+```typescript
+// Linea 287-289: Migliorare il logging
+} catch (e) {
+  console.error("[Enable Banking] FAILED to fetch balances for account", account.uid, ":", e);
+  // Continuiamo con balance = 0, ma logghiamo l'errore
+}
+```
+
+Modificare per impostare uno status più descrittivo quando c'è un errore di saldi:
+
+```typescript
+// Nuovo campo: se i saldi non sono stati recuperati, usiamo uno status diverso
+status: currentBalance === 0 && availableBalance === 0 ? "pending" : "active",
+```
+
+### 2. Frontend: Mostrare messaggi più utili
+
+**File:** `src/components/conti-bancari/BankAccountCard.tsx`
+
+Aggiungere un pulsante "Ricollega" per gli account in errore e migliorare i messaggi di stato:
+
+```typescript
+// Aggiungere "pending" come status con messaggio "In attesa di sincronizzazione"
+const statusConfig = {
+  active: { label: "Attivo", className: "bg-success text-success-foreground" },
+  pending: { label: "In sincronizzazione", className: "bg-warning text-warning-foreground" },
+  error: { label: "Riconnessione richiesta", className: "bg-destructive text-destructive-foreground" },
+};
+
+// Mostrare pulsante "Ricollega" quando status è error
+{account.status === "error" && (
+  <Button variant="outline" size="sm" onClick={() => onReconnect?.(account.id)}>
+    <RefreshCw className="h-4 w-4 mr-1" />
+    Ricollega
+  </Button>
+)}
+```
+
+### 3. Opzionale: Retry automatico per saldi
+
+Aggiungere un meccanismo di retry nella Edge Function per tentare più volte di recuperare i saldi in caso di errore temporaneo della banca.
+
+---
+
+## Riepilogo File da Modificare
 
 | File | Modifica |
 |------|----------|
-| `src/components/conti-bancari/ConnectBankModal.tsx` | Usare `window.location.origin` invece di URL hardcoded |
-
-## Cosa dovrai fare tu
-
-1. Dopo che applico la modifica, **registra il tuo dominio custom** nel dashboard Enable Banking
-2. Testa il flusso dal tuo dominio custom
-3. Se la banca ti reindirizza correttamente al tuo dominio, il flusso dovrebbe completarsi
+| `supabase/functions/enable-banking/index.ts` | Logging migliorato, status "pending" se saldi = 0 |
+| `src/components/conti-bancari/BankAccountCard.tsx` | Status "pending", pulsante "Ricollega" |
+| `src/pages/ContiBancari.tsx` | Handler per riconnessione account |
 
 ---
 
-## Risultato atteso
+## Nota Importante
 
-Dopo le modifiche:
-- Inizi il collegamento dal tuo dominio custom
-- La banca ti reindirizza al tuo dominio custom (con `?code=...`)
-- L'app riceve il codice e salva il conto collegato
+L'errore `ASPSP_ERROR` è un problema lato banca, non del nostro codice. Possibili azioni:
+
+1. **Attendere e riprovare** - Potrebbe essere un problema temporaneo della banca
+2. **Verificare il consenso** - Assicurati che il consenso PSD2 sia stato completato fino in fondo sul sito della banca
+3. **Contattare Enable Banking** - Se il problema persiste, potrebbero esserci problemi specifici con BCC di Cherasco
+
