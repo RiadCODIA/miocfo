@@ -62,10 +62,8 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   // Generate redirect URI for Enable Banking callback
   const getRedirectUri = useCallback(() => {
-    // Enable Banking richiede che il redirect_url sia pre-whitelisted.
-    // Usiamo SEMPRE la URL pubblicata per garantire compatibilità.
-    const PUBLISHED_URL = "https://insight-buddy-09.lovable.app";
-    return `${PUBLISHED_URL}/conti-bancari`;
+    // Usa l'origin corrente per supportare domini custom, preview e published
+    return `${window.location.origin}/conti-bancari`;
   }, []);
 
   // Load banks when country changes
