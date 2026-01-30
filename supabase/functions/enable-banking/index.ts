@@ -521,19 +521,35 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
     
     return { account: updatedAccount, transactions_synced: transactionsSynced };
   } catch (error) {
-    console.error("[Enable Banking] Sync error:", error);
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error("[Enable Banking] Sync error:", errorMessage);
     
-    const { data: updatedAccount } = await supabase
+    // Determine appropriate status and user-friendly message based on error type
+    let newStatus = "error";
+    let userMessage = "Errore nella sincronizzazione del conto.";
+    
+    if (errorMessage.includes("ASPSP_ERROR") || errorMessage.includes("Error interacting with ASPSP")) {
+      userMessage = "Errore banca (ASPSP_ERROR): la banca non ha risposto correttamente tramite PSD2. Riprova più tardi o ricollega il conto.";
+      newStatus = "error";
+    } else if (errorMessage.includes("401") || errorMessage.includes("403") || errorMessage.includes("Unauthorized") || errorMessage.includes("consent")) {
+      userMessage = "Consenso scaduto o revocato: premi 'Ricollega' per autorizzare nuovamente.";
+      newStatus = "disconnected";
+    } else if (errorMessage.includes("SESSION_EXPIRED") || errorMessage.includes("session")) {
+      userMessage = "Sessione scaduta: ricollega il conto bancario.";
+      newStatus = "disconnected";
+    }
+    
+    console.log(`[Enable Banking] Setting account ${accountId} status to ${newStatus}`);
+    
+    await supabase
       .from("bank_accounts")
       .update({
-        status: "error",
+        status: newStatus,
         updated_at: new Date().toISOString(),
       })
-      .eq("id", accountId)
-      .select()
-      .single();
+      .eq("id", accountId);
     
-    throw new Error("Failed to sync account. The connection may have expired.");
+    throw new Error(userMessage);
   }
 }
 

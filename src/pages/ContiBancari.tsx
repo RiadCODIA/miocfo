@@ -56,7 +56,7 @@ export default function ContiBancari() {
     iban: account.iban || `•••• ${account.mask || "****"}`,
     balance: account.current_balance || 0,
     currency: account.currency || "EUR",
-    status: account.status as "active" | "pending" | "error",
+    status: account.status as "active" | "pending" | "error" | "disconnected",
     lastSync: account.last_sync_at ? new Date(account.last_sync_at) : new Date(),
     source: (account as BankAccount & { source?: string }).source || "enable_banking",
   });

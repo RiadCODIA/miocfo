@@ -60,22 +60,39 @@ export function useEnableBanking() {
         // Try to extract the real error message from the response
         let errorMessage = "Errore nella chiamata Enable Banking";
         
-        // The error.context may contain the response body with the actual error
         try {
+          // The error.context may contain the response body with the actual error
           if (error.context && typeof error.context === "object") {
-            const ctx = error.context as { body?: string };
+            const ctx = error.context as { body?: string | object };
             if (ctx.body) {
-              const parsed = JSON.parse(ctx.body);
-              if (parsed.error) {
-                errorMessage = parsed.error;
+              // Handle body as string (JSON) or object
+              if (typeof ctx.body === "string") {
+                try {
+                  const parsed = JSON.parse(ctx.body);
+                  if (parsed.error) {
+                    errorMessage = parsed.error;
+                  }
+                } catch {
+                  // If not valid JSON, use the string directly
+                  errorMessage = ctx.body;
+                }
+              } else if (typeof ctx.body === "object" && ctx.body !== null) {
+                const bodyObj = ctx.body as { error?: string };
+                if (bodyObj.error) {
+                  errorMessage = bodyObj.error;
+                }
               }
             }
           } else if (error.message) {
             // Try to parse error message if it's JSON
             if (error.message.startsWith("{")) {
-              const parsed = JSON.parse(error.message);
-              if (parsed.error) {
-                errorMessage = parsed.error;
+              try {
+                const parsed = JSON.parse(error.message);
+                if (parsed.error) {
+                  errorMessage = parsed.error;
+                }
+              } catch {
+                errorMessage = error.message;
               }
             } else {
               errorMessage = error.message;
@@ -194,19 +211,27 @@ export function useEnableBanking() {
         });
 
         return data;
-      } catch (error) {
+    } catch (error) {
         toast({
           title: "Errore sincronizzazione",
           description:
             error instanceof Error ? error.message : "Errore nella sincronizzazione",
           variant: "destructive",
         });
+        
+        // Refresh accounts to sync UI with DB status (status may have changed to error/disconnected)
+        try {
+          await fetchAccounts();
+        } catch {
+          // Ignore fetch error, just trying to refresh UI
+        }
+        
         throw error;
       } finally {
         setIsLoading(false);
       }
     },
-    [callEnableBankingFunction, toast]
+    [callEnableBankingFunction, toast, fetchAccounts]
   );
 
   const fetchTransactions = useCallback(
