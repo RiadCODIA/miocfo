@@ -50,59 +50,27 @@ export function useEnableBanking() {
       const { data: { session } } = await supabase.auth.getSession();
       const userId = session?.user?.id;
 
-      const { data, error } = await supabase.functions.invoke("enable-banking", {
-        body: { action, user_id: userId, ...params },
+      // Use fetch directly to get better error handling with response body
+      const supabaseUrl = "https://ublsnradzhfpqhunfqbn.supabase.co";
+      const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVibHNucmFkemhmcHFodW5mcWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwODUyNDQsImV4cCI6MjA4MTY2MTI0NH0.njhpIOLukx6bmrw5p-AHCNShPkCnB-QqrDOvkYSkTOw";
+      
+      const response = await fetch(`${supabaseUrl}/functions/v1/enable-banking`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "apikey": anonKey,
+          "Authorization": `Bearer ${session?.access_token || anonKey}`,
+        },
+        body: JSON.stringify({ action, user_id: userId, ...params }),
       });
 
-      if (error) {
-        console.error("[useEnableBanking] Function error:", error);
+      const data = await response.json();
+
+      if (!response.ok) {
+        console.error("[useEnableBanking] Function error:", response.status, data);
         
-        // Try to extract the real error message from the response
-        let errorMessage = "Errore nella chiamata Enable Banking";
-        
-        try {
-          // The error.context may contain the response body with the actual error
-          if (error.context && typeof error.context === "object") {
-            const ctx = error.context as { body?: string | object };
-            if (ctx.body) {
-              // Handle body as string (JSON) or object
-              if (typeof ctx.body === "string") {
-                try {
-                  const parsed = JSON.parse(ctx.body);
-                  if (parsed.error) {
-                    errorMessage = parsed.error;
-                  }
-                } catch {
-                  // If not valid JSON, use the string directly
-                  errorMessage = ctx.body;
-                }
-              } else if (typeof ctx.body === "object" && ctx.body !== null) {
-                const bodyObj = ctx.body as { error?: string };
-                if (bodyObj.error) {
-                  errorMessage = bodyObj.error;
-                }
-              }
-            }
-          } else if (error.message) {
-            // Try to parse error message if it's JSON
-            if (error.message.startsWith("{")) {
-              try {
-                const parsed = JSON.parse(error.message);
-                if (parsed.error) {
-                  errorMessage = parsed.error;
-                }
-              } catch {
-                errorMessage = error.message;
-              }
-            } else {
-              errorMessage = error.message;
-            }
-          }
-        } catch {
-          // Keep default message if parsing fails
-          console.log("[useEnableBanking] Could not parse error details");
-        }
-        
+        // Extract the error message from the response body
+        const errorMessage = data?.error || "Errore nella chiamata Enable Banking";
         throw new Error(errorMessage);
       }
 
