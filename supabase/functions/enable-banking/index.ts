@@ -263,6 +263,7 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
     let currentBalance = 0;
     let availableBalance = 0;
     
+    let balanceFetchFailed = false;
     try {
       const balances = await enableBankingRequest(`/accounts/${account.uid}/balances`) as {
         balances: Array<{
@@ -283,13 +284,25 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
             availableBalance = balance.balance_amount.amount;
           }
         }
+        console.log(`[Enable Banking] Balances fetched for ${account.uid}: current=${currentBalance}, available=${availableBalance}`);
       }
     } catch (e) {
-      console.log("[Enable Banking] Could not fetch balances:", e);
+      console.error("[Enable Banking] FAILED to fetch balances for account", account.uid, ":", e);
+      balanceFetchFailed = true;
+      // Continue with balance = 0, but we'll mark the account as pending
     }
     
     const iban = account.iban || account.account_id?.iban || null;
     
+    // Set status based on whether we successfully fetched balances
+    // "pending" = account connected but waiting for balance sync
+    // "active" = account fully connected with balances
+    const accountStatus = balanceFetchFailed || (currentBalance === 0 && availableBalance === 0) 
+      ? "pending" 
+      : "active";
+    
+    console.log(`[Enable Banking] Account ${account.uid} status: ${accountStatus} (balanceFetchFailed=${balanceFetchFailed})`);
+
     const accountData = {
       user_id: userId,
       plaid_account_id: account.uid,
@@ -301,7 +314,7 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
       currency: account.currency || "EUR",
       current_balance: currentBalance,
       available_balance: availableBalance || currentBalance,
-      status: "active",
+      status: accountStatus,
       source: "enable_banking",
       last_sync_at: new Date().toISOString(),
     };

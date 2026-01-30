@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { RefreshCw, Trash2, TestTube, Building2 } from "lucide-react";
+import { RefreshCw, Trash2, TestTube, Building2, Link2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export interface BankAccount {
@@ -11,7 +11,7 @@ export interface BankAccount {
   iban: string;
   balance: number;
   currency: string;
-  status: "active" | "pending" | "error";
+  status: "active" | "pending" | "error" | "disconnected";
   lastSync: Date;
   source?: "enable_banking" | "powens" | "manual";
 }
@@ -21,11 +21,13 @@ interface BankAccountCardProps {
   onSync: (id: string) => void;
   onTest: (id: string) => void;
   onRemove: (id: string) => void;
+  onReconnect?: (id: string) => void;
 }
 
-export function BankAccountCard({ account, onSync, onTest, onRemove }: BankAccountCardProps) {
+export function BankAccountCard({ account, onSync, onTest, onRemove, onReconnect }: BankAccountCardProps) {
   const [isSyncing, setIsSyncing] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  const [isReconnecting, setIsReconnecting] = useState(false);
 
   const maskIban = (iban: string) => {
     if (iban.length < 8) return iban;
@@ -44,10 +46,18 @@ export function BankAccountCard({ account, onSync, onTest, onRemove }: BankAccou
     setTimeout(() => setIsTesting(false), 1500);
   };
 
+  const handleReconnect = async () => {
+    if (!onReconnect) return;
+    setIsReconnecting(true);
+    await onReconnect(account.id);
+    setTimeout(() => setIsReconnecting(false), 1500);
+  };
+
   const statusConfig = {
     active: { label: "Attivo", variant: "default" as const, className: "bg-success text-success-foreground" },
-    pending: { label: "In attesa", variant: "secondary" as const, className: "bg-warning text-warning-foreground" },
-    error: { label: "Errore", variant: "destructive" as const, className: "bg-destructive text-destructive-foreground" },
+    pending: { label: "In sincronizzazione", variant: "secondary" as const, className: "bg-warning text-warning-foreground" },
+    error: { label: "Riconnessione richiesta", variant: "destructive" as const, className: "bg-destructive text-destructive-foreground" },
+    disconnected: { label: "Disconnesso", variant: "destructive" as const, className: "bg-muted text-muted-foreground" },
   };
 
   const status = statusConfig[account.status];
@@ -99,7 +109,19 @@ export function BankAccountCard({ account, onSync, onTest, onRemove }: BankAccou
           </div>
 
           <div className="flex gap-2">
-            {!isManual && (
+            {/* Reconnect button for error/pending status */}
+            {!isManual && (account.status === "error" || account.status === "disconnected") && onReconnect && (
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleReconnect}
+                disabled={isReconnecting}
+              >
+                <Link2 className={cn("h-4 w-4 mr-1", isReconnecting && "animate-pulse")} />
+                Ricollega
+              </Button>
+            )}
+            {!isManual && account.status !== "error" && account.status !== "disconnected" && (
               <>
                 <Button
                   variant="outline"
