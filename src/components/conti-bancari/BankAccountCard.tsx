@@ -36,21 +36,36 @@ export function BankAccountCard({ account, onSync, onTest, onRemove, onReconnect
 
   const handleSync = async () => {
     setIsSyncing(true);
-    await onSync(account.id);
-    setTimeout(() => setIsSyncing(false), 1500);
+    try {
+      await onSync(account.id);
+    } catch {
+      // Error is handled in the hook, just catch to prevent unhandled rejection
+    } finally {
+      setTimeout(() => setIsSyncing(false), 1500);
+    }
   };
 
   const handleTest = async () => {
     setIsTesting(true);
-    await onTest(account.id);
-    setTimeout(() => setIsTesting(false), 1500);
+    try {
+      await onTest(account.id);
+    } catch {
+      // Error is handled in the hook
+    } finally {
+      setTimeout(() => setIsTesting(false), 1500);
+    }
   };
 
   const handleReconnect = async () => {
     if (!onReconnect) return;
     setIsReconnecting(true);
-    await onReconnect(account.id);
-    setTimeout(() => setIsReconnecting(false), 1500);
+    try {
+      await onReconnect(account.id);
+    } catch {
+      // Error is handled externally
+    } finally {
+      setTimeout(() => setIsReconnecting(false), 1500);
+    }
   };
 
   const statusConfig = {
@@ -109,7 +124,7 @@ export function BankAccountCard({ account, onSync, onTest, onRemove, onReconnect
           </div>
 
           <div className="flex gap-2">
-            {/* Reconnect button for error/pending status */}
+            {/* Reconnect button for error/disconnected status */}
             {!isManual && (account.status === "error" || account.status === "disconnected") && onReconnect && (
               <Button
                 variant="default"
@@ -121,6 +136,19 @@ export function BankAccountCard({ account, onSync, onTest, onRemove, onReconnect
                 Ricollega
               </Button>
             )}
+            {/* Retry sync button for error status (temporary bank issue) */}
+            {!isManual && account.status === "error" && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleSync}
+                disabled={isSyncing}
+              >
+                <RefreshCw className={cn("h-4 w-4 mr-1", isSyncing && "animate-spin")} />
+                Riprova
+              </Button>
+            )}
+            {/* Normal sync/test buttons for active/pending status */}
             {!isManual && account.status !== "error" && account.status !== "disconnected" && (
               <>
                 <Button
