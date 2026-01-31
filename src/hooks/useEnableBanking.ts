@@ -168,20 +168,16 @@ export function useEnableBanking() {
           account_id: accountId,
         });
 
-        // Update local state
-        setAccounts((prev) =>
-          prev.map((acc) =>
-            acc.id === accountId ? (data.account as BankAccount) : acc
-          )
-        );
-
         toast({
           title: "Sincronizzazione completata",
           description: `${data.transactions_synced} transazioni sincronizzate`,
         });
 
+        // Refresh all accounts from DB to ensure UI is fully in sync
+        await fetchAccounts();
+
         return data;
-    } catch (error) {
+      } catch (error) {
         toast({
           title: "Errore sincronizzazione",
           description:
