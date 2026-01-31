@@ -88,7 +88,8 @@ export function useEnableBanking() {
     async (
       redirectUri: string,
       aspspCountry?: string,
-      aspspName?: string
+      aspspName?: string,
+      psuType?: "personal" | "business"
     ): Promise<{ session_id: string; authorization_url: string }> => {
       setIsLoading(true);
       try {
@@ -96,6 +97,7 @@ export function useEnableBanking() {
           redirect_uri: redirectUri,
           aspsp_country: aspspCountry,
           aspsp_name: aspspName,
+          psu_type: psuType || "personal",
         });
         return data;
       } finally {
