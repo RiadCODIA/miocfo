@@ -57,6 +57,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   const [connectedAccounts, setConnectedAccounts] = useState<BankAccount[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [isLoadingBanks, setIsLoadingBanks] = useState(false);
+  const [psuType, setPsuType] = useState<"personal" | "business">("business");
   
   const { createSession, completeSession, getASPSPs, isLoading } = useEnableBanking();
 
@@ -148,7 +149,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
     setStep("ready");
     try {
-      const data = await createSession(getRedirectUri(), selectedCountry, selectedBank.name);
+      const data = await createSession(getRedirectUri(), selectedCountry, selectedBank.name, psuType);
       setAuthorizationUrl(data.authorization_url);
     } catch (error) {
       console.error("Failed to create session:", error);
@@ -175,6 +176,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     setConnectedAccounts([]);
     setErrorMessage("");
     setSearchQuery("");
+    setPsuType("business");
     onOpenChange(false);
   };
 
@@ -219,6 +221,19 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
                         {country.name}
                       </SelectItem>
                     ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2 flex-shrink-0">
+                <Label>Tipo di conto</Label>
+                <Select value={psuType} onValueChange={(v) => setPsuType(v as "personal" | "business")}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="personal">Conto Privato</SelectItem>
+                    <SelectItem value="business">Conto Aziendale</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
