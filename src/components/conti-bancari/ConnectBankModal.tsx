@@ -53,6 +53,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   const [filteredBanks, setFilteredBanks] = useState<ASPSP[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBank, setSelectedBank] = useState<ASPSP | null>(null);
+  const [psuType, setPsuType] = useState<"personal" | "business">("business");
   const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<BankAccount[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
@@ -148,7 +149,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
     setStep("ready");
     try {
-      const data = await createSession(getRedirectUri(), selectedCountry, selectedBank.name);
+      const data = await createSession(getRedirectUri(), selectedCountry, selectedBank.name, psuType);
       setAuthorizationUrl(data.authorization_url);
     } catch (error) {
       console.error("Failed to create session:", error);
@@ -171,6 +172,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   const handleClose = () => {
     setStep("select_bank");
     setSelectedBank(null);
+    setPsuType("business");
     setAuthorizationUrl(null);
     setConnectedAccounts([]);
     setErrorMessage("");
@@ -270,6 +272,19 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
                   </ScrollArea>
                 )}
               </div>
+            </div>
+
+            <div className="space-y-2 flex-shrink-0 pt-4">
+              <Label>Tipo di conto</Label>
+              <Select value={psuType} onValueChange={(v) => setPsuType(v as "personal" | "business")}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="personal">Conto Privato</SelectItem>
+                  <SelectItem value="business">Conto Aziendale</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="flex gap-3 pt-4 flex-shrink-0">
