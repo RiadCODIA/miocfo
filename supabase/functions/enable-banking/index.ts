@@ -305,10 +305,12 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
       if (balancesResponse.balances && balancesResponse.balances.length > 0) {
         for (const balance of balancesResponse.balances) {
           const amount = toNumber(balance.balance_amount?.amount);
-          if (balance.balance_type === "closingBooked" || balance.balance_type === "interimBooked") {
+          // Current balance: closingBooked, interimBooked, OR ISO 20022 codes CLBD, ITBD
+          if (["closingBooked", "interimBooked", "CLBD", "ITBD"].includes(balance.balance_type)) {
             currentBalance = amount;
           }
-          if (balance.balance_type === "interimAvailable" || balance.balance_type === "expected") {
+          // Available balance: interimAvailable, expected, OR ISO 20022 codes ITAV, CLAV, FWAV
+          if (["interimAvailable", "expected", "ITAV", "CLAV", "FWAV"].includes(balance.balance_type)) {
             availableBalance = amount;
           }
         }
@@ -487,10 +489,12 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
     if (balancesResponse.balances && balancesResponse.balances.length > 0) {
       for (const balance of balancesResponse.balances) {
         const amount = toNumber(balance.balance_amount?.amount);
-        if (balance.balance_type === "closingBooked" || balance.balance_type === "interimBooked") {
+        // Current balance: closingBooked, interimBooked, OR ISO 20022 codes CLBD, ITBD
+        if (["closingBooked", "interimBooked", "CLBD", "ITBD"].includes(balance.balance_type)) {
           currentBalance = amount;
         }
-        if (balance.balance_type === "interimAvailable" || balance.balance_type === "expected") {
+        // Available balance: interimAvailable, expected, OR ISO 20022 codes ITAV, CLAV, FWAV
+        if (["interimAvailable", "expected", "ITAV", "CLAV", "FWAV"].includes(balance.balance_type)) {
           availableBalance = amount;
         }
       }
