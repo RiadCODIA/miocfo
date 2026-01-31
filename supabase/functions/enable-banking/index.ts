@@ -501,9 +501,19 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
       console.log(`[Enable Banking] Sync - Parsed balances: current=${currentBalance}, available=${availableBalance}`);
     }
     
-    // Get transactions (last 365 days) with pagination support
+    // Get transactions - default to 90 days (safe for most banks after initial consent)
     const endDate = new Date().toISOString().split("T")[0];
-    const startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    let startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    
+    // Check if this is a fresh connection (within 1 hour) - some banks allow more history
+    const accountCreatedAt = new Date(account.created_at);
+    const hoursSinceCreation = (Date.now() - accountCreatedAt.getTime()) / (1000 * 60 * 60);
+    const tryExtendedPeriod = hoursSinceCreation <= 1;
+    
+    if (tryExtendedPeriod) {
+      startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      console.log(`[Enable Banking] First sync within 1h, trying 365 days of history`);
+    }
     
     console.log(`[Enable Banking] Fetching transactions from ${startDate} to ${endDate}`);
     
@@ -532,37 +542,60 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
       debtor_name?: string;
     }
     
-    // Fetch all transactions with pagination
+    // Fetch all transactions with pagination and fallback for period errors
     let allTransactions: EnableBankingTransaction[] = [];
     let continuationKey: string | undefined;
     let pageCount = 0;
     const maxPages = 50; // Safety limit
     
-    do {
-      pageCount++;
-      const url = `/accounts/${accountUid}/transactions?date_from=${startDate}&date_to=${endDate}` +
-        (continuationKey ? `&continuation_key=${encodeURIComponent(continuationKey)}` : "");
+    // Helper function to fetch transactions with a given date range
+    const fetchTransactionsForPeriod = async (fromDate: string, toDate: string): Promise<void> => {
+      allTransactions = [];
+      continuationKey = undefined;
+      pageCount = 0;
       
-      console.log(`[Enable Banking] Fetching transactions page ${pageCount}...`);
+      do {
+        pageCount++;
+        const url = `/accounts/${accountUid}/transactions?date_from=${fromDate}&date_to=${toDate}` +
+          (continuationKey ? `&continuation_key=${encodeURIComponent(continuationKey)}` : "");
+        
+        console.log(`[Enable Banking] Fetching transactions page ${pageCount}...`);
+        
+        const transactionsResponse = await enableBankingRequest(url) as {
+          transactions?: EnableBankingTransaction[];
+          continuation_key?: string;
+          booked?: EnableBankingTransaction[];
+          pending?: EnableBankingTransaction[];
+        };
+        
+        // Handle different response formats
+        const transactions = transactionsResponse.transactions || 
+          [...(transactionsResponse.booked || []), ...(transactionsResponse.pending || [])];
+        
+        if (transactions.length > 0) {
+          allTransactions.push(...transactions);
+          console.log(`[Enable Banking] Page ${pageCount}: ${transactions.length} transactions (total: ${allTransactions.length})`);
+        }
+        
+        continuationKey = transactionsResponse.continuation_key;
+      } while (continuationKey && pageCount < maxPages);
+    };
+    
+    try {
+      await fetchTransactionsForPeriod(startDate, endDate);
+    } catch (txError) {
+      const txErrorMsg = txError instanceof Error ? txError.message : String(txError);
       
-      const transactionsResponse = await enableBankingRequest(url) as {
-        transactions?: EnableBankingTransaction[];
-        continuation_key?: string;
-        booked?: EnableBankingTransaction[];
-        pending?: EnableBankingTransaction[];
-      };
-      
-      // Handle different response formats
-      const transactions = transactionsResponse.transactions || 
-        [...(transactionsResponse.booked || []), ...(transactionsResponse.pending || [])];
-      
-      if (transactions.length > 0) {
-        allTransactions.push(...transactions);
-        console.log(`[Enable Banking] Page ${pageCount}: ${transactions.length} transactions (total: ${allTransactions.length})`);
+      // If 422 WRONG_TRANSACTIONS_PERIOD error and we tried 365 days, fallback to 90 days
+      if ((txErrorMsg.includes("422") || txErrorMsg.includes("WRONG_TRANSACTIONS_PERIOD")) && tryExtendedPeriod) {
+        console.log(`[Enable Banking] 365-day period rejected by ASPSP, falling back to 90 days`);
+        startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        await fetchTransactionsForPeriod(startDate, endDate);
+      } else {
+        // Re-throw other errors
+        throw txError;
       }
-      
-      continuationKey = transactionsResponse.continuation_key;
-    } while (continuationKey && pageCount < maxPages);
+    }
     
     console.log(`[Enable Banking] Total transactions fetched: ${allTransactions.length} in ${pageCount} pages`);
     
@@ -641,7 +674,10 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
     let newStatus = "error";
     let userMessage = "Errore nella sincronizzazione del conto.";
     
-    if (errorMessage.includes("ASPSP_ERROR") || errorMessage.includes("Error interacting with ASPSP")) {
+    if (errorMessage.includes("429") || errorMessage.includes("ASPSP_RATE_LIMIT_EXCEEDED") || errorMessage.includes("rate limit")) {
+      userMessage = "Limite giornaliero raggiunto: la banca limita gli accessi. Riprova tra qualche ora.";
+      newStatus = "error";
+    } else if (errorMessage.includes("ASPSP_ERROR") || errorMessage.includes("Error interacting with ASPSP")) {
       userMessage = "Errore banca (ASPSP_ERROR): la banca non ha risposto correttamente tramite PSD2. Riprova più tardi o ricollega il conto.";
       newStatus = "error";
     } else if (errorMessage.includes("401") || errorMessage.includes("403") || errorMessage.includes("Unauthorized") || errorMessage.includes("consent")) {
@@ -650,6 +686,9 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
     } else if (errorMessage.includes("SESSION_EXPIRED") || errorMessage.includes("session")) {
       userMessage = "Sessione scaduta: ricollega il conto bancario.";
       newStatus = "disconnected";
+    } else if (errorMessage.includes("422") || errorMessage.includes("WRONG_TRANSACTIONS_PERIOD")) {
+      userMessage = "Periodo richiesto non supportato dalla banca. Riprova.";
+      newStatus = "error";
     }
     
     console.log(`[Enable Banking] Setting account ${accountId} status to ${newStatus}`);

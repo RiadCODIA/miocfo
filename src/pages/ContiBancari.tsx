@@ -54,7 +54,8 @@ export default function ContiBancari() {
     id: account.id,
     bankName: account.bank_name,
     iban: account.iban || `•••• ${account.mask || "****"}`,
-    balance: account.current_balance || 0,
+    // Prioritize available_balance (ITAV) which matches what users see in their bank app
+    balance: account.available_balance || account.current_balance || 0,
     currency: account.currency || "EUR",
     status: account.status as "active" | "pending" | "error" | "disconnected",
     lastSync: account.last_sync_at ? new Date(account.last_sync_at) : new Date(),

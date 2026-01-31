@@ -106,7 +106,7 @@ export function BankAccountCard({ account, onSync, onTest, onRemove, onReconnect
 
         <div className="mt-6 flex items-end justify-between">
           <div>
-            <p className="text-sm text-muted-foreground">Saldo attuale</p>
+            <p className="text-sm text-muted-foreground">Saldo disponibile</p>
             <p className="text-2xl font-bold text-foreground">
               {new Intl.NumberFormat("it-IT", {
                 style: "currency",
