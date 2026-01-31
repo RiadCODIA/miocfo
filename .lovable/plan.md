@@ -1,202 +1,131 @@
 
+
 ## Obiettivo
-Recuperare le transazioni storiche tramite l'API Enable Banking e salvare tutti i dati disponibili nel database per visualizzarli nella sezione Transazioni.
+Correggere gli errori di sincronizzazione e mostrare il saldo corretto (disponibile invece di contabile).
 
-## Problema identificato
+## Problemi Identificati
 
-### 1. Sincronizzazione mai eseguita
-I log mostrano che l'action `sync_account` non è mai stata chiamata - sono stati eseguiti solo `get_accounts`. Per vedere le transazioni devi cliccare il pulsante **"Sincronizza"** sulla card del conto bancario.
+### 1. Errore 422: "WRONG_TRANSACTIONS_PERIOD"
+**Causa**: Il codice richiede transazioni per 365 giorni, ma FinecoBank limita l'accesso agli ultimi 90 giorni dopo l'autorizzazione iniziale.
 
-### 2. Limite attuale di 90 giorni
-Il codice attuale richiede solo le transazioni degli ultimi 90 giorni. Possiamo estendere questo periodo.
-
-### 3. Dati non catturati
-L'API Enable Banking restituisce molti campi che attualmente non stiamo salvando.
-
----
-
-## Dati disponibili dall'API Enable Banking (Transaction schema)
-
-| Campo API | Descrizione | Attualmente salvato? |
-|-----------|-------------|---------------------|
-| `transaction_id` | ID univoco transazione | Si (come plaid_transaction_id) |
-| `transaction_amount.amount` | Importo | Si |
-| `transaction_amount.currency` | Valuta (EUR, USD, etc.) | Si |
-| `booking_date` | Data di contabilizzazione | Si (come date) |
-| `value_date` | Data valuta | No |
-| `transaction_date` | Data effettiva transazione | No |
-| `remittance_information[]` | Causale/descrizione | Si (come name) |
-| `creditor.name` | Nome beneficiario | Parziale (come merchant_name) |
-| `debtor.name` | Nome ordinante | Parziale |
-| `creditor_account.iban` | IBAN beneficiario | No |
-| `debtor_account.iban` | IBAN ordinante | No |
-| `credit_debit_indicator` | CRDT/DBIT (entrata/uscita) | No |
-| `status` | BOOK/PDNG (contabilizzata/pending) | Parziale |
-| `merchant_category_code` | Codice categoria esercente (MCC) | No |
-| `bank_transaction_code.description` | Tipo operazione banca | No |
-| `bank_transaction_code.code` | Codice operazione | No |
-| `reference_number` | Numero riferimento | No |
-| `balance_after_transaction` | Saldo dopo operazione | No |
-| `entry_reference` | Riferimento movimento | No |
-| `exchange_rate` | Tasso di cambio (per valute estere) | No |
-| `note` | Note aggiuntive | No |
-
----
-
-## Piano di implementazione
-
-### Fase 1: Estensione schema database `bank_transactions`
-Aggiungere nuove colonne per catturare tutti i dati:
-
-```sql
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS value_date date;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS transaction_date date;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS credit_debit_indicator text;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS creditor_name text;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS creditor_iban text;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS debtor_name text;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS debtor_iban text;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS mcc_code text;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS bank_tx_code text;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS bank_tx_description text;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS reference_number text;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS balance_after numeric;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS entry_reference text;
-ALTER TABLE bank_transactions ADD COLUMN IF NOT EXISTS raw_data jsonb;
+**Log specifico**:
+```
+GET /accounts/.../transactions?date_from=2025-01-31&date_to=2026-01-31
+Error 422: "Wrong transactions period requested"
 ```
 
-### Fase 2: Aggiornare Edge Function `enable-banking`
+### 2. Saldo Errato (€10.484 invece di ~€9.900)
+**Causa**: Il sistema mostra `current_balance` (saldo contabile ITBD = €10.484) invece di `available_balance` (saldo disponibile ITAV = €9.951).
 
-**File:** `supabase/functions/enable-banking/index.ts`
+Il saldo **disponibile** (ITAV) è quello che vedi nella tua app Fineco e corrisponde al ~€9.900 che hai verificato.
 
-1. **Estendere il periodo di recupero** da 90 giorni a 365 giorni (o più)
-2. **Aggiornare il TypeScript type** per il transaction response
-3. **Mappare tutti i campi** dalla risposta API
-4. **Gestire la paginazione** (`continuation_key`) per recuperare tutte le transazioni
-5. **Salvare i dati raw** in campo jsonb per debugging futuro
-
-### Fase 3: Aggiornare Frontend
-
-**File:** `src/hooks/useTransactions.ts`
-- Aggiungere i nuovi campi al type `Transaction`
-
-**File:** `src/pages/Transazioni.tsx`
-- Mostrare informazioni aggiuntive (creditore/debitore, tipo operazione, etc.)
+### 3. Errore 429: Rate Limit
+**Causa**: Troppi tentativi di sincronizzazione falliti hanno superato il limite giornaliero della banca. Questo si risolverà automaticamente dopo 24 ore.
 
 ---
 
-## Dettaglio tecnico implementazione
+## Piano di Implementazione
 
-### Edge Function - Nuova logica transazioni
+### Fase 1: Correggere il Periodo Transazioni (Edge Function)
+
+**File**: `supabase/functions/enable-banking/index.ts`
+
+Modificare la logica per tentare prima 90 giorni (limite sicuro per la maggior parte delle banche), con fallback intelligente:
 
 ```typescript
-// Tipo completo per transazione Enable Banking
-interface EnableBankingTransaction {
-  transaction_id: string;
-  entry_reference?: string;
-  merchant_category_code?: string;
-  transaction_amount: { amount: string | number; currency: string };
-  creditor?: { name: string };
-  creditor_account?: { iban?: string };
-  debtor?: { name: string };
-  debtor_account?: { iban?: string };
-  bank_transaction_code?: { description?: string; code?: string };
-  credit_debit_indicator?: "CRDT" | "DBIT";
-  status?: "BOOK" | "PDNG";
-  booking_date: string;
-  value_date?: string;
-  transaction_date?: string;
-  balance_after_transaction?: { amount: string | number; currency: string };
-  reference_number?: string;
-  remittance_information?: string[];
-  note?: string;
-}
-
-// Recupero con paginazione (fino a 365 giorni)
+// Fase 1: Prova con 90 giorni (limite sicuro per la maggior parte delle ASPSP)
 const endDate = new Date().toISOString().split("T")[0];
-const startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+let startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
 
-let allTransactions: EnableBankingTransaction[] = [];
-let continuationKey: string | undefined;
+// Se è la prima sincronizzazione dopo l'autorizzazione (entro 1 ora), prova 365 giorni
+const accountCreatedAt = new Date(account.created_at);
+const hoursSinceCreation = (Date.now() - accountCreatedAt.getTime()) / (1000 * 60 * 60);
 
-do {
-  const url = `/accounts/${accountUid}/transactions?date_from=${startDate}&date_to=${endDate}` +
-    (continuationKey ? `&continuation_key=${continuationKey}` : "");
+if (hoursSinceCreation <= 1) {
+  // Entro la prima ora, molte banche permettono storico più lungo
+  startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  console.log(`[Enable Banking] First sync within 1h, trying 365 days`);
+}
+```
+
+Aggiungere anche gestione specifica dell'errore 422 per retry con periodo più breve:
+
+```typescript
+} catch (txError) {
+  const txErrorMsg = txError instanceof Error ? txError.message : String(txError);
   
-  const response = await enableBankingRequest(url);
-  
-  if (response.transactions) {
-    allTransactions.push(...response.transactions);
+  // Se errore 422 WRONG_TRANSACTIONS_PERIOD, riprova con 90 giorni
+  if (txErrorMsg.includes("422") || txErrorMsg.includes("WRONG_TRANSACTIONS_PERIOD")) {
+    console.log(`[Enable Banking] 365-day period rejected, falling back to 90 days`);
+    startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    // Retry with shorter period...
   }
-  
-  continuationKey = response.continuation_key;
-} while (continuationKey);
+}
+```
 
-// Mappatura completa
-for (const tx of allTransactions) {
-  const transactionData = {
-    bank_account_id: accountId,
-    plaid_transaction_id: tx.transaction_id,
-    amount: toNumber(tx.transaction_amount?.amount),
-    currency: tx.transaction_amount?.currency || "EUR",
-    date: tx.booking_date,
-    value_date: tx.value_date || null,
-    transaction_date: tx.transaction_date || null,
-    name: tx.remittance_information?.join(" ") || tx.creditor?.name || tx.debtor?.name || "Transazione",
-    merchant_name: tx.creditor?.name || tx.debtor?.name || null,
-    creditor_name: tx.creditor?.name || null,
-    creditor_iban: tx.creditor_account?.iban || null,
-    debtor_name: tx.debtor?.name || null,
-    debtor_iban: tx.debtor_account?.iban || null,
-    credit_debit_indicator: tx.credit_debit_indicator || null,
-    pending: tx.status === "PDNG",
-    mcc_code: tx.merchant_category_code || null,
-    bank_tx_code: tx.bank_transaction_code?.code || null,
-    bank_tx_description: tx.bank_transaction_code?.description || null,
-    reference_number: tx.reference_number || null,
-    balance_after: tx.balance_after_transaction ? toNumber(tx.balance_after_transaction.amount) : null,
-    entry_reference: tx.entry_reference || null,
-    raw_data: tx, // Salva tutto per debugging
-  };
-  
-  await supabase.from("bank_transactions").upsert(transactionData, { 
-    onConflict: "plaid_transaction_id" 
-  });
+### Fase 2: Mostrare il Saldo Disponibile (Frontend)
+
+**File**: `src/pages/ContiBancari.tsx`
+
+Modificare `mapAccountToCard` per usare `available_balance` come saldo principale:
+
+```typescript
+const mapAccountToCard = (account: BankAccount) => ({
+  id: account.id,
+  bankName: account.bank_name,
+  iban: account.iban || `•••• ${account.mask || "****"}`,
+  // Usa il saldo DISPONIBILE invece del saldo contabile
+  balance: account.available_balance || account.current_balance || 0,
+  currency: account.currency || "EUR",
+  status: account.status as "active" | "pending" | "error" | "disconnected",
+  lastSync: account.last_sync_at ? new Date(account.last_sync_at) : new Date(),
+  source: (account as BankAccount & { source?: string }).source || "enable_banking",
+});
+```
+
+**File**: `src/components/conti-bancari/BankAccountCard.tsx`
+
+Aggiornare l'etichetta da "Saldo attuale" a "Saldo disponibile" per chiarezza:
+
+```typescript
+<p className="text-sm text-muted-foreground">Saldo disponibile</p>
+```
+
+### Fase 3: Gestione Specifica Errore 429 (Edge Function)
+
+**File**: `supabase/functions/enable-banking/index.ts`
+
+Aggiungere riconoscimento specifico dell'errore rate limit:
+
+```typescript
+} else if (errorMessage.includes("429") || errorMessage.includes("ASPSP_RATE_LIMIT_EXCEEDED")) {
+  userMessage = "Limite giornaliero raggiunto: la banca limita gli accessi. Riprova domani.";
+  newStatus = "error";
 }
 ```
 
 ---
 
-## Azione immediata richiesta
+## File da Modificare
 
-Prima di implementare queste modifiche, **prova a cliccare "Sincronizza"** su uno dei conti FinecoBank per verificare che le transazioni vengano recuperate con il codice attuale. Se funziona, le transazioni appariranno nella sezione Transazioni.
-
-Se non appare nulla dopo la sincronizzazione, procederemo con l'implementazione completa.
-
----
-
-## File da modificare
-
-1. **Migrazione SQL** - Nuove colonne `bank_transactions`
-2. **`supabase/functions/enable-banking/index.ts`** - Logica transazioni estesa
-3. **`src/integrations/supabase/types.ts`** - Rigenerato automaticamente
-4. **`src/hooks/useTransactions.ts`** - Nuovi campi nel tipo Transaction
-5. **`src/pages/Transazioni.tsx`** - Visualizzazione dati aggiuntivi (opzionale)
+| File | Modifica |
+|------|----------|
+| `supabase/functions/enable-banking/index.ts` | Periodo 90 giorni, retry con fallback, gestione errore 429 |
+| `src/pages/ContiBancari.tsx` | Usare `available_balance` invece di `current_balance` |
+| `src/components/conti-bancari/BankAccountCard.tsx` | Etichetta "Saldo disponibile" |
 
 ---
 
-## Riepilogo dati estraibili
+## Risultato Atteso
 
-Dall'API Enable Banking possiamo estrarre per ogni transazione:
-- Data contabilizzazione, data valuta, data transazione
-- Importo e valuta
-- Nome e IBAN creditore/debitore
-- Indicatore credito/debito (entrata/uscita)
-- Causale completa
-- Codice categoria esercente (MCC)
-- Codice e descrizione tipo operazione bancaria
-- Numero riferimento
-- Saldo dopo operazione
-- Stato (contabilizzata/in attesa)
+Dopo queste modifiche:
+- **Saldo corretto**: Mostrerà ~€9.951 (saldo disponibile) invece di €10.484
+- **Sincronizzazione funzionante**: Le transazioni degli ultimi 90 giorni verranno scaricate
+- **Messaggi errore chiari**: L'utente vedrà messaggi specifici per rate limit
 
-Questi dati permetteranno analisi dettagliate delle spese, categorizzazione automatica migliorata e reportistica avanzata.
+---
+
+## Nota sul Rate Limit
+
+L'errore 429 attuale si risolverà automaticamente dopo alcune ore. Una volta implementate le modifiche, attendi qualche ora prima di testare nuovamente la sincronizzazione.
+
