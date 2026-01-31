@@ -17,7 +17,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle, Search } from "lucide-react";
+import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle, Search, Landmark, SearchX } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { useEnableBanking, BankAccount } from "@/hooks/useEnableBanking";
 
 interface ASPSP {
@@ -187,9 +188,9 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
-        <DialogHeader>
-          <DialogTitle>
+      <DialogContent className="sm:max-w-[550px]">
+        <DialogHeader className="text-center pb-2">
+          <DialogTitle className="text-xl">
             {step === "select_bank" && "Seleziona la tua banca"}
             {step === "ready" && "Collega un conto bancario"}
             {step === "connecting" && "Collegamento in corso..."}
@@ -207,12 +208,22 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
         {/* Bank Selection */}
         {step === "select_bank" && (
-          <div className="flex flex-col h-[450px]">
-            <div className="flex-1 flex flex-col min-h-0 space-y-4 border rounded-lg p-4 bg-muted/30">
-              <div className="space-y-2 flex-shrink-0">
-                <Label>Paese</Label>
+          <div className="flex flex-col h-[500px]">
+            {/* Header con icona */}
+            <div className="flex items-center justify-center pb-4">
+              <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+                <Landmark className="h-7 w-7 text-primary" />
+              </div>
+            </div>
+
+            {/* Selettori Paese e Tipo su due colonne */}
+            <div className="grid grid-cols-2 gap-4 mb-4">
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Paese
+                </Label>
                 <Select value={selectedCountry} onValueChange={setSelectedCountry}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-12 rounded-xl bg-muted/50 border-0 focus:ring-2">
                     <SelectValue placeholder="Seleziona un paese" />
                   </SelectTrigger>
                   <SelectContent>
@@ -224,11 +235,12 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-2 flex-shrink-0">
-                <Label>Tipo di conto</Label>
+              <div className="space-y-2">
+                <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Tipo conto
+                </Label>
                 <Select value={psuType} onValueChange={(v) => setPsuType(v as "personal" | "business")}>
-                  <SelectTrigger>
+                  <SelectTrigger className="h-12 rounded-xl bg-muted/50 border-0 focus:ring-2">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
@@ -237,68 +249,82 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-2 flex-shrink-0">
-                <Label>Cerca banca</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Cerca per nome..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-
-              <div className="flex-1 min-h-0 overflow-hidden">
-                {isLoadingBanks ? (
-                  <div className="flex items-center justify-center py-8 h-full">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  </div>
-                ) : (
-                  <ScrollArea className="h-full rounded-md">
-                    <div className="space-y-1">
-                      {filteredBanks.length === 0 ? (
-                        <p className="text-center text-muted-foreground py-4">
-                          Nessuna banca trovata
-                        </p>
-                      ) : (
-                        filteredBanks.map((bank) => (
-                          <button
-                            key={bank.name}
-                            onClick={() => handleSelectBank(bank)}
-                            className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
-                              selectedBank?.name === bank.name
-                                ? "bg-primary/10 border border-primary"
-                                : "hover:bg-muted/50"
-                            }`}
-                          >
-                            <Building2 className="h-5 w-5 text-primary flex-shrink-0" />
-                            <span className="font-medium text-foreground truncate">
-                              {bank.name}
-                            </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </ScrollArea>
-                )}
-              </div>
             </div>
 
-            <div className="flex gap-3 pt-4 flex-shrink-0">
-              <Button variant="outline" onClick={handleClose} className="flex-1">
+            {/* Ricerca con design migliorato */}
+            <div className="relative mb-4">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+              <Input
+                placeholder="Cerca la tua banca..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="pl-12 h-12 rounded-xl bg-muted/50 border-0 focus-visible:ring-2 text-base"
+              />
+            </div>
+
+            {/* Lista banche con card migliorate */}
+            <div className="flex-1 min-h-0 -mx-2">
+              {isLoadingBanks ? (
+                <div className="flex flex-col items-center justify-center py-12 h-full gap-3">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                  <p className="text-sm text-muted-foreground">Caricamento banche...</p>
+                </div>
+              ) : (
+                <ScrollArea className="h-full px-2">
+                  <div className="space-y-2 pb-2">
+                    {filteredBanks.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-12 gap-3">
+                        <div className="h-12 w-12 rounded-full bg-muted flex items-center justify-center">
+                          <SearchX className="h-6 w-6 text-muted-foreground" />
+                        </div>
+                        <p className="text-center text-muted-foreground">
+                          Nessuna banca trovata
+                        </p>
+                        <p className="text-center text-xs text-muted-foreground">
+                          Prova con un altro termine di ricerca
+                        </p>
+                      </div>
+                    ) : (
+                      filteredBanks.map((bank) => (
+                        <button
+                          key={bank.name}
+                          onClick={() => handleSelectBank(bank)}
+                          className={cn(
+                            "w-full flex items-center gap-4 p-4 rounded-xl text-left transition-all duration-200",
+                            "hover:shadow-md hover:scale-[1.01] hover:bg-muted/80",
+                            selectedBank?.name === bank.name
+                              ? "bg-primary/10 ring-2 ring-primary shadow-md"
+                              : "bg-muted/40"
+                          )}
+                        >
+                          <div className="h-10 w-10 rounded-lg bg-background shadow-sm flex items-center justify-center flex-shrink-0">
+                            <Building2 className="h-5 w-5 text-primary" />
+                          </div>
+                          <span className="font-semibold text-foreground flex-1 truncate">
+                            {bank.name}
+                          </span>
+                          {selectedBank?.name === bank.name && (
+                            <CheckCircle2 className="h-5 w-5 text-primary flex-shrink-0" />
+                          )}
+                        </button>
+                      ))
+                    )}
+                  </div>
+                </ScrollArea>
+              )}
+            </div>
+
+            {/* Footer con bottoni prominenti */}
+            <div className="flex gap-3 pt-6 border-t mt-4">
+              <Button variant="ghost" onClick={handleClose} className="flex-1 h-12 rounded-xl">
                 Annulla
               </Button>
               <Button
                 onClick={handleProceed}
                 disabled={!selectedBank || isLoading}
-                className="flex-1"
+                className="flex-1 h-12 rounded-xl bg-gradient-to-r from-primary to-primary/90 shadow-lg hover:shadow-xl transition-all"
               >
-                {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                ) : null}
+                {isLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
                 Continua
               </Button>
             </div>
