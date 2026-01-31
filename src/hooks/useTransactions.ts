@@ -15,6 +15,21 @@ export interface Transaction {
   aiCategoryId: string | null;
   aiConfidence: number | null;
   categoryConfirmed: boolean;
+  // Extended fields from Enable Banking PSD2 API
+  valueDate: string | null;
+  transactionDate: string | null;
+  creditDebitIndicator: string | null;
+  creditorName: string | null;
+  creditorIban: string | null;
+  debtorName: string | null;
+  debtorIban: string | null;
+  mccCode: string | null;
+  bankTxCode: string | null;
+  bankTxDescription: string | null;
+  referenceNumber: string | null;
+  balanceAfter: number | null;
+  entryReference: string | null;
+  currency: string;
 }
 
 interface UseTransactionsOptions {
@@ -44,10 +59,24 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
           ai_category_id,
           ai_confidence,
           category_confirmed,
+          currency,
+          value_date,
+          transaction_date,
+          credit_debit_indicator,
+          creditor_name,
+          creditor_iban,
+          debtor_name,
+          debtor_iban,
+          mcc_code,
+          bank_tx_code,
+          bank_tx_description,
+          reference_number,
+          balance_after,
+          entry_reference,
           bank_accounts!inner(bank_name)
         `)
         .order("date", { ascending: false })
-        .limit(100);
+        .limit(500);
 
       // Apply period filter
       const now = new Date();
@@ -81,6 +110,20 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
         aiCategoryId: tx.ai_category_id,
         aiConfidence: tx.ai_confidence,
         categoryConfirmed: tx.category_confirmed ?? false,
+        currency: tx.currency || "EUR",
+        valueDate: tx.value_date,
+        transactionDate: tx.transaction_date,
+        creditDebitIndicator: tx.credit_debit_indicator,
+        creditorName: tx.creditor_name,
+        creditorIban: tx.creditor_iban,
+        debtorName: tx.debtor_name,
+        debtorIban: tx.debtor_iban,
+        mccCode: tx.mcc_code,
+        bankTxCode: tx.bank_tx_code,
+        bankTxDescription: tx.bank_tx_description,
+        referenceNumber: tx.reference_number,
+        balanceAfter: tx.balance_after ? Number(tx.balance_after) : null,
+        entryReference: tx.entry_reference,
       })) || [];
 
       // Apply search filter client-side

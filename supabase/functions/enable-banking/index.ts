@@ -501,55 +501,114 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
       console.log(`[Enable Banking] Sync - Parsed balances: current=${currentBalance}, available=${availableBalance}`);
     }
     
-    // Get recent transactions (last 90 days)
+    // Get transactions (last 365 days) with pagination support
     const endDate = new Date().toISOString().split("T")[0];
-    const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
     
-    const transactionsResponse = await enableBankingRequest(
-      `/accounts/${accountUid}/transactions?date_from=${startDate}&date_to=${endDate}`
-    ) as {
-      transactions?: Array<{
-        transaction_id: string;
-        booking_date: string;
-        transaction_amount: {
-          amount: unknown;
-          currency: string;
-        };
-        remittance_information?: string[];
-        creditor_name?: string;
-        debtor_name?: string;
-      }>;
-      booked?: Array<unknown>;
-      pending?: Array<unknown>;
-    };
+    console.log(`[Enable Banking] Fetching transactions from ${startDate} to ${endDate}`);
     
-    console.log(`[Enable Banking] Sync - Transactions response keys:`, Object.keys(transactionsResponse));
-    console.log(`[Enable Banking] Sync - Transactions count:`, transactionsResponse.transactions?.length || 0);
+    // Define transaction type for Enable Banking API (PSD2/ISO 20022)
+    interface EnableBankingTransaction {
+      transaction_id: string;
+      entry_reference?: string;
+      merchant_category_code?: string;
+      transaction_amount: { amount: string | number; currency: string };
+      creditor?: { name?: string };
+      creditor_account?: { iban?: string };
+      debtor?: { name?: string };
+      debtor_account?: { iban?: string };
+      bank_transaction_code?: { description?: string; code?: string };
+      credit_debit_indicator?: "CRDT" | "DBIT";
+      status?: "BOOK" | "PDNG" | string;
+      booking_date: string;
+      value_date?: string;
+      transaction_date?: string;
+      balance_after_transaction?: { amount: string | number; currency: string };
+      reference_number?: string;
+      remittance_information?: string[];
+      note?: string;
+      // Legacy field names (some ASPSPs use these)
+      creditor_name?: string;
+      debtor_name?: string;
+    }
+    
+    // Fetch all transactions with pagination
+    let allTransactions: EnableBankingTransaction[] = [];
+    let continuationKey: string | undefined;
+    let pageCount = 0;
+    const maxPages = 50; // Safety limit
+    
+    do {
+      pageCount++;
+      const url = `/accounts/${accountUid}/transactions?date_from=${startDate}&date_to=${endDate}` +
+        (continuationKey ? `&continuation_key=${encodeURIComponent(continuationKey)}` : "");
+      
+      console.log(`[Enable Banking] Fetching transactions page ${pageCount}...`);
+      
+      const transactionsResponse = await enableBankingRequest(url) as {
+        transactions?: EnableBankingTransaction[];
+        continuation_key?: string;
+        booked?: EnableBankingTransaction[];
+        pending?: EnableBankingTransaction[];
+      };
+      
+      // Handle different response formats
+      const transactions = transactionsResponse.transactions || 
+        [...(transactionsResponse.booked || []), ...(transactionsResponse.pending || [])];
+      
+      if (transactions.length > 0) {
+        allTransactions.push(...transactions);
+        console.log(`[Enable Banking] Page ${pageCount}: ${transactions.length} transactions (total: ${allTransactions.length})`);
+      }
+      
+      continuationKey = transactionsResponse.continuation_key;
+    } while (continuationKey && pageCount < maxPages);
+    
+    console.log(`[Enable Banking] Total transactions fetched: ${allTransactions.length} in ${pageCount} pages`);
     
     let transactionsSynced = 0;
     
-    if (transactionsResponse.transactions) {
-      for (const tx of transactionsResponse.transactions) {
-        const transactionData = {
-          bank_account_id: accountId,
-          plaid_transaction_id: tx.transaction_id,
-          amount: toNumber(tx.transaction_amount?.amount),
-          currency: tx.transaction_amount?.currency || "EUR",
-          date: tx.booking_date,
-          name: tx.remittance_information?.join(" ") || tx.creditor_name || tx.debtor_name || "Transaction",
-          merchant_name: tx.creditor_name || tx.debtor_name || null,
-          pending: false,
-        };
-        
-        const { error } = await supabase
-          .from("bank_transactions")
-          .upsert(transactionData, { 
-            onConflict: "plaid_transaction_id",
-          });
-        
-        if (!error) {
-          transactionsSynced++;
-        }
+    for (const tx of allTransactions) {
+      // Build complete transaction data with all available fields
+      const transactionData = {
+        bank_account_id: accountId,
+        plaid_transaction_id: tx.transaction_id,
+        amount: toNumber(tx.transaction_amount?.amount),
+        currency: tx.transaction_amount?.currency || "EUR",
+        date: tx.booking_date,
+        value_date: tx.value_date || null,
+        transaction_date: tx.transaction_date || null,
+        name: tx.remittance_information?.join(" ") || 
+              tx.creditor?.name || tx.creditor_name ||
+              tx.debtor?.name || tx.debtor_name || 
+              "Transazione",
+        merchant_name: tx.creditor?.name || tx.creditor_name || 
+                      tx.debtor?.name || tx.debtor_name || null,
+        creditor_name: tx.creditor?.name || tx.creditor_name || null,
+        creditor_iban: tx.creditor_account?.iban || null,
+        debtor_name: tx.debtor?.name || tx.debtor_name || null,
+        debtor_iban: tx.debtor_account?.iban || null,
+        credit_debit_indicator: tx.credit_debit_indicator || null,
+        pending: tx.status === "PDNG",
+        mcc_code: tx.merchant_category_code || null,
+        bank_tx_code: tx.bank_transaction_code?.code || null,
+        bank_tx_description: tx.bank_transaction_code?.description || null,
+        reference_number: tx.reference_number || null,
+        balance_after: tx.balance_after_transaction ? toNumber(tx.balance_after_transaction.amount) : null,
+        entry_reference: tx.entry_reference || null,
+        raw_data: tx, // Store full response for debugging
+      };
+      
+      const { error } = await supabase
+        .from("bank_transactions")
+        .upsert(transactionData, { 
+          onConflict: "plaid_transaction_id",
+        });
+      
+      if (!error) {
+        transactionsSynced++;
+      } else {
+        console.error(`[Enable Banking] Error upserting transaction ${tx.transaction_id}:`, error.message);
       }
     }
     
