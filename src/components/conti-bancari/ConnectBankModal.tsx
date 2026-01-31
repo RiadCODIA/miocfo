@@ -188,7 +188,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[550px] max-h-[90vh] overflow-hidden flex flex-col">
+      <DialogContent className="sm:max-w-[550px]">
         <DialogHeader className="text-center pb-2">
           <DialogTitle className="text-xl">
             {step === "select_bank" && "Seleziona la tua banca"}
@@ -208,7 +208,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
         {/* Bank Selection */}
         {step === "select_bank" && (
-          <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="flex flex-col h-[500px]">
             {/* Header con icona */}
             <div className="flex items-center justify-center pb-4">
               <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
@@ -263,7 +263,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
             </div>
 
             {/* Lista banche con card migliorate */}
-            <div className="flex-1 min-h-0 overflow-hidden">
+            <div className="flex-1 min-h-0 -mx-2">
               {isLoadingBanks ? (
                 <div className="flex flex-col items-center justify-center py-12 h-full gap-3">
                   <Loader2 className="h-8 w-8 animate-spin text-primary" />
