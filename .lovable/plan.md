@@ -1,108 +1,119 @@
 
 
 ## Obiettivo
-Correggere gli errori di sincronizzazione e mostrare il saldo corretto (disponibile invece di contabile).
+Sincronizzare automaticamente le transazioni dopo il collegamento di un nuovo conto bancario, così l'utente vedrà immediatamente le transazioni nella sezione Transazioni senza dover cliccare manualmente "Sincronizza".
 
-## Problemi Identificati
+## Problema Identificato
 
-### 1. Errore 422: "WRONG_TRANSACTIONS_PERIOD"
-**Causa**: Il codice richiede transazioni per 365 giorni, ma FinecoBank limita l'accesso agli ultimi 90 giorni dopo l'autorizzazione iniziale.
+Attualmente il flusso è:
+1. Utente collega il conto → viene recuperato solo il **saldo**
+2. Le transazioni vengono scaricate **solo** quando l'utente clicca "Sincronizza" manualmente
+3. La modale dice "Le transazioni verranno sincronizzate automaticamente" ma non è vero
 
-**Log specifico**:
-```
-GET /accounts/.../transactions?date_from=2025-01-31&date_to=2026-01-31
-Error 422: "Wrong transactions period requested"
-```
-
-### 2. Saldo Errato (€10.484 invece di ~€9.900)
-**Causa**: Il sistema mostra `current_balance` (saldo contabile ITBD = €10.484) invece di `available_balance` (saldo disponibile ITAV = €9.951).
-
-Il saldo **disponibile** (ITAV) è quello che vedi nella tua app Fineco e corrisponde al ~€9.900 che hai verificato.
-
-### 3. Errore 429: Rate Limit
-**Causa**: Troppi tentativi di sincronizzazione falliti hanno superato il limite giornaliero della banca. Questo si risolverà automaticamente dopo 24 ore.
+**Risultato**: Il conto BCC di Cherasco è collegato con status "active" ma ha **0 transazioni** nel database.
 
 ---
 
-## Piano di Implementazione
+## Soluzione Proposta
 
-### Fase 1: Correggere il Periodo Transazioni (Edge Function)
+### Opzione A: Sincronizzazione Automatica nel Backend (Consigliata)
 
-**File**: `supabase/functions/enable-banking/index.ts`
+Dopo aver salvato i conti durante `complete_session`, chiamare automaticamente la logica di sincronizzazione transazioni per ogni conto.
 
-Modificare la logica per tentare prima 90 giorni (limite sicuro per la maggior parte delle banche), con fallback intelligente:
+**Vantaggi**:
+- Tutto avviene in un'unica operazione
+- L'utente vede immediatamente le transazioni
+- Nessuna modifica al frontend necessaria
 
-```typescript
-// Fase 1: Prova con 90 giorni (limite sicuro per la maggior parte delle ASPSP)
-const endDate = new Date().toISOString().split("T")[0];
-let startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-
-// Se è la prima sincronizzazione dopo l'autorizzazione (entro 1 ora), prova 365 giorni
-const accountCreatedAt = new Date(account.created_at);
-const hoursSinceCreation = (Date.now() - accountCreatedAt.getTime()) / (1000 * 60 * 60);
-
-if (hoursSinceCreation <= 1) {
-  // Entro la prima ora, molte banche permettono storico più lungo
-  startDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-  console.log(`[Enable Banking] First sync within 1h, trying 365 days`);
-}
-```
-
-Aggiungere anche gestione specifica dell'errore 422 per retry con periodo più breve:
+**File da modificare**: `supabase/functions/enable-banking/index.ts`
 
 ```typescript
-} catch (txError) {
-  const txErrorMsg = txError instanceof Error ? txError.message : String(txError);
-  
-  // Se errore 422 WRONG_TRANSACTIONS_PERIOD, riprova con 90 giorni
-  if (txErrorMsg.includes("422") || txErrorMsg.includes("WRONG_TRANSACTIONS_PERIOD")) {
-    console.log(`[Enable Banking] 365-day period rejected, falling back to 90 days`);
-    startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-    // Retry with shorter period...
+// In completeSession(), dopo aver salvato gli account:
+
+// Auto-sync transactions for each newly connected account
+console.log("[Enable Banking] Auto-syncing transactions for new accounts...");
+
+for (const savedAccount of savedAccounts) {
+  try {
+    // Get the account UID from the database (plaid_account_id stores the Enable Banking uid)
+    const accountUid = savedAccount.plaid_account_id;
+    
+    // Fetch transactions for the last 90 days (safe default)
+    const endDate = new Date().toISOString().split("T")[0];
+    const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    
+    console.log(`[Enable Banking] Auto-syncing transactions for ${accountUid} from ${startDate} to ${endDate}`);
+    
+    // Call transaction fetch logic (reuse existing syncAccountTransactions function)
+    const result = await syncAccountTransactions(
+      savedAccount.id, // DB account ID
+      accountUid,      // Enable Banking account UID
+      startDate,
+      endDate,
+      userId
+    );
+    
+    console.log(`[Enable Banking] Auto-synced ${result.transactions_synced} transactions for ${savedAccount.bank_name}`);
+  } catch (syncError) {
+    // Log but don't fail the whole operation - account is still connected
+    console.error(`[Enable Banking] Auto-sync failed for ${savedAccount.bank_name}:`, syncError);
   }
 }
 ```
 
-### Fase 2: Mostrare il Saldo Disponibile (Frontend)
+### Opzione B: Sincronizzazione Automatica nel Frontend
 
-**File**: `src/pages/ContiBancari.tsx`
+Dopo che `completeSession` ritorna con i conti collegati, chiamare `syncAccount` per ogni conto.
 
-Modificare `mapAccountToCard` per usare `available_balance` come saldo principale:
+**File da modificare**: `src/components/conti-bancari/ConnectBankModal.tsx`
 
 ```typescript
-const mapAccountToCard = (account: BankAccount) => ({
-  id: account.id,
-  bankName: account.bank_name,
-  iban: account.iban || `•••• ${account.mask || "****"}`,
-  // Usa il saldo DISPONIBILE invece del saldo contabile
-  balance: account.available_balance || account.current_balance || 0,
-  currency: account.currency || "EUR",
-  status: account.status as "active" | "pending" | "error" | "disconnected",
-  lastSync: account.last_sync_at ? new Date(account.last_sync_at) : new Date(),
-  source: (account as BankAccount & { source?: string }).source || "enable_banking",
-});
+// In useEffect callback after completeSession succeeds:
+const accounts = await completeSession(authCode);
+setConnectedAccounts(accounts);
+
+// Auto-sync transactions for each account
+for (const account of accounts) {
+  try {
+    await syncAccount(account.id);
+  } catch (error) {
+    console.error("Auto-sync failed for", account.bank_name, error);
+    // Continue with other accounts
+  }
+}
+
+setStep("success");
 ```
 
-**File**: `src/components/conti-bancari/BankAccountCard.tsx`
+---
 
-Aggiornare l'etichetta da "Saldo attuale" a "Saldo disponibile" per chiarezza:
+## Piano di Implementazione (Opzione A - Backend)
 
-```typescript
-<p className="text-sm text-muted-foreground">Saldo disponibile</p>
-```
+### Fase 1: Refactoring della funzione sync_account
 
-### Fase 3: Gestione Specifica Errore 429 (Edge Function)
-
-**File**: `supabase/functions/enable-banking/index.ts`
-
-Aggiungere riconoscimento specifico dell'errore rate limit:
+Estrarre la logica di sincronizzazione transazioni in una funzione riutilizzabile:
 
 ```typescript
-} else if (errorMessage.includes("429") || errorMessage.includes("ASPSP_RATE_LIMIT_EXCEEDED")) {
-  userMessage = "Limite giornaliero raggiunto: la banca limita gli accessi. Riprova domani.";
-  newStatus = "error";
+async function syncAccountTransactions(
+  dbAccountId: string,
+  enableBankingUid: string,
+  startDate: string,
+  endDate: string,
+  userId: string
+): Promise<{ transactions_synced: number }> {
+  // [logica esistente di sync_account per le transazioni]
+  // ...
+  return { transactions_synced: count };
 }
 ```
+
+### Fase 2: Chiamare la sincronizzazione in complete_session
+
+Dopo aver salvato i conti nel database, iterare su ogni conto e sincronizzare le transazioni.
+
+### Fase 3: Gestione errori resiliente
+
+Se la sincronizzazione fallisce per un conto (es. rate limit), non bloccare l'intero processo. Il conto rimane collegato e l'utente può sincronizzare manualmente dopo.
 
 ---
 
@@ -110,22 +121,21 @@ Aggiungere riconoscimento specifico dell'errore rate limit:
 
 | File | Modifica |
 |------|----------|
-| `supabase/functions/enable-banking/index.ts` | Periodo 90 giorni, retry con fallback, gestione errore 429 |
-| `src/pages/ContiBancari.tsx` | Usare `available_balance` invece di `current_balance` |
-| `src/components/conti-bancari/BankAccountCard.tsx` | Etichetta "Saldo disponibile" |
+| `supabase/functions/enable-banking/index.ts` | Aggiungere auto-sync in `completeSession()` |
 
 ---
 
 ## Risultato Atteso
 
-Dopo queste modifiche:
-- **Saldo corretto**: Mostrerà ~€9.951 (saldo disponibile) invece di €10.484
-- **Sincronizzazione funzionante**: Le transazioni degli ultimi 90 giorni verranno scaricate
-- **Messaggi errore chiari**: L'utente vedrà messaggi specifici per rate limit
+Dopo questa modifica:
+1. Utente collega un conto → il conto viene salvato
+2. **Le transazioni degli ultimi 90 giorni vengono scaricate automaticamente**
+3. L'utente vede immediatamente le transazioni nella sezione Transazioni
+4. Se la sincronizzazione fallisce, il conto è comunque collegato e l'utente può sincronizzare manualmente
 
 ---
 
-## Nota sul Rate Limit
+## Nota Importante
 
-L'errore 429 attuale si risolverà automaticamente dopo alcune ore. Una volta implementate le modifiche, attendi qualche ora prima di testare nuovamente la sincronizzazione.
+Per il conto BCC di Cherasco già collegato, dovrai comunque cliccare "Sincronizza" manualmente una volta per importare le transazioni storiche. La sincronizzazione automatica si applicherà ai **nuovi** conti collegati.
 
