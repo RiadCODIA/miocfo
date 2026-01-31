@@ -24,7 +24,6 @@ interface EnableBankingRequest {
   aspsp_country?: string;
   aspsp_name?: string;
   user_id?: string;
-  psu_type?: "personal" | "business";
 }
 
 // Base64URL encode function
@@ -143,8 +142,7 @@ async function enableBankingRequest(
 async function createSession(
   redirectUri: string,
   aspspCountry: string,
-  aspspName: string,
-  psuType: "personal" | "business" = "personal"
+  aspspName: string
 ): Promise<{ session_id: string; authorization_url: string }> {
   const validUntil = new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString();
   
@@ -158,7 +156,7 @@ async function createSession(
     },
     state: crypto.randomUUID(),
     redirect_url: redirectUri,
-    psu_type: psuType,
+    psu_type: "personal",
   };
   
   console.log("[Enable Banking] Creating auth request with data:", JSON.stringify(authData));
@@ -656,7 +654,7 @@ serve(async (req: Request) => {
         if (!body.aspsp_country || !body.aspsp_name) {
           throw new Error("aspsp_country and aspsp_name are required");
         }
-        result = await createSession(body.redirect_uri, body.aspsp_country, body.aspsp_name, body.psu_type || "personal");
+        result = await createSession(body.redirect_uri, body.aspsp_country, body.aspsp_name);
         break;
         
       case "complete_session":
