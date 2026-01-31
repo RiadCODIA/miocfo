@@ -273,6 +273,16 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   const savedAccounts: unknown[] = [];
   
+  // Helper to safely parse amounts (handles string/number from PSD2 APIs)
+  const toNumber = (value: unknown): number => {
+    if (typeof value === "number") return value;
+    if (typeof value === "string") {
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
+  };
+
   for (const account of accounts) {
     // Get account balances
     let currentBalance = 0;
@@ -280,26 +290,31 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
     
     let balanceFetchFailed = false;
     try {
-      const balances = await enableBankingRequest(`/accounts/${account.uid}/balances`) as {
-        balances: Array<{
+      const balancesResponse = await enableBankingRequest(`/accounts/${account.uid}/balances`) as {
+        balances?: Array<{
           balance_amount: {
-            amount: number;
+            amount: unknown;
             currency: string;
           };
           balance_type: string;
         }>;
       };
       
-      if (balances.balances) {
-        for (const balance of balances.balances) {
+      console.log(`[Enable Banking] Balances RAW response for ${account.uid}:`, JSON.stringify(balancesResponse));
+      
+      if (balancesResponse.balances && balancesResponse.balances.length > 0) {
+        for (const balance of balancesResponse.balances) {
+          const amount = toNumber(balance.balance_amount?.amount);
           if (balance.balance_type === "closingBooked" || balance.balance_type === "interimBooked") {
-            currentBalance = balance.balance_amount.amount;
+            currentBalance = amount;
           }
           if (balance.balance_type === "interimAvailable" || balance.balance_type === "expected") {
-            availableBalance = balance.balance_amount.amount;
+            availableBalance = amount;
           }
         }
-        console.log(`[Enable Banking] Balances fetched for ${account.uid}: current=${currentBalance}, available=${availableBalance}`);
+        console.log(`[Enable Banking] Parsed balances for ${account.uid}: current=${currentBalance}, available=${availableBalance}`);
+      } else {
+        console.log(`[Enable Banking] No balances array in response for ${account.uid}`);
       }
     } catch (e) {
       console.error("[Enable Banking] FAILED to fetch balances for account", account.uid, ":", e);
@@ -310,11 +325,9 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
     const iban = account.iban || account.account_id?.iban || null;
     
     // Set status based on whether we successfully fetched balances
-    // "pending" = account connected but waiting for balance sync
-    // "active" = account fully connected with balances
-    const accountStatus = balanceFetchFailed || (currentBalance === 0 && availableBalance === 0) 
-      ? "pending" 
-      : "active";
+    // "pending" = balance fetch failed (API error)
+    // "active" = API call succeeded (even if balance is 0)
+    const accountStatus = balanceFetchFailed ? "pending" : "active";
     
     console.log(`[Enable Banking] Account ${account.uid} status: ${accountStatus} (balanceFetchFailed=${balanceFetchFailed})`);
 
@@ -444,30 +457,44 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
   
   const accountUid = account.plaid_account_id;
   
+  // Helper to safely parse amounts (handles string/number from PSD2 APIs)
+  const toNumber = (value: unknown): number => {
+    if (typeof value === "number") return value;
+    if (typeof value === "string") {
+      const parsed = parseFloat(value);
+      return isNaN(parsed) ? 0 : parsed;
+    }
+    return 0;
+  };
+
   try {
     // Get account balances
-    const balances = await enableBankingRequest(`/accounts/${accountUid}/balances`) as {
-      balances: Array<{
+    const balancesResponse = await enableBankingRequest(`/accounts/${accountUid}/balances`) as {
+      balances?: Array<{
         balance_amount: {
-          amount: number;
+          amount: unknown;
           currency: string;
         };
         balance_type: string;
       }>;
     };
     
+    console.log(`[Enable Banking] Sync - Balances RAW response:`, JSON.stringify(balancesResponse));
+    
     let currentBalance = account.current_balance;
     let availableBalance = account.available_balance;
     
-    if (balances.balances) {
-      for (const balance of balances.balances) {
+    if (balancesResponse.balances && balancesResponse.balances.length > 0) {
+      for (const balance of balancesResponse.balances) {
+        const amount = toNumber(balance.balance_amount?.amount);
         if (balance.balance_type === "closingBooked" || balance.balance_type === "interimBooked") {
-          currentBalance = balance.balance_amount.amount;
+          currentBalance = amount;
         }
         if (balance.balance_type === "interimAvailable" || balance.balance_type === "expected") {
-          availableBalance = balance.balance_amount.amount;
+          availableBalance = amount;
         }
       }
+      console.log(`[Enable Banking] Sync - Parsed balances: current=${currentBalance}, available=${availableBalance}`);
     }
     
     // Get recent transactions (last 90 days)
@@ -477,18 +504,23 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
     const transactionsResponse = await enableBankingRequest(
       `/accounts/${accountUid}/transactions?date_from=${startDate}&date_to=${endDate}`
     ) as {
-      transactions: Array<{
+      transactions?: Array<{
         transaction_id: string;
         booking_date: string;
         transaction_amount: {
-          amount: number;
+          amount: unknown;
           currency: string;
         };
         remittance_information?: string[];
         creditor_name?: string;
         debtor_name?: string;
       }>;
+      booked?: Array<unknown>;
+      pending?: Array<unknown>;
     };
+    
+    console.log(`[Enable Banking] Sync - Transactions response keys:`, Object.keys(transactionsResponse));
+    console.log(`[Enable Banking] Sync - Transactions count:`, transactionsResponse.transactions?.length || 0);
     
     let transactionsSynced = 0;
     
@@ -497,8 +529,8 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
         const transactionData = {
           bank_account_id: accountId,
           plaid_transaction_id: tx.transaction_id,
-          amount: tx.transaction_amount.amount,
-          currency: tx.transaction_amount.currency,
+          amount: toNumber(tx.transaction_amount?.amount),
+          currency: tx.transaction_amount?.currency || "EUR",
           date: tx.booking_date,
           name: tx.remittance_information?.join(" ") || tx.creditor_name || tx.debtor_name || "Transaction",
           merchant_name: tx.creditor_name || tx.debtor_name || null,
@@ -517,12 +549,13 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
       }
     }
     
-    // Update account in database
+    // Update account in database - set status to active on successful sync
     const { data: updatedAccount, error: updateError } = await supabase
       .from("bank_accounts")
       .update({
         current_balance: currentBalance,
         available_balance: availableBalance,
+        status: "active",
         last_sync_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
       })
@@ -533,6 +566,8 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
     if (updateError) {
       throw updateError;
     }
+    
+    console.log(`[Enable Banking] Sync complete: ${transactionsSynced} transactions, status=active`);
     
     return { account: updatedAccount, transactions_synced: transactionsSynced };
   } catch (error) {
