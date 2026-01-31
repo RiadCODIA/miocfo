@@ -1,154 +1,91 @@
 
+## Goal
+Make Enable Banking-connected accounts show correct “active” status and display API-derived data (balances/transactions) reliably after connection and after “Sincronizza”, avoiding the current situation where accounts stay “pending” with 0 balances and nothing appears “active”.
 
-## Piano: Correggere il tipo di PSU per conti aziendali
+## What I found (root cause)
+1. **Accounts are being saved correctly** (your screenshot shows 4 FinecoBank accounts; network log confirms `get_accounts` returns 4 rows).
+2. In `supabase/functions/enable-banking/index.ts` the account `status` is set to **`pending` whenever balances are 0**, even if the balance fetch succeeded:
+   - Current logic: `balanceFetchFailed || (currentBalance === 0 && availableBalance === 0) ? "pending" : "active"`
+   - This is wrong because a valid bank balance can be 0; it also makes “Conti attivi” stay at 0 forever.
+3. In `syncAccount()` the function updates balances and transactions, **but it does not set the account status to `active` on success**, so even after syncing the UI can remain “In sincronizzazione”.
 
-### Problema Identificato
-La sincronizzazione fallisce con `ASPSP_ERROR` perché stiamo inviando `psu_type: "personal"` a Enable Banking, ma stai collegando un **conto aziendale**. Alcune banche (come BCC di Cherasco) richiedono che il parametro `psu_type` corrisponda correttamente al tipo di conto.
+## Expected behavior after fix
+- If the balances endpoint call succeeds, the account becomes **`active`**, even if balance is 0.
+- If balances/transactions calls fail due to bank/consent issues, status becomes **`error`** or **`disconnected`** as already implemented.
+- Clicking **“Sincronizza”** updates:
+  - balance fields
+  - status = active
+  - and upserts bank transactions
 
-Dalla documentazione Enable Banking API (`POST /auth`):
-```json
-{
-  "psu_type": "business"  // oppure "personal"
-}
-```
+## Implementation plan (code changes)
+### 1) Fix status assignment in `completeSession()`
+File: `supabase/functions/enable-banking/index.ts`
 
-### Soluzione Proposta
-Aggiungere la possibilità di selezionare il tipo di conto (personale/aziendale) nel modal di connessione, e passare il valore corretto a Enable Banking.
+- Change the logic to:
+  - `pending` only when **balance fetch fails** (or when the API returns no balances payload at all and we decide to treat it as not-ready)
+  - `active` when balances call succeeds (regardless of amount being 0)
 
----
+Concretely:
+- Remove the `(currentBalance === 0 && availableBalance === 0)` condition from the status decision.
+- Keep `balanceFetchFailed` as the main driver for `pending`.
 
-## Modifiche Tecniche
+### 2) Set status to `active` on successful `syncAccount()`
+File: `supabase/functions/enable-banking/index.ts`
 
-### 1. Modal di Connessione: Aggiungere selezione tipo conto
-**File:** `src/components/conti-bancari/ConnectBankModal.tsx`
+- When `syncAccount()` completes successfully, update `bank_accounts.status` to `active` alongside balance updates:
+  - `status: "active"`
+  - `last_sync_at`, `updated_at` already exist and should remain.
 
-Aggiungere un selector per il tipo di conto (Privato / Aziendale) nella schermata di selezione banca, prima del pulsante "Continua":
+### 3) Make balance/amount parsing robust (avoid silent “0”)
+File: `supabase/functions/enable-banking/index.ts`
 
-```typescript
-// Nuovo stato
-const [psuType, setPsuType] = useState<"personal" | "business">("business"); // Default business
+Even if the API returns amounts as strings (common in PSD2 APIs), we should parse safely:
+- Implement a small helper (local function) like:
+  - `toNumber(value): number` using `Number(...)` / `parseFloat(...)` and fallback to 0 if NaN
+- Apply it to:
+  - `balance.balance_amount.amount`
+  - `tx.transaction_amount.amount`
 
-// Nuova UI - Radio buttons o Select
-<div className="space-y-2">
-  <Label>Tipo di conto</Label>
-  <Select value={psuType} onValueChange={(v) => setPsuType(v as "personal" | "business")}>
-    <SelectTrigger>
-      <SelectValue />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="personal">Conto Privato</SelectItem>
-      <SelectItem value="business">Conto Aziendale</SelectItem>
-    </SelectContent>
-  </Select>
-</div>
-```
+This prevents cases where:
+- a string amount fails numeric coercion
+- Supabase insert/update coerces unexpectedly
+- balances appear as 0 despite real values
 
-Passare `psuType` alla funzione `createSession`.
+### 4) Add targeted logging for balances/transactions payload shape (temporary)
+File: `supabase/functions/enable-banking/index.ts`
 
----
+Because providers sometimes differ in response structure, add logs that show:
+- the raw `balances` response (trimmed) when it returns 0 balances or unexpected shape
+- the raw `transactionsResponse` shape (count + top-level keys)
+This will quickly confirm whether we are reading the correct fields for FinecoBank.
 
-### 2. Hook Enable Banking: Passare psu_type
-**File:** `src/hooks/useEnableBanking.ts`
+(We’ll keep logs minimal to avoid noise; once confirmed stable, we can reduce them.)
 
-Modificare `createSession` per accettare e passare il parametro `psu_type`:
+### 5) Frontend refresh after sync (UI reliability)
+File: `src/hooks/useEnableBanking.ts`
 
-```typescript
-const createSession = useCallback(
-  async (
-    redirectUri: string,
-    aspspCountry?: string,
-    aspspName?: string,
-    psuType?: "personal" | "business"  // Nuovo parametro
-  ): Promise<{ session_id: string; authorization_url: string }> => {
-    // ...
-    const data = await callEnableBankingFunction("create_session", {
-      redirect_uri: redirectUri,
-      aspsp_country: aspspCountry,
-      aspsp_name: aspspName,
-      psu_type: psuType || "personal",  // Passa il tipo
-    });
-    return data;
-  },
-  [callEnableBankingFunction]
-);
-```
+Right now after sync we update the local `accounts` state with `data.account`. That’s fine, but for maximum reliability:
+- After a successful `syncAccount`, call `fetchAccounts()` (or, at least, ensure the returned `data.account.status` is reflected).
+- This ensures the UI always matches the DB (especially if the edge function updates more fields than the local object includes).
 
----
+This is aligned with the proven pattern: “invalidate/refetch after mutation”.
 
-### 3. Edge Function: Usare psu_type dinamico
-**File:** `supabase/functions/enable-banking/index.ts`
+## How we’ll verify it works (step-by-step tests)
+1. In `/conti-bancari`, click **Aggiorna**:
+   - Expect: “Conti attivi” becomes **4** (or at least >0), not 0.
+2. Click **Sincronizza** on one FinecoBank card:
+   - Expect a toast: “Sincronizzazione completata”
+   - Expect status badge becomes “Attivo” after completion.
+3. Go to **Transazioni** page:
+   - Expect transactions to appear after a successful sync (if the bank returns them).
+4. If balances remain 0:
+   - Check edge logs to confirm whether FinecoBank is returning balances and in which field shape; then we can adapt mapping if needed.
 
-**A. Aggiornare l'interfaccia request:**
-```typescript
-interface EnableBankingRequest {
-  action: string;
-  // ... altri campi
-  psu_type?: "personal" | "business";
-}
-```
+## Potential edge cases
+- FinecoBank multicurrency sub-accounts may legitimately have 0 balance in some currencies.
+- Some banks return transactions in separate “booked/pending” arrays rather than a single `transactions` array. If logs show this, we’ll adapt parsing accordingly.
+- If consent is limited (AIS without balances), balances may be unavailable; in that case we should still mark `active` but show “Saldo non disponibile” instead of forcing pending. (We can add that UI nuance if needed after we confirm the API behavior.)
 
-**B. Modificare la funzione `createSession`:**
-```typescript
-async function createSession(
-  redirectUri: string,
-  aspspCountry: string,
-  aspspName: string,
-  psuType: string = "personal"  // Nuovo parametro con default
-): Promise<{ session_id: string; authorization_url: string }> {
-  const authData = {
-    access: {
-      valid_until: validUntil,
-    },
-    aspsp: {
-      country: aspspCountry,
-      name: aspspName,
-    },
-    state: crypto.randomUUID(),
-    redirect_url: redirectUri,
-    psu_type: psuType,  // Usa il valore passato invece di hardcodato "personal"
-  };
-  // ...
-}
-```
-
-**C. Aggiornare il case switch:**
-```typescript
-case "create_session":
-  // ...
-  result = await createSession(
-    body.redirect_uri, 
-    body.aspsp_country, 
-    body.aspsp_name, 
-    body.psu_type || "personal"  // Passa psu_type
-  );
-  break;
-```
-
----
-
-## Riepilogo File da Modificare
-
-| File | Modifica |
-|------|----------|
-| `src/components/conti-bancari/ConnectBankModal.tsx` | Aggiungere selector tipo conto (Privato/Aziendale) |
-| `src/hooks/useEnableBanking.ts` | Passare `psu_type` a `create_session` |
-| `supabase/functions/enable-banking/index.ts` | Usare `psu_type` dinamico invece di "personal" hardcodato |
-
----
-
-## Test dopo la modifica
-1. Elimina il conto BCC di Cherasco esistente
-2. Clicca "Collega nuovo conto"
-3. Seleziona Italia > BCC di Cherasco
-4. **Seleziona "Conto Aziendale"** nel nuovo selector
-5. Completa il flusso di autorizzazione
-6. Verifica se la sincronizzazione ora funziona
-
----
-
-## Nota
-Se dopo questa modifica l'errore persiste, il problema è effettivamente lato banca (BCC di Cherasco potrebbe avere problemi temporanei con la loro implementazione PSD2). In quel caso, l'unica opzione è:
-- Riprovare più tardi
-- Contattare Enable Banking per verificare lo stato dell'integrazione con BCC di Cherasco
-- Provare con un'altra banca per verificare che l'integrazione funzioni
-
+## Items I may need from you (only if verification still fails)
+- Whether you clicked “Sincronizza” and what toast/error you see
+- A timestamp of a sync attempt so we can pinpoint the correct edge logs
