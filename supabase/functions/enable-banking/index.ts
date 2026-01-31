@@ -188,6 +188,131 @@ interface EnableBankingAccount {
   cash_account_type?: string;
 }
 
+// Helper to safely parse amounts (handles string/number from PSD2 APIs)
+const toNumber = (value: unknown): number => {
+  if (typeof value === "number") return value;
+  if (typeof value === "string") {
+    const parsed = parseFloat(value);
+    return isNaN(parsed) ? 0 : parsed;
+  }
+  return 0;
+};
+
+// Reusable function to sync transactions for an account
+// This is used both by syncAccount action and auto-sync after connection
+async function syncAccountTransactions(
+  dbAccountId: string,
+  enableBankingUid: string,
+  startDate: string,
+  endDate: string,
+  // deno-lint-ignore no-explicit-any
+  supabase: any
+): Promise<{ transactions_synced: number }> {
+  console.log(`[Enable Banking] syncAccountTransactions: ${enableBankingUid} from ${startDate} to ${endDate}`);
+  
+  // Define transaction type for Enable Banking API (PSD2/ISO 20022)
+  interface EnableBankingTransaction {
+    transaction_id: string;
+    entry_reference?: string;
+    merchant_category_code?: string;
+    transaction_amount: { amount: string | number; currency: string };
+    creditor?: { name?: string };
+    creditor_account?: { iban?: string };
+    debtor?: { name?: string };
+    debtor_account?: { iban?: string };
+    bank_transaction_code?: { description?: string; code?: string };
+    credit_debit_indicator?: "CRDT" | "DBIT";
+    status?: "BOOK" | "PDNG" | string;
+    booking_date: string;
+    value_date?: string;
+    transaction_date?: string;
+    balance_after_transaction?: { amount: string | number; currency: string };
+    reference_number?: string;
+    remittance_information?: string[];
+    note?: string;
+    creditor_name?: string;
+    debtor_name?: string;
+  }
+  
+  // Fetch all transactions with pagination
+  let allTransactions: EnableBankingTransaction[] = [];
+  let continuationKey: string | undefined;
+  let pageCount = 0;
+  const maxPages = 50;
+  
+  do {
+    pageCount++;
+    const url = `/accounts/${enableBankingUid}/transactions?date_from=${startDate}&date_to=${endDate}` +
+      (continuationKey ? `&continuation_key=${encodeURIComponent(continuationKey)}` : "");
+    
+    console.log(`[Enable Banking] Fetching transactions page ${pageCount}...`);
+    
+    const transactionsResponse = await enableBankingRequest(url) as {
+      transactions?: EnableBankingTransaction[];
+      continuation_key?: string;
+      booked?: EnableBankingTransaction[];
+      pending?: EnableBankingTransaction[];
+    };
+    
+    const transactions = transactionsResponse.transactions || 
+      [...(transactionsResponse.booked || []), ...(transactionsResponse.pending || [])];
+    
+    if (transactions.length > 0) {
+      allTransactions.push(...transactions);
+      console.log(`[Enable Banking] Page ${pageCount}: ${transactions.length} transactions (total: ${allTransactions.length})`);
+    }
+    
+    continuationKey = transactionsResponse.continuation_key;
+  } while (continuationKey && pageCount < maxPages);
+  
+  console.log(`[Enable Banking] Total transactions fetched: ${allTransactions.length} in ${pageCount} pages`);
+  
+  let transactionsSynced = 0;
+  
+  for (const tx of allTransactions) {
+    const transactionData = {
+      bank_account_id: dbAccountId,
+      plaid_transaction_id: tx.transaction_id,
+      amount: toNumber(tx.transaction_amount?.amount),
+      currency: tx.transaction_amount?.currency || "EUR",
+      date: tx.booking_date,
+      value_date: tx.value_date || null,
+      transaction_date: tx.transaction_date || null,
+      name: tx.remittance_information?.join(" ") || 
+            tx.creditor?.name || tx.creditor_name ||
+            tx.debtor?.name || tx.debtor_name || 
+            "Transazione",
+      merchant_name: tx.creditor?.name || tx.creditor_name || 
+                    tx.debtor?.name || tx.debtor_name || null,
+      creditor_name: tx.creditor?.name || tx.creditor_name || null,
+      creditor_iban: tx.creditor_account?.iban || null,
+      debtor_name: tx.debtor?.name || tx.debtor_name || null,
+      debtor_iban: tx.debtor_account?.iban || null,
+      credit_debit_indicator: tx.credit_debit_indicator || null,
+      pending: tx.status === "PDNG",
+      mcc_code: tx.merchant_category_code || null,
+      bank_tx_code: tx.bank_transaction_code?.code || null,
+      bank_tx_description: tx.bank_transaction_code?.description || null,
+      reference_number: tx.reference_number || null,
+      balance_after: tx.balance_after_transaction ? toNumber(tx.balance_after_transaction.amount) : null,
+      entry_reference: tx.entry_reference || null,
+      raw_data: tx,
+    };
+    
+    const { error } = await supabase
+      .from("bank_transactions")
+      .upsert(transactionData, { onConflict: "plaid_transaction_id" });
+    
+    if (!error) {
+      transactionsSynced++;
+    } else {
+      console.error(`[Enable Banking] Error upserting transaction ${tx.transaction_id}:`, error.message);
+    }
+  }
+  
+  return { transactions_synced: transactionsSynced };
+}
+
 // Complete the authorization after user returns with code
 async function completeSession(code: string, userId?: string | null): Promise<{ accounts: unknown[] }> {
   console.log(`[Enable Banking] Completing session with code: ${code.substring(0, 20)}...`);
@@ -198,7 +323,6 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
   }
   
   // Exchange the authorization code for a session
-  // The POST /sessions endpoint returns session_id AND accounts directly
   const session = await enableBankingRequest("/sessions", "POST", { code }) as {
     session_id: string;
     accounts?: EnableBankingAccount[];
@@ -215,7 +339,6 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
   console.log("[Enable Banking] POST /sessions FULL RESPONSE:", JSON.stringify(session));
   console.log("[Enable Banking] Accounts in response:", session.accounts?.length || 0);
   
-  // Get accounts from the session response directly
   let accounts: EnableBankingAccount[] = session.accounts || [];
   
   // Fallback: if accounts are not in the initial response, fetch session details
@@ -238,13 +361,11 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
       console.log("[Enable Banking] Session details accounts:", sessionDetails.accounts?.length || 0);
       console.log("[Enable Banking] Session details accounts_data:", sessionDetails.accounts_data?.length || 0);
       
-      // Get account IDs from either accounts or accounts_data
       const accountIds: string[] = sessionDetails.accounts || 
         (sessionDetails.accounts_data?.map(a => a.uid) || []);
       
       console.log("[Enable Banking] Account IDs to process:", accountIds);
       
-      // If we have account IDs, fetch details for each
       if (accountIds.length > 0) {
         for (const accountId of accountIds) {
           try {
@@ -258,7 +379,6 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
             }
           } catch (e) {
             console.log(`[Enable Banking] Could not fetch details for account ${accountId}:`, e);
-            // Still add basic account info
             accounts.push({ uid: accountId });
           }
         }
@@ -271,17 +391,8 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
   console.log(`[Enable Banking] Processing ${accounts.length} accounts`);
   
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  const savedAccounts: unknown[] = [];
-  
-  // Helper to safely parse amounts (handles string/number from PSD2 APIs)
-  const toNumber = (value: unknown): number => {
-    if (typeof value === "number") return value;
-    if (typeof value === "string") {
-      const parsed = parseFloat(value);
-      return isNaN(parsed) ? 0 : parsed;
-    }
-    return 0;
-  };
+  // deno-lint-ignore no-explicit-any
+  const savedAccounts: any[] = [];
 
   for (const account of accounts) {
     // Get account balances
@@ -305,11 +416,9 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
       if (balancesResponse.balances && balancesResponse.balances.length > 0) {
         for (const balance of balancesResponse.balances) {
           const amount = toNumber(balance.balance_amount?.amount);
-          // Current balance: closingBooked, interimBooked, OR ISO 20022 codes CLBD, ITBD
           if (["closingBooked", "interimBooked", "CLBD", "ITBD"].includes(balance.balance_type)) {
             currentBalance = amount;
           }
-          // Available balance: interimAvailable, expected, OR ISO 20022 codes ITAV, CLAV, FWAV
           if (["interimAvailable", "expected", "ITAV", "CLAV", "FWAV"].includes(balance.balance_type)) {
             availableBalance = amount;
           }
@@ -321,14 +430,9 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
     } catch (e) {
       console.error("[Enable Banking] FAILED to fetch balances for account", account.uid, ":", e);
       balanceFetchFailed = true;
-      // Continue with balance = 0, but we'll mark the account as pending
     }
     
     const iban = account.iban || account.account_id?.iban || null;
-    
-    // Set status based on whether we successfully fetched balances
-    // "pending" = balance fetch failed (API error)
-    // "active" = API call succeeded (even if balance is 0)
     const accountStatus = balanceFetchFailed ? "pending" : "active";
     
     console.log(`[Enable Banking] Account ${account.uid} status: ${accountStatus} (balanceFetchFailed=${balanceFetchFailed})`);
@@ -389,6 +493,66 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
   }
   
   console.log(`[Enable Banking] Saved ${savedAccounts.length} accounts for user ${userId}`);
+  
+  // ============ AUTO-SYNC TRANSACTIONS FOR NEW ACCOUNTS ============
+  console.log("[Enable Banking] Starting auto-sync of transactions for new accounts...");
+  
+  for (const savedAccount of savedAccounts) {
+    try {
+      const accountUid = savedAccount.plaid_account_id;
+      
+      // Default to 90 days (safe for most banks)
+      const endDate = new Date().toISOString().split("T")[0];
+      let startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+      
+      console.log(`[Enable Banking] Auto-syncing ${savedAccount.bank_name} (${accountUid}) from ${startDate} to ${endDate}`);
+      
+      let syncResult: { transactions_synced: number };
+      
+      try {
+        // Try 365 days first (fresh consent may allow more history)
+        const extendedStartDate = new Date(Date.now() - 365 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+        syncResult = await syncAccountTransactions(
+          savedAccount.id,
+          accountUid,
+          extendedStartDate,
+          endDate,
+          supabase
+        );
+      } catch (syncError) {
+        const syncErrorMsg = syncError instanceof Error ? syncError.message : String(syncError);
+        
+        // If 422 period error, fallback to 90 days
+        if (syncErrorMsg.includes("422") || syncErrorMsg.includes("WRONG_TRANSACTIONS_PERIOD")) {
+          console.log(`[Enable Banking] 365-day auto-sync failed, falling back to 90 days`);
+          syncResult = await syncAccountTransactions(
+            savedAccount.id,
+            accountUid,
+            startDate,
+            endDate,
+            supabase
+          );
+        } else {
+          throw syncError;
+        }
+      }
+      
+      console.log(`[Enable Banking] Auto-synced ${syncResult.transactions_synced} transactions for ${savedAccount.bank_name}`);
+      
+      // Update last_sync_at after successful auto-sync
+      await supabase
+        .from("bank_accounts")
+        .update({ last_sync_at: new Date().toISOString() })
+        .eq("id", savedAccount.id);
+        
+    } catch (syncError) {
+      // Log but don't fail the whole operation - account is still connected
+      console.error(`[Enable Banking] Auto-sync FAILED for ${savedAccount.bank_name}:`, syncError);
+      // Account remains connected, user can sync manually later
+    }
+  }
+  
+  console.log("[Enable Banking] Auto-sync complete for all accounts");
   
   return { accounts: savedAccounts };
 }
@@ -458,16 +622,6 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
   }
   
   const accountUid = account.plaid_account_id;
-  
-  // Helper to safely parse amounts (handles string/number from PSD2 APIs)
-  const toNumber = (value: unknown): number => {
-    if (typeof value === "number") return value;
-    if (typeof value === "string") {
-      const parsed = parseFloat(value);
-      return isNaN(parsed) ? 0 : parsed;
-    }
-    return 0;
-  };
 
   try {
     // Get account balances
@@ -489,11 +643,9 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
     if (balancesResponse.balances && balancesResponse.balances.length > 0) {
       for (const balance of balancesResponse.balances) {
         const amount = toNumber(balance.balance_amount?.amount);
-        // Current balance: closingBooked, interimBooked, OR ISO 20022 codes CLBD, ITBD
         if (["closingBooked", "interimBooked", "CLBD", "ITBD"].includes(balance.balance_type)) {
           currentBalance = amount;
         }
-        // Available balance: interimAvailable, expected, OR ISO 20022 codes ITAV, CLAV, FWAV
         if (["interimAvailable", "expected", "ITAV", "CLAV", "FWAV"].includes(balance.balance_type)) {
           availableBalance = amount;
         }
@@ -517,131 +669,21 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
     
     console.log(`[Enable Banking] Fetching transactions from ${startDate} to ${endDate}`);
     
-    // Define transaction type for Enable Banking API (PSD2/ISO 20022)
-    interface EnableBankingTransaction {
-      transaction_id: string;
-      entry_reference?: string;
-      merchant_category_code?: string;
-      transaction_amount: { amount: string | number; currency: string };
-      creditor?: { name?: string };
-      creditor_account?: { iban?: string };
-      debtor?: { name?: string };
-      debtor_account?: { iban?: string };
-      bank_transaction_code?: { description?: string; code?: string };
-      credit_debit_indicator?: "CRDT" | "DBIT";
-      status?: "BOOK" | "PDNG" | string;
-      booking_date: string;
-      value_date?: string;
-      transaction_date?: string;
-      balance_after_transaction?: { amount: string | number; currency: string };
-      reference_number?: string;
-      remittance_information?: string[];
-      note?: string;
-      // Legacy field names (some ASPSPs use these)
-      creditor_name?: string;
-      debtor_name?: string;
-    }
-    
-    // Fetch all transactions with pagination and fallback for period errors
-    let allTransactions: EnableBankingTransaction[] = [];
-    let continuationKey: string | undefined;
-    let pageCount = 0;
-    const maxPages = 50; // Safety limit
-    
-    // Helper function to fetch transactions with a given date range
-    const fetchTransactionsForPeriod = async (fromDate: string, toDate: string): Promise<void> => {
-      allTransactions = [];
-      continuationKey = undefined;
-      pageCount = 0;
-      
-      do {
-        pageCount++;
-        const url = `/accounts/${accountUid}/transactions?date_from=${fromDate}&date_to=${toDate}` +
-          (continuationKey ? `&continuation_key=${encodeURIComponent(continuationKey)}` : "");
-        
-        console.log(`[Enable Banking] Fetching transactions page ${pageCount}...`);
-        
-        const transactionsResponse = await enableBankingRequest(url) as {
-          transactions?: EnableBankingTransaction[];
-          continuation_key?: string;
-          booked?: EnableBankingTransaction[];
-          pending?: EnableBankingTransaction[];
-        };
-        
-        // Handle different response formats
-        const transactions = transactionsResponse.transactions || 
-          [...(transactionsResponse.booked || []), ...(transactionsResponse.pending || [])];
-        
-        if (transactions.length > 0) {
-          allTransactions.push(...transactions);
-          console.log(`[Enable Banking] Page ${pageCount}: ${transactions.length} transactions (total: ${allTransactions.length})`);
-        }
-        
-        continuationKey = transactionsResponse.continuation_key;
-      } while (continuationKey && pageCount < maxPages);
-    };
+    let syncResult: { transactions_synced: number };
     
     try {
-      await fetchTransactionsForPeriod(startDate, endDate);
+      // Use the reusable syncAccountTransactions function
+      syncResult = await syncAccountTransactions(accountId, accountUid, startDate, endDate, supabase);
     } catch (txError) {
       const txErrorMsg = txError instanceof Error ? txError.message : String(txError);
       
-      // If 422 WRONG_TRANSACTIONS_PERIOD error and we tried 365 days, fallback to 90 days
+      // If 422 period error and we tried 365 days, fallback to 90 days
       if ((txErrorMsg.includes("422") || txErrorMsg.includes("WRONG_TRANSACTIONS_PERIOD")) && tryExtendedPeriod) {
         console.log(`[Enable Banking] 365-day period rejected by ASPSP, falling back to 90 days`);
         startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-        await fetchTransactionsForPeriod(startDate, endDate);
+        syncResult = await syncAccountTransactions(accountId, accountUid, startDate, endDate, supabase);
       } else {
-        // Re-throw other errors
         throw txError;
-      }
-    }
-    
-    console.log(`[Enable Banking] Total transactions fetched: ${allTransactions.length} in ${pageCount} pages`);
-    
-    let transactionsSynced = 0;
-    
-    for (const tx of allTransactions) {
-      // Build complete transaction data with all available fields
-      const transactionData = {
-        bank_account_id: accountId,
-        plaid_transaction_id: tx.transaction_id,
-        amount: toNumber(tx.transaction_amount?.amount),
-        currency: tx.transaction_amount?.currency || "EUR",
-        date: tx.booking_date,
-        value_date: tx.value_date || null,
-        transaction_date: tx.transaction_date || null,
-        name: tx.remittance_information?.join(" ") || 
-              tx.creditor?.name || tx.creditor_name ||
-              tx.debtor?.name || tx.debtor_name || 
-              "Transazione",
-        merchant_name: tx.creditor?.name || tx.creditor_name || 
-                      tx.debtor?.name || tx.debtor_name || null,
-        creditor_name: tx.creditor?.name || tx.creditor_name || null,
-        creditor_iban: tx.creditor_account?.iban || null,
-        debtor_name: tx.debtor?.name || tx.debtor_name || null,
-        debtor_iban: tx.debtor_account?.iban || null,
-        credit_debit_indicator: tx.credit_debit_indicator || null,
-        pending: tx.status === "PDNG",
-        mcc_code: tx.merchant_category_code || null,
-        bank_tx_code: tx.bank_transaction_code?.code || null,
-        bank_tx_description: tx.bank_transaction_code?.description || null,
-        reference_number: tx.reference_number || null,
-        balance_after: tx.balance_after_transaction ? toNumber(tx.balance_after_transaction.amount) : null,
-        entry_reference: tx.entry_reference || null,
-        raw_data: tx, // Store full response for debugging
-      };
-      
-      const { error } = await supabase
-        .from("bank_transactions")
-        .upsert(transactionData, { 
-          onConflict: "plaid_transaction_id",
-        });
-      
-      if (!error) {
-        transactionsSynced++;
-      } else {
-        console.error(`[Enable Banking] Error upserting transaction ${tx.transaction_id}:`, error.message);
       }
     }
     
@@ -663,9 +705,9 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
       throw updateError;
     }
     
-    console.log(`[Enable Banking] Sync complete: ${transactionsSynced} transactions, status=active`);
+    console.log(`[Enable Banking] Sync complete: ${syncResult.transactions_synced} transactions, status=active`);
     
-    return { account: updatedAccount, transactions_synced: transactionsSynced };
+    return { account: updatedAccount, transactions_synced: syncResult.transactions_synced };
   } catch (error) {
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("[Enable Banking] Sync error:", errorMessage);
