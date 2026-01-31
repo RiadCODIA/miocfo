@@ -185,7 +185,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[600px]">
         <DialogHeader>
           <DialogTitle>
             {step === "select_bank" && "Seleziona la tua banca"}
