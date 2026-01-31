@@ -212,6 +212,7 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
   };
   
   console.log("[Enable Banking] Session created:", session.session_id);
+  console.log("[Enable Banking] POST /sessions FULL RESPONSE:", JSON.stringify(session));
   console.log("[Enable Banking] Accounts in response:", session.accounts?.length || 0);
   
   // Get accounts from the session response directly
@@ -224,19 +225,31 @@ async function completeSession(code: string, userId?: string | null): Promise<{ 
     try {
       const sessionDetails = await enableBankingRequest(`/sessions/${session.session_id}`) as {
         accounts?: string[];
+        accounts_data?: Array<{ uid: string; identification_hash?: string }>;
         aspsp?: {
           name: string;
           country: string;
         };
+        status?: string;
       };
       
+      console.log("[Enable Banking] GET /sessions FULL RESPONSE:", JSON.stringify(sessionDetails));
+      console.log("[Enable Banking] Session status:", sessionDetails.status);
       console.log("[Enable Banking] Session details accounts:", sessionDetails.accounts?.length || 0);
+      console.log("[Enable Banking] Session details accounts_data:", sessionDetails.accounts_data?.length || 0);
+      
+      // Get account IDs from either accounts or accounts_data
+      const accountIds: string[] = sessionDetails.accounts || 
+        (sessionDetails.accounts_data?.map(a => a.uid) || []);
+      
+      console.log("[Enable Banking] Account IDs to process:", accountIds);
       
       // If we have account IDs, fetch details for each
-      if (sessionDetails.accounts && sessionDetails.accounts.length > 0) {
-        for (const accountId of sessionDetails.accounts) {
+      if (accountIds.length > 0) {
+        for (const accountId of accountIds) {
           try {
             const accountDetails = await enableBankingRequest(`/accounts/${accountId}/details`) as EnableBankingAccount;
+            console.log(`[Enable Banking] Account ${accountId} details:`, JSON.stringify(accountDetails));
             if (accountDetails) {
               accounts.push({
                 ...accountDetails,
