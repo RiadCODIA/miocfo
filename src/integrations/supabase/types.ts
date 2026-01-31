@@ -234,55 +234,97 @@ export type Database = {
           ai_category_id: string | null
           ai_confidence: number | null
           amount: number
+          balance_after: number | null
           bank_account_id: string
+          bank_tx_code: string | null
+          bank_tx_description: string | null
           category: string[] | null
           category_confirmed: boolean | null
           created_at: string
+          credit_debit_indicator: string | null
+          creditor_iban: string | null
+          creditor_name: string | null
           currency: string | null
           date: string
+          debtor_iban: string | null
+          debtor_name: string | null
+          entry_reference: string | null
           id: string
+          mcc_code: string | null
           merchant_name: string | null
           name: string
           payment_channel: string | null
           pending: boolean | null
           plaid_transaction_id: string
+          raw_data: Json | null
+          reference_number: string | null
+          transaction_date: string | null
           transaction_type: string | null
+          value_date: string | null
         }
         Insert: {
           ai_category_id?: string | null
           ai_confidence?: number | null
           amount: number
+          balance_after?: number | null
           bank_account_id: string
+          bank_tx_code?: string | null
+          bank_tx_description?: string | null
           category?: string[] | null
           category_confirmed?: boolean | null
           created_at?: string
+          credit_debit_indicator?: string | null
+          creditor_iban?: string | null
+          creditor_name?: string | null
           currency?: string | null
           date: string
+          debtor_iban?: string | null
+          debtor_name?: string | null
+          entry_reference?: string | null
           id?: string
+          mcc_code?: string | null
           merchant_name?: string | null
           name: string
           payment_channel?: string | null
           pending?: boolean | null
           plaid_transaction_id: string
+          raw_data?: Json | null
+          reference_number?: string | null
+          transaction_date?: string | null
           transaction_type?: string | null
+          value_date?: string | null
         }
         Update: {
           ai_category_id?: string | null
           ai_confidence?: number | null
           amount?: number
+          balance_after?: number | null
           bank_account_id?: string
+          bank_tx_code?: string | null
+          bank_tx_description?: string | null
           category?: string[] | null
           category_confirmed?: boolean | null
           created_at?: string
+          credit_debit_indicator?: string | null
+          creditor_iban?: string | null
+          creditor_name?: string | null
           currency?: string | null
           date?: string
+          debtor_iban?: string | null
+          debtor_name?: string | null
+          entry_reference?: string | null
           id?: string
+          mcc_code?: string | null
           merchant_name?: string | null
           name?: string
           payment_channel?: string | null
           pending?: boolean | null
           plaid_transaction_id?: string
+          raw_data?: Json | null
+          reference_number?: string | null
+          transaction_date?: string | null
           transaction_type?: string | null
+          value_date?: string | null
         }
         Relationships: [
           {
