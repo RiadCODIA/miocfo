@@ -1,113 +1,154 @@
 
-## Cosa sta succedendo (in parole semplici)
-Il redirect ora funziona, quindi il collegamento “tecnico” è ok.  
-Però quando provi a sincronizzare, Enable Banking risponde con un errore della banca (**ASPSP_ERROR**), quindi non riesce a leggere saldi/movimenti → saldo resta **0** e la sincronizzazione fallisce.
 
-In più, l’errore che vedi in app è troppo generico (“Errore nella chiamata Enable Banking”) perché il frontend non riesce sempre a “estrarre” il messaggio reale dal body della risposta. E la card può restare in stato “In sincronizzazione” anche se nel DB è già diventata “error”, perché dopo il fallimento non stiamo ricaricando i conti.
+## Piano: Correggere il tipo di PSU per conti aziendali
 
----
+### Problema Identificato
+La sincronizzazione fallisce con `ASPSP_ERROR` perché stiamo inviando `psu_type: "personal"` a Enable Banking, ma stai collegando un **conto aziendale**. Alcune banche (come BCC di Cherasco) richiedono che il parametro `psu_type` corrisponda correttamente al tipo di conto.
 
-## Obiettivo
-1) Mostrare un messaggio d’errore **chiaro e utile** (es. “Errore banca ASPSP_ERROR: …”) invece di quello generico.  
-2) Aggiornare la UI **subito dopo l’errore** (badge e bottoni coerenti con lo stato reale).  
-3) Evitare che i bottoni rimangano “bloccati” se la sync fallisce.  
-4) (Opzionale ma consigliato) Permettere “Riprova sincronizzazione” anche se lo stato è `error`, oltre a “Ricollega”.
+Dalla documentazione Enable Banking API (`POST /auth`):
+```json
+{
+  "psu_type": "business"  // oppure "personal"
+}
+```
 
----
-
-## Diagnosi tecnica (basata sui log)
-Nei log della Edge Function `enable-banking` risulta:
-- `Enable Banking API error: 400 - {... "error":"ASPSP_ERROR" ...}`
-- poi la funzione attuale maschera il motivo reale e rilancia sempre:  
-  **"Failed to sync account. The connection may have expired."**
-- infine la funzione aggiorna `bank_accounts.status = "error"`.
-
-Quindi:
-- il problema principale è lato banca/provider (ASPSP_ERROR), ma noi possiamo:
-  - comunicare meglio cosa significa
-  - guidare l’utente su cosa fare (riprova / ricollega)
-  - rendere la UI coerente con lo stato DB
+### Soluzione Proposta
+Aggiungere la possibilità di selezionare il tipo di conto (personale/aziendale) nel modal di connessione, e passare il valore corretto a Enable Banking.
 
 ---
 
-## Modifiche previste (codice)
+## Modifiche Tecniche
 
-### 1) Edge Function: messaggi più specifici e stato più coerente
-**File:** `supabase/functions/enable-banking/index.ts`
+### 1. Modal di Connessione: Aggiungere selezione tipo conto
+**File:** `src/components/conti-bancari/ConnectBankModal.tsx`
 
-Intervento su `syncAccount(...){ ... } catch (error) { ... }`:
-- Leggere `error.message` originale.
-- Se contiene `ASPSP_ERROR` (o “Error interacting with ASPSP”):
-  - Restituire un errore più utile, ad esempio:
-    - `Errore banca (ASPSP_ERROR): la banca non ha risposto correttamente tramite PSD2. Riprova più tardi.`
-- Se contiene 401/403 (consenso scaduto / revocato):
-  - Aggiornare status a `disconnected` invece che `error`
-  - Messaggio:
-    - `Consenso scaduto o revocato: premi "Ricollega".`
-- Continuare ad aggiornare `bank_accounts.status` nel DB, ma con distinzione `error` vs `disconnected` (quando possibile).
+Aggiungere un selector per il tipo di conto (Privato / Aziendale) nella schermata di selezione banca, prima del pulsante "Continua":
 
-Risultato: il frontend riceverà un `{"error":"...messaggio chiaro..."}` e potrà mostrarlo.
+```typescript
+// Nuovo stato
+const [psuType, setPsuType] = useState<"personal" | "business">("business"); // Default business
+
+// Nuova UI - Radio buttons o Select
+<div className="space-y-2">
+  <Label>Tipo di conto</Label>
+  <Select value={psuType} onValueChange={(v) => setPsuType(v as "personal" | "business")}>
+    <SelectTrigger>
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent>
+      <SelectItem value="personal">Conto Privato</SelectItem>
+      <SelectItem value="business">Conto Aziendale</SelectItem>
+    </SelectContent>
+  </Select>
+</div>
+```
+
+Passare `psuType` alla funzione `createSession`.
 
 ---
 
-### 2) Frontend hook: parsing errori robusto + refresh dopo fallimento sync
+### 2. Hook Enable Banking: Passare psu_type
 **File:** `src/hooks/useEnableBanking.ts`
 
-**A. Error parsing**
-In `callEnableBankingFunction`:
-- Gestire `error.context.body` anche quando:
-  - non è JSON
-  - oppure è già un oggetto
-- Se JSON.parse fallisce, usare direttamente `ctx.body` come stringa (così non rimaniamo col messaggio generico).
+Modificare `createSession` per accettare e passare il parametro `psu_type`:
 
-**B. Refresh UI dopo errore**
-In `syncAccount` (catch):
-- Dopo aver mostrato il toast, chiamare `fetchAccounts()` (best-effort) per riallineare badge/stato/bottoni con il DB (che viene aggiornato a `error`/`disconnected` nella edge function).
-
-Questo risolve il caso che vedi ora: badge “In sincronizzazione” ma in realtà il record è già `error`.
-
----
-
-### 3) UI Card: niente “loading bloccato” e azioni coerenti quando fallisce
-**File:** `src/components/conti-bancari/BankAccountCard.tsx`
-
-- Mettere `handleSync/handleTest/handleReconnect` in `try/finally` per spegnere sempre `isSyncing/isTesting/isReconnecting`, anche se `onSync` lancia errore.
-- (Consigliato) Quando `status === "error"`:
-  - mostrare **sia** “Ricollega” **sia** “Riprova” (che richiama `onSync`), così se è un problema temporaneo lato banca l’utente può riprovare senza rifare tutto il consenso.
-- Quando `status === "disconnected"`:
-  - mostrare principalmente “Ricollega” (ha senso perché è tipicamente un problema di consenso).
-
----
-
-### 4) Pagina Conti: supportare anche lo stato `disconnected`
-**File:** `src/pages/ContiBancari.tsx`
-
-- Sistemare `mapAccountToCard` per includere correttamente anche `disconnected` (oggi il cast non lo include), così se la edge function imposta `disconnected` la UI lo mostra e presenta le azioni corrette.
+```typescript
+const createSession = useCallback(
+  async (
+    redirectUri: string,
+    aspspCountry?: string,
+    aspspName?: string,
+    psuType?: "personal" | "business"  // Nuovo parametro
+  ): Promise<{ session_id: string; authorization_url: string }> => {
+    // ...
+    const data = await callEnableBankingFunction("create_session", {
+      redirect_uri: redirectUri,
+      aspsp_country: aspspCountry,
+      aspsp_name: aspspName,
+      psu_type: psuType || "personal",  // Passa il tipo
+    });
+    return data;
+  },
+  [callEnableBankingFunction]
+);
+```
 
 ---
 
-## Come verifichiamo che è risolto (test rapido)
-1) Vai su **/conti-bancari**.
-2) Clicca **Sincronizza** su BCC di Cherasco.
-3) Atteso:
-   - Il toast mostra un messaggio chiaro tipo **“Errore banca (ASPSP_ERROR) …”** (non più generico).
-   - La card si aggiorna dopo poco (grazie a `fetchAccounts()` in catch):
-     - badge passa a **“Riconnessione richiesta”** o **“Disconnesso”** (a seconda del caso)
-     - compaiono i bottoni coerenti (Ricollega e/o Riprova)
-   - I bottoni non restano bloccati in loading.
+### 3. Edge Function: Usare psu_type dinamico
+**File:** `supabase/functions/enable-banking/index.ts`
+
+**A. Aggiornare l'interfaccia request:**
+```typescript
+interface EnableBankingRequest {
+  action: string;
+  // ... altri campi
+  psu_type?: "personal" | "business";
+}
+```
+
+**B. Modificare la funzione `createSession`:**
+```typescript
+async function createSession(
+  redirectUri: string,
+  aspspCountry: string,
+  aspspName: string,
+  psuType: string = "personal"  // Nuovo parametro con default
+): Promise<{ session_id: string; authorization_url: string }> {
+  const authData = {
+    access: {
+      valid_until: validUntil,
+    },
+    aspsp: {
+      country: aspspCountry,
+      name: aspspName,
+    },
+    state: crypto.randomUUID(),
+    redirect_url: redirectUri,
+    psu_type: psuType,  // Usa il valore passato invece di hardcodato "personal"
+  };
+  // ...
+}
+```
+
+**C. Aggiornare il case switch:**
+```typescript
+case "create_session":
+  // ...
+  result = await createSession(
+    body.redirect_uri, 
+    body.aspsp_country, 
+    body.aspsp_name, 
+    body.psu_type || "personal"  // Passa psu_type
+  );
+  break;
+```
 
 ---
 
-## Note importanti (limiti reali)
-- **ASPSP_ERROR** è quasi sempre un problema di integrazione banca/PSD2 o un down temporaneo della banca: noi possiamo migliorare UX e diagnosi, ma non possiamo “forzare” la banca a rispondere.
-- Se continua a dare ASPSP_ERROR anche dopo “Ricollega”, spesso l’unica soluzione è:
-  - riprovare dopo qualche ora
-  - oppure aprire ticket con Enable Banking indicando banca + timestamp + ASPSP_ERROR
+## Riepilogo File da Modificare
+
+| File | Modifica |
+|------|----------|
+| `src/components/conti-bancari/ConnectBankModal.tsx` | Aggiungere selector tipo conto (Privato/Aziendale) |
+| `src/hooks/useEnableBanking.ts` | Passare `psu_type` a `create_session` |
+| `supabase/functions/enable-banking/index.ts` | Usare `psu_type` dinamico invece di "personal" hardcodato |
 
 ---
 
-## File coinvolti
-- `supabase/functions/enable-banking/index.ts`
-- `src/hooks/useEnableBanking.ts`
-- `src/components/conti-bancari/BankAccountCard.tsx`
-- `src/pages/ContiBancari.tsx`
+## Test dopo la modifica
+1. Elimina il conto BCC di Cherasco esistente
+2. Clicca "Collega nuovo conto"
+3. Seleziona Italia > BCC di Cherasco
+4. **Seleziona "Conto Aziendale"** nel nuovo selector
+5. Completa il flusso di autorizzazione
+6. Verifica se la sincronizzazione ora funziona
+
+---
+
+## Nota
+Se dopo questa modifica l'errore persiste, il problema è effettivamente lato banca (BCC di Cherasco potrebbe avere problemi temporanei con la loro implementazione PSD2). In quel caso, l'unica opzione è:
+- Riprovare più tardi
+- Contattare Enable Banking per verificare lo stato dell'integrazione con BCC di Cherasco
+- Provare con un'altra banca per verificare che l'integrazione funzioni
+
