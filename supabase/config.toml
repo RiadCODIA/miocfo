@@ -23,3 +23,6 @@ verify_jwt = false
 
 [functions.check-alerts]
 verify_jwt = false
+
+[functions.powens]
+verify_jwt = false
