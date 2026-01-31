@@ -1,154 +1,162 @@
 
 
-## Piano: Correggere il tipo di PSU per conti aziendali
+## Piano: Migliorare il Design del Modal "Seleziona la tua banca"
 
-### Problema Identificato
-La sincronizzazione fallisce con `ASPSP_ERROR` perché stiamo inviando `psu_type: "personal"` a Enable Banking, ma stai collegando un **conto aziendale**. Alcune banche (come BCC di Cherasco) richiedono che il parametro `psu_type` corrisponda correttamente al tipo di conto.
-
-Dalla documentazione Enable Banking API (`POST /auth`):
-```json
-{
-  "psu_type": "business"  // oppure "personal"
-}
-```
-
-### Soluzione Proposta
-Aggiungere la possibilità di selezionare il tipo di conto (personale/aziendale) nel modal di connessione, e passare il valore corretto a Enable Banking.
+### Obiettivo
+Rendere il modal di selezione banca piu moderno, pulito e professionale, con una migliore gerarchia visiva e spaziatura.
 
 ---
 
-## Modifiche Tecniche
+## Miglioramenti Proposti
 
-### 1. Modal di Connessione: Aggiungere selezione tipo conto
-**File:** `src/components/conti-bancari/ConnectBankModal.tsx`
+### 1. Layout Generale
+- Aumentare la larghezza del modal a `sm:max-w-[550px]` per dare piu respiro
+- Rimuovere il contenitore con bordo e sfondo grigio che appesantisce il design
+- Usare una struttura piu ariosa con spaziatura maggiore tra gli elementi
 
-Aggiungere un selector per il tipo di conto (Privato / Aziendale) nella schermata di selezione banca, prima del pulsante "Continua":
+### 2. Header del Modal
+- Aggiungere un'icona decorativa nel header (Building2 o Landmark)
+- Centrare titolo e descrizione per un look piu elegante
 
-```typescript
-// Nuovo stato
-const [psuType, setPsuType] = useState<"personal" | "business">("business"); // Default business
+### 3. Form Fields (Paese e Tipo Conto)
+- Disporre Paese e Tipo di conto su **due colonne affiancate** per risparmiare spazio verticale
+- Usare un design piu minimal per i select (senza bordo pesante)
 
-// Nuova UI - Radio buttons o Select
-<div className="space-y-2">
-  <Label>Tipo di conto</Label>
-  <Select value={psuType} onValueChange={(v) => setPsuType(v as "personal" | "business")}>
-    <SelectTrigger>
-      <SelectValue />
-    </SelectTrigger>
-    <SelectContent>
-      <SelectItem value="personal">Conto Privato</SelectItem>
-      <SelectItem value="business">Conto Aziendale</SelectItem>
-    </SelectContent>
-  </Select>
-</div>
-```
+### 4. Campo Ricerca
+- Aggiungere uno sfondo leggero al campo di ricerca
+- Icona di ricerca piu grande e prominente
 
-Passare `psuType` alla funzione `createSession`.
+### 5. Lista Banche
+- Card delle banche con hover effect piu elegante (shadow + scale)
+- Aggiungere un sottile bordo di separazione tra le banche
+- Stato selezionato piu evidente con bordo primary e sfondo gradient leggero
+- Aggiungere un badge o checkmark quando una banca e selezionata
 
----
+### 6. Bottoni Footer
+- Bottoni con design piu prominente
+- "Continua" con gradiente primary per maggiore enfasi
+- Spaziatura migliore dal contenuto sopra
 
-### 2. Hook Enable Banking: Passare psu_type
-**File:** `src/hooks/useEnableBanking.ts`
-
-Modificare `createSession` per accettare e passare il parametro `psu_type`:
-
-```typescript
-const createSession = useCallback(
-  async (
-    redirectUri: string,
-    aspspCountry?: string,
-    aspspName?: string,
-    psuType?: "personal" | "business"  // Nuovo parametro
-  ): Promise<{ session_id: string; authorization_url: string }> => {
-    // ...
-    const data = await callEnableBankingFunction("create_session", {
-      redirect_uri: redirectUri,
-      aspsp_country: aspspCountry,
-      aspsp_name: aspspName,
-      psu_type: psuType || "personal",  // Passa il tipo
-    });
-    return data;
-  },
-  [callEnableBankingFunction]
-);
-```
+### 7. Stati Loading ed Empty
+- Migliorare l'animazione di loading con un messaggio contestuale
+- Stato "Nessuna banca trovata" con icona e suggerimento
 
 ---
 
-### 3. Edge Function: Usare psu_type dinamico
-**File:** `supabase/functions/enable-banking/index.ts`
+## Dettagli Tecnici
 
-**A. Aggiornare l'interfaccia request:**
-```typescript
-interface EnableBankingRequest {
-  action: string;
-  // ... altri campi
-  psu_type?: "personal" | "business";
-}
-```
+### File da modificare
+`src/components/conti-bancari/ConnectBankModal.tsx`
 
-**B. Modificare la funzione `createSession`:**
-```typescript
-async function createSession(
-  redirectUri: string,
-  aspspCountry: string,
-  aspspName: string,
-  psuType: string = "personal"  // Nuovo parametro con default
-): Promise<{ session_id: string; authorization_url: string }> {
-  const authData = {
-    access: {
-      valid_until: validUntil,
-    },
-    aspsp: {
-      country: aspspCountry,
-      name: aspspName,
-    },
-    state: crypto.randomUUID(),
-    redirect_url: redirectUri,
-    psu_type: psuType,  // Usa il valore passato invece di hardcodato "personal"
-  };
-  // ...
-}
-```
+### Struttura Proposta (step "select_bank")
 
-**C. Aggiornare il case switch:**
-```typescript
-case "create_session":
-  // ...
-  result = await createSession(
-    body.redirect_uri, 
-    body.aspsp_country, 
-    body.aspsp_name, 
-    body.psu_type || "personal"  // Passa psu_type
-  );
-  break;
+```tsx
+{step === "select_bank" && (
+  <div className="flex flex-col h-[500px]">
+    {/* Header con icona */}
+    <div className="flex items-center justify-center pb-4">
+      <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-primary/20 to-accent/20 flex items-center justify-center">
+        <Landmark className="h-7 w-7 text-primary" />
+      </div>
+    </div>
+    
+    {/* Selettori Paese e Tipo su due colonne */}
+    <div className="grid grid-cols-2 gap-4 mb-4">
+      <div className="space-y-2">
+        <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Paese
+        </Label>
+        <Select ...>
+          <SelectTrigger className="h-12 rounded-xl bg-muted/50 border-0 focus:ring-2">
+            ...
+          </SelectTrigger>
+        </Select>
+      </div>
+      <div className="space-y-2">
+        <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          Tipo conto
+        </Label>
+        <Select ...>
+          <SelectTrigger className="h-12 rounded-xl bg-muted/50 border-0 focus:ring-2">
+            ...
+          </SelectTrigger>
+        </Select>
+      </div>
+    </div>
+    
+    {/* Ricerca con design migliorato */}
+    <div className="relative mb-4">
+      <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground" />
+      <Input
+        placeholder="Cerca la tua banca..."
+        className="pl-12 h-12 rounded-xl bg-muted/50 border-0 focus-visible:ring-2 text-base"
+      />
+    </div>
+    
+    {/* Lista banche con card migliorate */}
+    <div className="flex-1 min-h-0 -mx-2">
+      <ScrollArea className="h-full px-2">
+        <div className="space-y-2">
+          {filteredBanks.map((bank) => (
+            <button
+              key={bank.name}
+              onClick={() => handleSelectBank(bank)}
+              className={cn(
+                "w-full flex items-center gap-4 p-4 rounded-xl text-left transition-all duration-200",
+                "hover:shadow-md hover:scale-[1.02] hover:bg-muted/80",
+                selectedBank?.name === bank.name
+                  ? "bg-primary/10 ring-2 ring-primary shadow-md"
+                  : "bg-muted/40"
+              )}
+            >
+              <div className="h-10 w-10 rounded-lg bg-white shadow-sm flex items-center justify-center">
+                <Building2 className="h-5 w-5 text-primary" />
+              </div>
+              <span className="font-semibold text-foreground flex-1">
+                {bank.name}
+              </span>
+              {selectedBank?.name === bank.name && (
+                <CheckCircle2 className="h-5 w-5 text-primary" />
+              )}
+            </button>
+          ))}
+        </div>
+      </ScrollArea>
+    </div>
+    
+    {/* Footer con bottoni prominenti */}
+    <div className="flex gap-3 pt-6 border-t mt-4">
+      <Button variant="ghost" onClick={handleClose} className="flex-1 h-12 rounded-xl">
+        Annulla
+      </Button>
+      <Button
+        onClick={handleProceed}
+        disabled={!selectedBank || isLoading}
+        className="flex-1 h-12 rounded-xl bg-gradient-to-r from-primary to-primary/90 shadow-lg hover:shadow-xl transition-all"
+      >
+        {isLoading && <Loader2 className="h-4 w-4 animate-spin mr-2" />}
+        Continua
+      </Button>
+    </div>
+  </div>
+)}
 ```
 
 ---
 
-## Riepilogo File da Modificare
+## Riepilogo Visivo delle Modifiche
 
-| File | Modifica |
-|------|----------|
-| `src/components/conti-bancari/ConnectBankModal.tsx` | Aggiungere selector tipo conto (Privato/Aziendale) |
-| `src/hooks/useEnableBanking.ts` | Passare `psu_type` a `create_session` |
-| `supabase/functions/enable-banking/index.ts` | Usare `psu_type` dinamico invece di "personal" hardcodato |
-
----
-
-## Test dopo la modifica
-1. Elimina il conto BCC di Cherasco esistente
-2. Clicca "Collega nuovo conto"
-3. Seleziona Italia > BCC di Cherasco
-4. **Seleziona "Conto Aziendale"** nel nuovo selector
-5. Completa il flusso di autorizzazione
-6. Verifica se la sincronizzazione ora funziona
+| Elemento | Attuale | Nuovo Design |
+|----------|---------|--------------|
+| Container form | Box grigio con bordo | Sfondo pulito, no bordo |
+| Paese + Tipo | In colonna (verticale) | In riga (2 colonne) |
+| Select triggers | Standard shadcn | Piu alti (h-12), rounded-xl, sfondo muted |
+| Campo ricerca | Standard | Piu grande, icona prominente |
+| Card banche | Semplice hover | Shadow + scale + checkmark quando selezionata |
+| Bottoni | Standard | Piu alti, rounded-xl, gradiente su "Continua" |
 
 ---
 
-## Nota
-Se dopo questa modifica l'errore persiste, il problema è effettivamente lato banca (BCC di Cherasco potrebbe avere problemi temporanei con la loro implementazione PSD2). In quel caso, l'unica opzione è:
-- Riprovare più tardi
-- Contattare Enable Banking per verificare lo stato dell'integrazione con BCC di Cherasco
-- Provare con un'altra banca per verificare che l'integrazione funzioni
+## File da Modificare
+- `src/components/conti-bancari/ConnectBankModal.tsx`
 
