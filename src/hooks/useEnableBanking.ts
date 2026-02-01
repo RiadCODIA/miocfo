@@ -38,6 +38,19 @@ export interface BankTransaction {
   created_at: string;
 }
 
+export interface DebugTransactionsResult {
+  account_id: string;
+  enable_banking_uid: string;
+  psu_context: { ip: string | null; userAgent: string | null };
+  test_results: Array<{
+    variant: string;
+    params: Record<string, string>;
+    status: number | string;
+    body: unknown;
+    success: boolean;
+  }>;
+}
+
 export function useEnableBanking() {
   const [isLoading, setIsLoading] = useState(false);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
@@ -276,6 +289,22 @@ export function useEnableBanking() {
     [callEnableBankingFunction]
   );
 
+  // Debug transactions - diagnostic action to test different API parameter combinations
+  const debugTransactions = useCallback(
+    async (accountId: string): Promise<DebugTransactionsResult> => {
+      setIsLoading(true);
+      try {
+        const data = await callEnableBankingFunction("debug_transactions", {
+          account_id: accountId,
+        });
+        return data as DebugTransactionsResult;
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [callEnableBankingFunction]
+  );
+
   return {
     isLoading,
     accounts,
@@ -287,5 +316,6 @@ export function useEnableBanking() {
     fetchTransactions,
     removeAccount,
     getASPSPs,
+    debugTransactions,
   };
 }
