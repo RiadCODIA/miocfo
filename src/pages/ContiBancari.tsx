@@ -31,36 +31,29 @@ export default function ContiBancari() {
   };
 
   const handleDebug = async (id: string) => {
-    const { debugTransactions } = await import("@/hooks/useEnableBanking").then(m => {
-      // We need to call the function from the hook instance
-      // Since we can't call hooks dynamically, we'll use the supabase client directly
-      return { debugTransactions: async (accountId: string) => {
-        const { supabase } = await import("@/integrations/supabase/client");
-        const { data: { session } } = await supabase.auth.getSession();
-        const userId = session?.user?.id;
-        
-        const supabaseUrl = "https://ublsnradzhfpqhunfqbn.supabase.co";
-        const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVibHNucmFkemhmcHFodW5mcWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwODUyNDQsImV4cCI6MjA4MTY2MTI0NH0.njhpIOLukx6bmrw5p-AHCNShPkCnB-QqrDOvkYSkTOw";
-        
-        const response = await fetch(`${supabaseUrl}/functions/v1/enable-banking`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "apikey": anonKey,
-            "Authorization": `Bearer ${session?.access_token || anonKey}`,
-          },
-          body: JSON.stringify({ action: "debug_transactions", user_id: userId, account_id: accountId }),
-        });
-        
-        if (!response.ok) {
-          throw new Error("Debug failed");
-        }
-        
-        return response.json();
-      }};
+    // Auth is now handled via Authorization header - no user_id needed
+    const { supabase } = await import("@/integrations/supabase/client");
+    const { data: { session } } = await supabase.auth.getSession();
+    
+    const supabaseUrl = "https://ublsnradzhfpqhunfqbn.supabase.co";
+    const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVibHNucmFkemhmcHFodW5mcWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwODUyNDQsImV4cCI6MjA4MTY2MTI0NH0.njhpIOLukx6bmrw5p-AHCNShPkCnB-QqrDOvkYSkTOw";
+    
+    const response = await fetch(`${supabaseUrl}/functions/v1/enable-banking`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "apikey": anonKey,
+        "Authorization": `Bearer ${session?.access_token || anonKey}`,
+      },
+      body: JSON.stringify({ action: "debug_transactions", account_id: id }),
     });
     
-    return debugTransactions(id);
+    if (!response.ok) {
+      const data = await response.json().catch(() => ({}));
+      throw new Error(data?.error || "Debug failed");
+    }
+    
+    return response.json();
   };
 
   const handleConnect = (newAccounts: BankAccount[]) => {

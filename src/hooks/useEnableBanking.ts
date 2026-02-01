@@ -59,14 +59,14 @@ export function useEnableBanking() {
 
   const callEnableBankingFunction = useCallback(
     async (action: string, params: Record<string, unknown> = {}) => {
-      // Get the current session to include user_id
+      // Get the current session for auth token
       const { data: { session } } = await supabase.auth.getSession();
-      const userId = session?.user?.id;
 
       // Use fetch directly to get better error handling with response body
       const supabaseUrl = "https://ublsnradzhfpqhunfqbn.supabase.co";
       const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVibHNucmFkemhmcHFodW5mcWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwODUyNDQsImV4cCI6MjA4MTY2MTI0NH0.njhpIOLukx6bmrw5p-AHCNShPkCnB-QqrDOvkYSkTOw";
       
+      // Auth is now handled via Authorization header - no user_id in body needed
       const response = await fetch(`${supabaseUrl}/functions/v1/enable-banking`, {
         method: "POST",
         headers: {
@@ -74,7 +74,7 @@ export function useEnableBanking() {
           "apikey": anonKey,
           "Authorization": `Bearer ${session?.access_token || anonKey}`,
         },
-        body: JSON.stringify({ action, user_id: userId, ...params }),
+        body: JSON.stringify({ action, ...params }),
       });
 
       const data = await response.json();

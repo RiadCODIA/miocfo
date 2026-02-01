@@ -10,6 +10,7 @@ const ENABLE_BANKING_APP_ID = Deno.env.get("ENABLE_BANKING_APP_ID")!;
 const ENABLE_BANKING_PRIVATE_KEY = Deno.env.get("ENABLE_BANKING_PRIVATE_KEY")!;
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 // Enable Banking API base URL
 const ENABLE_BANKING_API_URL = "https://api.enablebanking.com";
@@ -23,7 +24,7 @@ interface EnableBankingRequest {
   end_date?: string;
   aspsp_country?: string;
   aspsp_name?: string;
-  user_id?: string;
+  user_id?: string; // Deprecated - now extracted from auth token
   psu_type?: "personal" | "business";
 }
 
@@ -42,6 +43,34 @@ interface EnableBankingError extends Error {
   isRetryable?: boolean;
 }
 
+// ============== AUTHENTICATION HELPER ==============
+// Extract authenticated user ID from Authorization header
+async function extractAuthenticatedUserId(req: Request): Promise<string | null> {
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return null;
+  }
+
+  const token = authHeader.replace("Bearer ", "");
+  
+  // Create a client with the anon key and user's token to verify
+  const supabaseAuth = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+  });
+
+  try {
+    const { data: { user }, error } = await supabaseAuth.auth.getUser();
+    if (error || !user) {
+      console.log("[Enable Banking] Auth token validation failed:", error?.message || "No user");
+      return null;
+    }
+    return user.id;
+  } catch (e) {
+    console.error("[Enable Banking] Error validating auth token:", e);
+    return null;
+  }
+}
+
 // Extract PSU context from incoming request
 function extractPsuContext(req: Request): PsuContext {
   // Try various headers for real IP
@@ -51,7 +80,6 @@ function extractPsuContext(req: Request): PsuContext {
   
   let ip: string | null = null;
   if (xForwardedFor) {
-    // Take the first IP from the list
     ip = xForwardedFor.split(",")[0].trim();
   } else if (cfConnectingIp) {
     ip = cfConnectingIp;
@@ -71,7 +99,6 @@ function extractPsuContext(req: Request): PsuContext {
 function buildPsuHeaders(psuContext: PsuContext): Record<string, string> {
   const headers: Record<string, string> = {};
   
-  // Only include headers with actual values - don't use placeholders
   if (psuContext.ip && psuContext.ip !== "0.0.0.0") {
     headers["Psu-Ip-Address"] = psuContext.ip;
   }
@@ -85,7 +112,6 @@ function buildPsuHeaders(psuContext: PsuContext): Record<string, string> {
     headers["Psu-Referer"] = psuContext.referer;
   }
   
-  // Always include Accept headers
   headers["Psu-Accept"] = "application/json";
   
   return headers;
@@ -109,7 +135,6 @@ async function createJWT(): Promise<string> {
     kid: ENABLE_BANKING_APP_ID,
   };
   
-  // FIXED: Updated audience to current API spec (was api.tilisy.com which is deprecated)
   const payload = {
     iss: "enablebanking.com",
     aud: "api.enablebanking.com",
@@ -186,7 +211,7 @@ async function enableBankingRequest(
   const headers: Record<string, string> = {
     "Authorization": `Bearer ${jwt}`,
     "Content-Type": "application/json",
-    "Accept": "application/json", // Standard HTTP Accept header
+    "Accept": "application/json",
     ...psuHeaders,
   };
   
@@ -210,20 +235,17 @@ async function enableBankingRequest(
     const errorText = await response.text();
     console.error(`[Enable Banking] Error ${response.status}:`, errorText);
     
-    // Try to parse as JSON for structured error info
     let parsedPayload: Record<string, unknown> | undefined;
     try {
       parsedPayload = JSON.parse(errorText);
     } catch {
-      // Not JSON, use raw text
+      // Not JSON
     }
     
-    // Create enriched error for retry logic
     const error = new Error(`Enable Banking API error: ${response.status} - ${errorText}`) as EnableBankingError;
     error.status = response.status;
     error.payload = parsedPayload;
     
-    // Determine if this error is retryable with a shorter period
     const isAspspError = parsedPayload?.error === "ASPSP_ERROR" || 
                          errorText.includes("ASPSP_ERROR") ||
                          errorText.includes("Error interacting with ASPSP");
@@ -309,6 +331,75 @@ function getToday(): string {
   return new Date().toISOString().split("T")[0];
 }
 
+// ============== STABLE TRANSACTION ID GENERATION ==============
+// Generates a stable, unique transaction ID even when bank doesn't provide one
+// Priority: transaction_id > entry_reference > reference_number > deterministic hash
+async function computeExternalTransactionId(
+  enableBankingUid: string,
+  // deno-lint-ignore no-explicit-any
+  tx: any
+): Promise<string> {
+  // Priority 1: Use transaction_id if available
+  if (tx.transaction_id && typeof tx.transaction_id === "string" && tx.transaction_id.trim()) {
+    return `eb:${enableBankingUid}:tx:${tx.transaction_id.trim()}`;
+  }
+  
+  // Priority 2: Use entry_reference (common in Revolut, other banks)
+  if (tx.entry_reference && typeof tx.entry_reference === "string" && tx.entry_reference.trim()) {
+    return `eb:${enableBankingUid}:entry:${tx.entry_reference.trim()}`;
+  }
+  
+  // Priority 3: Use reference_number
+  if (tx.reference_number && typeof tx.reference_number === "string" && tx.reference_number.trim()) {
+    return `eb:${enableBankingUid}:ref:${tx.reference_number.trim()}`;
+  }
+  
+  // Priority 4: Generate deterministic hash from stable fields
+  const stableFields = [
+    enableBankingUid,
+    tx.booking_date || "",
+    tx.value_date || "",
+    String(tx.transaction_amount?.amount || ""),
+    tx.transaction_amount?.currency || "",
+    tx.credit_debit_indicator || "",
+    (tx.remittance_information || []).join("|"),
+    tx.creditor?.name || tx.creditor_name || "",
+    tx.debtor?.name || tx.debtor_name || "",
+    tx.creditor_account?.iban || "",
+    tx.debtor_account?.iban || "",
+  ];
+  
+  const dataToHash = stableFields.map(s => String(s).trim()).join("|");
+  
+  // Use Web Crypto API for SHA-256
+  const encoder = new TextEncoder();
+  const data = encoder.encode(dataToHash);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map(b => b.toString(16).padStart(2, "0")).join("");
+  
+  // Use first 32 chars of hash (128 bits, sufficient for uniqueness)
+  return `eb:${enableBankingUid}:hash:${hashHex.substring(0, 32)}`;
+}
+
+// ============== AMOUNT SIGN CORRECTION ==============
+// Applies correct sign based on credit_debit_indicator
+// CRDT = credit = positive (money in)
+// DBIT = debit = negative (money out)
+function applyAmountSign(rawAmount: number, creditDebitIndicator: string | null): number {
+  const absAmount = Math.abs(rawAmount);
+  
+  if (creditDebitIndicator === "DBIT") {
+    return -absAmount; // Debit: money out = negative
+  } else if (creditDebitIndicator === "CRDT") {
+    return absAmount; // Credit: money in = positive
+  } else {
+    // Fallback: keep original sign (or positive if unclear)
+    console.log(`[Enable Banking] Warning: missing credit_debit_indicator, keeping amount as-is: ${rawAmount}`);
+    return rawAmount;
+  }
+}
+
 // Sync transactions with automatic fallback to shorter periods
 // Uses "yesterday" as default endDate (many banks don't allow "today")
 // Adds transaction_status=BOOK for reliable results
@@ -327,7 +418,6 @@ async function syncAccountTransactionsWithFallback(
   console.log(`[Enable Banking] syncWithFallback: ${enableBankingUid}, windows: ${windowsDays.join(", ")} days`);
   console.log(`[Enable Banking] PSU context: IP=${psuContext.ip || "none"}, UA=${psuContext.userAgent?.substring(0, 50) || "none"}`);
   
-  // Try "yesterday" first (many PSD2 banks close day at midnight and reject "today")
   const endDates = [getYesterday(), getToday()];
   
   let lastError: EnableBankingError | null = null;
@@ -340,7 +430,6 @@ async function syncAccountTransactionsWithFallback(
       
       console.log(`[Enable Banking] Trying ${days}-day window: ${startDate} to ${endDate}`);
       
-      // Retry loop for transient ASPSP errors
       for (let attempt = 1; attempt <= retryCount; attempt++) {
         try {
           const result = await syncAccountTransactionsCore(
@@ -362,7 +451,6 @@ async function syncAccountTransactionsWithFallback(
           
           console.log(`[Enable Banking] ${days}-day window failed (attempt ${attempt}/${retryCount}): status=${status}, retryable=${isRetryable}`);
           
-          // Non-retryable errors: stop immediately
           if (status === 429) {
             console.log(`[Enable Banking] Rate limit (429) - stopping retries`);
             throw new Error("Limite di accesso alla banca raggiunto. Riprova tra qualche ora.");
@@ -373,21 +461,18 @@ async function syncAccountTransactionsWithFallback(
             throw new Error("Consenso scaduto o revocato: scollega e ricollega il conto.");
           }
           
-          // ASPSP_ERROR on first attempt: wait and retry (bank might be temporarily busy)
           if (isRetryable && attempt < retryCount) {
-            const waitMs = 1000 * Math.pow(2, attempt - 1); // 1s, 2s
+            const waitMs = 1000 * Math.pow(2, attempt - 1);
             console.log(`[Enable Banking] Waiting ${waitMs}ms before retry...`);
             await delay(waitMs);
             continue;
           }
           
-          // Retryable error after all attempts: try next shorter window
           if (isRetryable) {
             console.log(`[Enable Banking] Will try shorter window...`);
-            break; // break retry loop, continue to next window
+            break;
           }
           
-          // Unknown error on non-retryable: throw
           if (!isRetryable) {
             throw error;
           }
@@ -396,13 +481,35 @@ async function syncAccountTransactionsWithFallback(
     }
   }
   
-  // All windows and endDates failed
   console.error(`[Enable Banking] All period windows failed`);
   throw lastError || new Error("Impossibile recuperare le transazioni dalla banca.");
 }
 
-// Core transaction sync logic (used by fallback wrapper)
-// Now includes transaction_status=BOOK for reliable results
+// Define transaction type for Enable Banking API (PSD2/ISO 20022)
+interface EnableBankingTransaction {
+  transaction_id?: string | null;
+  entry_reference?: string;
+  merchant_category_code?: string;
+  transaction_amount: { amount: string | number; currency: string };
+  creditor?: { name?: string };
+  creditor_account?: { iban?: string };
+  debtor?: { name?: string };
+  debtor_account?: { iban?: string };
+  bank_transaction_code?: { description?: string; code?: string };
+  credit_debit_indicator?: "CRDT" | "DBIT" | string;
+  status?: "BOOK" | "PDNG" | string;
+  booking_date: string;
+  value_date?: string;
+  transaction_date?: string;
+  balance_after_transaction?: { amount: string | number; currency: string };
+  reference_number?: string;
+  remittance_information?: string[];
+  note?: string;
+  creditor_name?: string;
+  debtor_name?: string;
+}
+
+// Core transaction sync logic with proper ID generation and amount signs
 async function syncAccountTransactionsCore(
   dbAccountId: string,
   enableBankingUid: string,
@@ -414,32 +521,7 @@ async function syncAccountTransactionsCore(
 ): Promise<{ transactions_synced: number }> {
   console.log(`[Enable Banking] syncCore: ${enableBankingUid} from ${startDate} to ${endDate}`);
   
-  // Define transaction type for Enable Banking API (PSD2/ISO 20022)
-  interface EnableBankingTransaction {
-    transaction_id: string;
-    entry_reference?: string;
-    merchant_category_code?: string;
-    transaction_amount: { amount: string | number; currency: string };
-    creditor?: { name?: string };
-    creditor_account?: { iban?: string };
-    debtor?: { name?: string };
-    debtor_account?: { iban?: string };
-    bank_transaction_code?: { description?: string; code?: string };
-    credit_debit_indicator?: "CRDT" | "DBIT";
-    status?: "BOOK" | "PDNG" | string;
-    booking_date: string;
-    value_date?: string;
-    transaction_date?: string;
-    balance_after_transaction?: { amount: string | number; currency: string };
-    reference_number?: string;
-    remittance_information?: string[];
-    note?: string;
-    creditor_name?: string;
-    debtor_name?: string;
-  }
-  
   // Fetch all transactions with pagination
-  // Use transaction_status=BOOK to get confirmed/booked transactions (more reliable)
   let allTransactions: EnableBankingTransaction[] = [];
   let continuationKey: string | undefined;
   let pageCount = 0;
@@ -447,7 +529,6 @@ async function syncAccountTransactionsCore(
   
   do {
     pageCount++;
-    // FIXED: Added transaction_status=BOOK for more reliable results
     const url = `/accounts/${enableBankingUid}/transactions?date_from=${startDate}&date_to=${endDate}&transaction_status=BOOK` +
       (continuationKey ? `&continuation_key=${encodeURIComponent(continuationKey)}` : "");
     
@@ -471,49 +552,77 @@ async function syncAccountTransactionsCore(
     continuationKey = transactionsResponse.continuation_key;
   } while (continuationKey && pageCount < maxPages);
   
-  console.log(`[Enable Banking] Total transactions fetched: ${allTransactions.length} in ${pageCount} pages`);
+  const fetchedCount = allTransactions.length;
+  console.log(`[Enable Banking] Total transactions fetched: ${fetchedCount} in ${pageCount} pages`);
   
   let transactionsSynced = 0;
+  let failedCount = 0;
+  const maxErrorsToLog = 5;
   
   for (const tx of allTransactions) {
-    const transactionData = {
-      bank_account_id: dbAccountId,
-      plaid_transaction_id: tx.transaction_id,
-      amount: toNumber(tx.transaction_amount?.amount),
-      currency: tx.transaction_amount?.currency || "EUR",
-      date: tx.booking_date,
-      value_date: tx.value_date || null,
-      transaction_date: tx.transaction_date || null,
-      name: tx.remittance_information?.join(" ") || 
-            tx.creditor?.name || tx.creditor_name ||
-            tx.debtor?.name || tx.debtor_name || 
-            "Transazione",
-      merchant_name: tx.creditor?.name || tx.creditor_name || 
-                    tx.debtor?.name || tx.debtor_name || null,
-      creditor_name: tx.creditor?.name || tx.creditor_name || null,
-      creditor_iban: tx.creditor_account?.iban || null,
-      debtor_name: tx.debtor?.name || tx.debtor_name || null,
-      debtor_iban: tx.debtor_account?.iban || null,
-      credit_debit_indicator: tx.credit_debit_indicator || null,
-      pending: tx.status === "PDNG",
-      mcc_code: tx.merchant_category_code || null,
-      bank_tx_code: tx.bank_transaction_code?.code || null,
-      bank_tx_description: tx.bank_transaction_code?.description || null,
-      reference_number: tx.reference_number || null,
-      balance_after: tx.balance_after_transaction ? toNumber(tx.balance_after_transaction.amount) : null,
-      entry_reference: tx.entry_reference || null,
-      raw_data: tx,
-    };
-    
-    const { error } = await supabase
-      .from("bank_transactions")
-      .upsert(transactionData, { onConflict: "plaid_transaction_id" });
-    
-    if (!error) {
-      transactionsSynced++;
-    } else {
-      console.error(`[Enable Banking] Error upserting transaction ${tx.transaction_id}:`, error.message);
+    try {
+      // Generate stable transaction ID (fixes null transaction_id issue)
+      const externalTxId = await computeExternalTransactionId(enableBankingUid, tx);
+      
+      // Apply correct amount sign based on credit_debit_indicator
+      const rawAmount = toNumber(tx.transaction_amount?.amount);
+      const signedAmount = applyAmountSign(rawAmount, tx.credit_debit_indicator || null);
+      
+      const transactionData = {
+        bank_account_id: dbAccountId,
+        plaid_transaction_id: externalTxId, // Now always non-null!
+        amount: signedAmount, // Now correctly signed!
+        currency: tx.transaction_amount?.currency || "EUR",
+        date: tx.booking_date,
+        value_date: tx.value_date || null,
+        transaction_date: tx.transaction_date || null,
+        name: tx.remittance_information?.join(" ") || 
+              tx.creditor?.name || tx.creditor_name ||
+              tx.debtor?.name || tx.debtor_name || 
+              "Transazione",
+        merchant_name: tx.creditor?.name || tx.creditor_name || 
+                      tx.debtor?.name || tx.debtor_name || null,
+        creditor_name: tx.creditor?.name || tx.creditor_name || null,
+        creditor_iban: tx.creditor_account?.iban || null,
+        debtor_name: tx.debtor?.name || tx.debtor_name || null,
+        debtor_iban: tx.debtor_account?.iban || null,
+        credit_debit_indicator: tx.credit_debit_indicator || null,
+        pending: tx.status === "PDNG",
+        mcc_code: tx.merchant_category_code || null,
+        bank_tx_code: tx.bank_transaction_code?.code || null,
+        bank_tx_description: tx.bank_transaction_code?.description || null,
+        reference_number: tx.reference_number || null,
+        balance_after: tx.balance_after_transaction ? toNumber(tx.balance_after_transaction.amount) : null,
+        entry_reference: tx.entry_reference || null,
+        raw_data: tx,
+      };
+      
+      const { error } = await supabase
+        .from("bank_transactions")
+        .upsert(transactionData, { onConflict: "plaid_transaction_id" });
+      
+      if (!error) {
+        transactionsSynced++;
+      } else {
+        failedCount++;
+        if (failedCount <= maxErrorsToLog) {
+          console.error(`[Enable Banking] Error upserting transaction ${externalTxId}:`, error.message);
+        }
+      }
+    } catch (e) {
+      failedCount++;
+      if (failedCount <= maxErrorsToLog) {
+        console.error(`[Enable Banking] Exception processing transaction:`, e);
+      }
     }
+  }
+  
+  // Log summary
+  console.log(`[Enable Banking] Sync summary: fetched=${fetchedCount}, synced=${transactionsSynced}, failed=${failedCount}`);
+  
+  // Throw explicit error if we got transactions but couldn't save any
+  if (fetchedCount > 0 && transactionsSynced === 0) {
+    throw new Error(`Transazioni ricevute (${fetchedCount}) ma non salvate: errore di mapping/constraint. Controlla i log.`);
   }
   
   return { transactions_synced: transactionsSynced };
@@ -524,7 +633,7 @@ async function syncAccountTransactionsCore(
 // Returns raw API responses to help troubleshoot bank-specific issues
 async function debugTransactions(
   accountId: string,
-  userId: string | null,
+  userId: string,
   psuContext: PsuContext
 ): Promise<{
   account_id: string;
@@ -541,11 +650,9 @@ async function debugTransactions(
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   
   // Verify ownership
-  if (userId) {
-    const isOwner = await verifyAccountOwnership(supabase, accountId, userId);
-    if (!isOwner) {
-      throw new Error("Account not found or access denied");
-    }
+  const isOwner = await verifyAccountOwnership(supabase, accountId, userId);
+  if (!isOwner) {
+    throw new Error("Account not found or access denied");
   }
   
   // Get account from database
@@ -661,13 +768,9 @@ async function debugTransactions(
 }
 
 // Complete the authorization after user returns with code
-async function completeSession(code: string, userId: string | null, psuContext: PsuContext): Promise<{ accounts: unknown[] }> {
+async function completeSession(code: string, userId: string, psuContext: PsuContext): Promise<{ accounts: unknown[] }> {
   console.log(`[Enable Banking] Completing session with code: ${code.substring(0, 20)}...`);
-  console.log(`[Enable Banking] User ID: ${userId || "not provided"}`);
-  
-  if (!userId) {
-    throw new Error("user_id is required to save accounts");
-  }
+  console.log(`[Enable Banking] User ID: ${userId}`);
   
   // Exchange the authorization code for a session
   const session = await enableBankingRequest("/sessions", "POST", { code }) as {
@@ -688,7 +791,6 @@ async function completeSession(code: string, userId: string | null, psuContext: 
   
   let accounts: EnableBankingAccount[] = session.accounts || [];
   
-  // Fallback: if accounts are not in the initial response, fetch session details
   if (accounts.length === 0) {
     console.log("[Enable Banking] No accounts in session response, fetching session details...");
     
@@ -742,7 +844,6 @@ async function completeSession(code: string, userId: string | null, psuContext: 
   const savedAccounts: any[] = [];
 
   for (const account of accounts) {
-    // Get account balances
     let currentBalance = 0;
     let availableBalance = 0;
     
@@ -800,7 +901,6 @@ async function completeSession(code: string, userId: string | null, psuContext: 
       last_sync_at: new Date().toISOString(),
     };
     
-    // Check if account already exists for this user
     const { data: existingAccount } = await supabase
       .from("bank_accounts")
       .select("id")
@@ -854,7 +954,6 @@ async function completeSession(code: string, userId: string | null, psuContext: 
       
       console.log(`[Enable Banking] Auto-syncing ${savedAccount.bank_name} (${accountUid})`);
       
-      // Use fallback wrapper with real PSU context - fresh connection gets 365/90/30/7 attempts
       const syncResult = await syncAccountTransactionsWithFallback(
         savedAccount.id,
         accountUid,
@@ -865,7 +964,6 @@ async function completeSession(code: string, userId: string | null, psuContext: 
       
       console.log(`[Enable Banking] Auto-synced ${syncResult.transactions_synced} transactions (${syncResult.period_used} days) for ${savedAccount.bank_name}`);
       
-      // Update last_sync_at after successful auto-sync
       await supabase
         .from("bank_accounts")
         .update({ last_sync_at: new Date().toISOString() })
@@ -884,20 +982,14 @@ async function completeSession(code: string, userId: string | null, psuContext: 
 }
 
 // Get accounts from database (filtered by user_id)
-async function getAccounts(userId?: string | null): Promise<{ accounts: unknown[] }> {
+async function getAccounts(userId: string): Promise<{ accounts: unknown[] }> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   
-  let query = supabase
+  const { data: accounts, error } = await supabase
     .from("bank_accounts")
     .select("*")
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
-  
-  // Filter by user if provided
-  if (userId) {
-    query = query.eq("user_id", userId);
-  }
-  
-  const { data: accounts, error } = await query;
   
   if (error) {
     console.error("[Enable Banking] Error fetching accounts:", error);
@@ -925,18 +1017,14 @@ async function verifyAccountOwnership(supabase: any, accountId: string, userId: 
 }
 
 // Sync account data (balance and transactions)
-async function syncAccount(accountId: string, userId: string | null, psuContext: PsuContext): Promise<{ account: unknown; transactions_synced: number }> {
+async function syncAccount(accountId: string, userId: string, psuContext: PsuContext): Promise<{ account: unknown; transactions_synced: number }> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   
-  // Verify ownership if userId provided
-  if (userId) {
-    const isOwner = await verifyAccountOwnership(supabase, accountId, userId);
-    if (!isOwner) {
-      throw new Error("Account not found or access denied");
-    }
+  const isOwner = await verifyAccountOwnership(supabase, accountId, userId);
+  if (!isOwner) {
+    throw new Error("Account not found or access denied");
   }
   
-  // Get account from database
   const { data: account, error: accountError } = await supabase
     .from("bank_accounts")
     .select("*")
@@ -950,7 +1038,6 @@ async function syncAccount(accountId: string, userId: string | null, psuContext:
   const accountUid = account.plaid_account_id;
 
   try {
-    // Get account balances
     const balancesResponse = await enableBankingRequest(`/accounts/${accountUid}/balances`) as {
       balances?: Array<{
         balance_amount: {
@@ -979,17 +1066,14 @@ async function syncAccount(accountId: string, userId: string | null, psuContext:
       console.log(`[Enable Banking] Sync - Parsed balances: current=${currentBalance}, available=${availableBalance}`);
     }
     
-    // Check if this is a fresh connection (within 1 hour) - some banks allow more history
     const accountCreatedAt = new Date(account.created_at);
     const hoursSinceCreation = (Date.now() - accountCreatedAt.getTime()) / (1000 * 60 * 60);
     const isFreshConnection = hoursSinceCreation <= 1;
     
-    // Determine windows to try
     const windowsDays = isFreshConnection ? [365, 90, 30, 7] : [90, 30, 7];
     
     console.log(`[Enable Banking] Fresh connection: ${isFreshConnection}, windows: ${windowsDays.join(", ")}`);
     
-    // Use fallback wrapper
     const syncResult = await syncAccountTransactionsWithFallback(
       accountId,
       accountUid,
@@ -998,7 +1082,6 @@ async function syncAccount(accountId: string, userId: string | null, psuContext:
       windowsDays
     );
     
-    // Update account in database - set status to active on successful sync
     const { data: updatedAccount, error: updateError } = await supabase
       .from("bank_accounts")
       .update({
@@ -1023,7 +1106,6 @@ async function syncAccount(accountId: string, userId: string | null, psuContext:
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("[Enable Banking] Sync error:", errorMessage);
     
-    // Determine appropriate status and user-friendly message based on error type
     let newStatus = "error";
     let userMessage = "Errore nella sincronizzazione del conto.";
     
@@ -1036,8 +1118,8 @@ async function syncAccount(accountId: string, userId: string | null, psuContext:
     } else if (errorMessage.includes("SESSION_EXPIRED") || errorMessage.includes("session")) {
       userMessage = "Sessione scaduta: scollega e ricollega il conto bancario.";
       newStatus = "disconnected";
-    } else if (errorMessage.includes("Impossibile recuperare")) {
-      userMessage = "La banca non risponde correttamente. Riprova tra qualche minuto. Se il problema persiste, scollega e ricollega il conto.";
+    } else if (errorMessage.includes("Impossibile recuperare") || errorMessage.includes("non salvate")) {
+      userMessage = errorMessage; // Keep original message for constraint errors
       newStatus = "error";
     }
     
@@ -1058,18 +1140,15 @@ async function syncAccount(accountId: string, userId: string | null, psuContext:
 // Get transactions for an account
 async function getTransactions(
   accountId: string,
-  userId?: string | null,
+  userId: string,
   startDate?: string,
   endDate?: string
 ): Promise<{ transactions: unknown[] }> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   
-  // Verify ownership if userId provided
-  if (userId) {
-    const isOwner = await verifyAccountOwnership(supabase, accountId, userId);
-    if (!isOwner) {
-      throw new Error("Account not found or access denied");
-    }
+  const isOwner = await verifyAccountOwnership(supabase, accountId, userId);
+  if (!isOwner) {
+    throw new Error("Account not found or access denied");
   }
   
   let query = supabase
@@ -1095,15 +1174,12 @@ async function getTransactions(
 }
 
 // Remove account connection
-async function removeConnection(accountId: string, userId?: string | null): Promise<{ success: boolean; deleted_count: number }> {
+async function removeConnection(accountId: string, userId: string): Promise<{ success: boolean; deleted_count: number }> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
   
-  // Verify ownership if userId provided
-  if (userId) {
-    const isOwner = await verifyAccountOwnership(supabase, accountId, userId);
-    if (!isOwner) {
-      throw new Error("Account not found or access denied");
-    }
+  const isOwner = await verifyAccountOwnership(supabase, accountId, userId);
+  if (!isOwner) {
+    throw new Error("Account not found or access denied");
   }
   
   // Delete transactions first
@@ -1142,12 +1218,34 @@ serve(async (req: Request) => {
   
   try {
     const body: EnableBankingRequest = await req.json();
-    const { action, user_id: userId } = body;
+    const { action } = body;
     
-    // Extract PSU context from the request for actions that need it
+    // Extract PSU context from the request
     const psuContext = extractPsuContext(req);
     
-    console.log(`[Enable Banking] Action: ${action}, User: ${userId || "anonymous"}`);
+    // ========== SECURITY: Extract user from auth token ==========
+    // Actions that don't require authentication
+    const publicActions = ["create_session", "get_aspsps"];
+    
+    let userId: string | null = null;
+    
+    if (!publicActions.includes(action)) {
+      // Extract authenticated user from Authorization header
+      userId = await extractAuthenticatedUserId(req);
+      
+      if (!userId) {
+        console.error(`[Enable Banking] Unauthorized access attempt for action: ${action}`);
+        return new Response(
+          JSON.stringify({ error: "Autenticazione richiesta. Effettua il login." }),
+          {
+            status: 401,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          }
+        );
+      }
+    }
+    
+    console.log(`[Enable Banking] Action: ${action}, User: ${userId || "public"}`);
     console.log(`[Enable Banking] PSU Context: IP=${psuContext.ip || "none"}`);
     
     let result: unknown;
@@ -1167,35 +1265,32 @@ serve(async (req: Request) => {
         if (!body.code) {
           throw new Error("code is required");
         }
-        if (!userId) {
-          throw new Error("user_id is required");
-        }
-        result = await completeSession(body.code, userId, psuContext);
+        result = await completeSession(body.code, userId!, psuContext);
         break;
         
       case "get_accounts":
-        result = await getAccounts(userId);
+        result = await getAccounts(userId!);
         break;
         
       case "sync_account":
         if (!body.account_id) {
           throw new Error("account_id is required");
         }
-        result = await syncAccount(body.account_id, userId ?? null, psuContext);
+        result = await syncAccount(body.account_id, userId!, psuContext);
         break;
         
       case "get_transactions":
         if (!body.account_id) {
           throw new Error("account_id is required");
         }
-        result = await getTransactions(body.account_id, userId, body.start_date, body.end_date);
+        result = await getTransactions(body.account_id, userId!, body.start_date, body.end_date);
         break;
         
       case "remove_connection":
         if (!body.account_id) {
           throw new Error("account_id is required");
         }
-        result = await removeConnection(body.account_id, userId);
+        result = await removeConnection(body.account_id, userId!);
         break;
         
       case "get_aspsps":
@@ -1209,7 +1304,7 @@ serve(async (req: Request) => {
         if (!body.account_id) {
           throw new Error("account_id is required");
         }
-        result = await debugTransactions(body.account_id, userId ?? null, psuContext);
+        result = await debugTransactions(body.account_id, userId!, psuContext);
         break;
         
       default:
