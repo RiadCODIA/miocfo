@@ -106,7 +106,7 @@ export function Sidebar() {
   const getDisplayEmail = () => {
     if (isDemoMode && demoRole) {
       if (demoRole === 'super_admin') return 'Super Amministratore';
-      if (demoRole === 'admin_aziendale') return 'Admin Aziendale';
+      if (demoRole === 'admin_aziendale') return 'Consulente';
       return 'Utente Standard';
     }
     return user?.email || "";
@@ -155,7 +155,7 @@ export function Sidebar() {
                 isAdmin && !isSuperAdmin && "bg-amber-500/20 text-amber-600 border-amber-500/30"
               )}
             >
-              {isSuperAdmin ? "👑 Super Admin" : isAdmin ? "🛡️ Admin Aziendale" : "👤 Utente Demo"}
+              {isSuperAdmin ? "👑 Super Admin" : isAdmin ? "🛡️ Consulente" : "👤 Utente Demo"}
             </Badge>
           </div>
         )}

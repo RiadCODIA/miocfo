@@ -231,9 +231,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signInAsDemoAdmin = () => {
     const adminDemoProfile: Profile = {
       id: 'demo-admin-id',
-      first_name: 'Admin',
-      last_name: 'Aziendale',
-      company_name: 'Azienda Demo S.r.l.',
+      first_name: 'Demo',
+      last_name: 'Consulente',
+      company_name: 'Studio Consulenza',
       avatar_url: null,
     };
     setProfile(adminDemoProfile);
