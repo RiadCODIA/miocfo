@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Filter, Download, Edit2, BarChart3, Loader2, X } from "lucide-react";
+import { Search, Filter, Download, Edit2, BarChart3, Loader2, X, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -323,12 +323,26 @@ export default function Transazioni() {
           </PopoverContent>
         </Popover>
 
-        {/* Auto-categorization status - now runs automatically after bank sync */}
+        {/* AI Categorization Button */}
         {uncategorizedCount > 0 && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 text-muted-foreground text-sm">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span>Categorizzazione automatica in corso ({uncategorizedCount} rimanenti)...</span>
-          </div>
+          <Button
+            variant="outline"
+            className="gap-2 bg-card border-border hover:bg-secondary"
+            onClick={handleCategorizeAll}
+            disabled={isCategorizing}
+          >
+            {isCategorizing ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Categorizzazione AI in corso...</span>
+              </>
+            ) : (
+              <>
+                <Sparkles className="h-4 w-4" />
+                <span>Categorizza {uncategorizedCount} transazioni</span>
+              </>
+            )}
+          </Button>
         )}
 
         {/* AI Spending Analysis Button */}
