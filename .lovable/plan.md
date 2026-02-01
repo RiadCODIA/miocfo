@@ -1,181 +1,175 @@
 
-## Piano: Collegamento Super Admin a Dati Reali
 
-### Analisi Situazione Attuale
+## Piano: Semplificazione Super Admin Dashboard
 
-#### Cosa funziona gia con dati reali (hook collegati a Supabase)
-- `useGlobalUsers` - Legge da `profiles` + `user_roles` 
-- `useCompanies` - Legge da `companies`
-- `useSubscriptionPlans` - Legge da `subscription_plans`
-- `useIntegrationProviders` - Legge da `integration_providers`
-- `useSystemLogs` - Legge da `application_logs` + `audit_trail`
-- `useSecurityCompliance` - Legge da `gdpr_requests`, `ip_allowlist`, `security_policies`
-- `useFeatureFlags` - Legge da `feature_flags`
-- `useSystemMetrics` - Legge da `system_metrics`
+### Analisi della Richiesta
 
-#### Problemi Identificati
+L'utente vuole semplificare drasticamente il profilo Super Admin:
 
-| Problema | Pagina | Causa |
-|----------|--------|-------|
-| Mock data hardcodati | `Aziende.tsx` | Array `companies` hardcodato (righe 68-160) invece di usare `useCompanies()` |
-| Tabella companies vuota | DB | 0 aziende nel database reale |
-| Nessun collegamento user-company | DB | Il campo `user_id` in `companies` non e popolato |
-| KPI non calcolati | Dashboard | I valori (transazioni, conti, sync) sono mock |
-| Metriche sistema vuote | `system_metrics` | Nessun dato reale di telemetria |
+| Azione | Sezione |
+|--------|---------|
+| **MANTENERE** | Dashboard di Sistema (con KPI reali) |
+| **MANTENERE** | Utenti (sezione unificata) |
+| **MANTENERE** | Piani e Limiti (dati reali) |
+| **RIMUOVERE** | Aziende (crea confusione) |
+| **RIMUOVERE** | Integrazioni |
+| **RIMUOVERE** | Monitoraggio & Log |
+| **RIMUOVERE** | Sicurezza & Compliance |
+| **RIMUOVERE** | Configurazioni Globali |
 
-### Modifiche Necessarie
+### Dati Reali Disponibili
 
-#### 1. Rimuovere Mock Data da Aziende.tsx
+Dalla query al database, abbiamo dati reali per la dashboard:
 
-**File**: `src/pages/Aziende.tsx`
+| Metrica | Valore |
+|---------|--------|
+| Utenti totali | 2 |
+| Conti bancari | 6 |
+| Transazioni totali | 743 |
+| Transazioni 30gg | 293 |
+| Incassi 30gg | €14.149,62 |
+| Pagamenti 30gg | €14.256,66 |
+| Piani configurati | 3 |
 
-Sostituire l'array mock con l'hook esistente e aggiungere metriche calcolate:
+---
+
+### Modifiche da Implementare
+
+#### 1. Sidebar Super Admin (3 sezioni invece di 8)
+
+**File**: `src/components/layout/Sidebar.tsx`
+
+Ridurre `superAdminSidebarSections` a:
 
 ```typescript
-// RIMUOVERE righe 68-160 (array companies mock)
-
-// AGGIUNGERE
-import { useCompanies } from "@/hooks/useCompanies";
-
-// Nel componente
-const { data: companies, isLoading } = useCompanies();
+const superAdminSidebarSections: SidebarSection[] = [
+  { id: "system_dashboard", label: "Dashboard di Sistema", icon: LayoutDashboard, path: "/" },
+  { id: "global_users", label: "Utenti", icon: Users, path: "/utenti-globali" },
+  { id: "plans", label: "Piani", icon: CreditCard, path: "/piani" },
+];
 ```
 
-#### 2. Aggiornare useCompanies per includere metriche derivate
+#### 2. Dashboard Super Admin con KPI Reali
 
-**File**: `src/hooks/useCompanies.ts`
+**File**: `src/pages/DashboardSuperAdmin.tsx`
 
-Aggiungere un hook per calcolare KPI reali per ogni azienda:
+Sostituire i KPI attuali (aziende totali/attive) con metriche di sistema reali:
+
+| KPI Card | Fonte Dati |
+|----------|------------|
+| Utenti Totali | `COUNT(profiles)` |
+| Conti Bancari | `COUNT(bank_accounts)` |
+| Transazioni Totali | `COUNT(bank_transactions)` |
+| Volume Transazioni 30gg | `SUM(amount) WHERE date >= 30 days ago` |
+| Incassi Periodo | `SUM(amount) WHERE amount > 0` |
+| Pagamenti Periodo | `SUM(amount) WHERE amount < 0` |
+
+Rimuovere:
+- Cards "Aziende Totali" e "Aziende Attive"
+- Sezioni servizi (API Gateway, Backend API, ecc.)
+- Grafici tecnici (latenza, error rate)
+
+Aggiungere grafici finanziari:
+- Andamento flussi di cassa mensili
+- Distribuzione utilizzo piattaforma
+
+#### 3. Rimuovere Route Non Necessarie
+
+**File**: `src/App.tsx`
+
+Rimuovere le route:
+- `/aziende`
+- `/integrazioni`
+- `/log`
+- `/sicurezza`
+- `/configurazioni`
+
+Rimuovere gli import corrispondenti
+
+#### 4. Hook per KPI di Sistema Reali
+
+**Nuovo file**: `src/hooks/useSuperAdminDashboard.ts`
 
 ```typescript
-export function useCompanyWithMetrics(companyId: string) {
+export function useSuperAdminKPIs() {
   return useQuery({
-    queryKey: ["company-metrics", companyId],
+    queryKey: ["super-admin-kpis"],
     queryFn: async () => {
-      // Conta utenti collegati
-      const { count: usersCount } = await supabase
+      // Query aggregata per tutti i KPI
+      const { data: profiles } = await supabase
         .from("profiles")
-        .select("*", { count: "exact", head: true })
-        .eq("company_id", companyId);
-
-      // Conta conti bancari
-      const { count: bankAccountsCount } = await supabase
-        .from("bank_accounts")
-        .select("*", { count: "exact", head: true })
-        // Collegamento tramite user_id dell'azienda
-        .in("user_id", [/* users della company */]);
-
-      // Conta transazioni ultimi 30 giorni
-      const thirtyDaysAgo = new Date();
-      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        .select("*", { count: "exact", head: true });
       
-      const { count: transactionsCount } = await supabase
+      const { data: bankAccounts } = await supabase
+        .from("bank_accounts")
+        .select("*", { count: "exact", head: true });
+      
+      const { data: transactions } = await supabase
         .from("bank_transactions")
-        .select("*", { count: "exact", head: true })
-        .gte("date", thirtyDaysAgo.toISOString());
-
+        .select("amount, date");
+      
+      // Calcola metriche
       return {
-        users: usersCount || 0,
-        bankAccounts: bankAccountsCount || 0,
-        transactions30d: transactionsCount || 0,
-        syncFailed7d: 0, // Da sync_jobs
+        totalUsers: profiles?.length || 0,
+        totalBankAccounts: bankAccounts?.length || 0,
+        totalTransactions: transactions?.length || 0,
+        income30d: /* calcolo */,
+        expenses30d: /* calcolo */,
+        netFlow30d: /* calcolo */,
       };
     },
   });
 }
 ```
 
-#### 3. Creare company per l'utente esistente
+---
 
-**Migrazione SQL** per creare la company dell'utente attivo:
+### Nuova Struttura Dashboard Super Admin
 
-```sql
--- Crea company per l'utente esistente
-INSERT INTO companies (
-  name, 
-  email, 
-  status, 
-  user_id,
-  vat_number,
-  created_at
-)
-SELECT 
-  COALESCE(p.company_name, p.first_name || ' ' || p.last_name || ' Company'),
-  u.email,
-  'active',
-  p.id,
-  NULL,
-  NOW()
-FROM profiles p
-JOIN auth.users u ON u.id = p.id
-WHERE p.id = '7c09c8f0-1dfa-4951-86cd-2920509bbfa5';
+```text
+┌──────────────────────────────────────────────────────────────────────────┐
+│                      DASHBOARD DI SISTEMA                                 │
+├──────────────────────────────────────────────────────────────────────────┤
+│                                                                           │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐     │
+│  │   Utenti    │  │    Conti    │  │ Transazioni │  │  Incassi    │     │
+│  │      2      │  │  Bancari 6  │  │    743      │  │  €14.149    │     │
+│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘     │
+│                                                                           │
+│  ┌─────────────┐  ┌─────────────┐                                        │
+│  │  Pagamenti  │  │    Piani    │                                        │
+│  │  €14.256    │  │      3      │                                        │
+│  └─────────────┘  └─────────────┘                                        │
+│                                                                           │
+│  ┌────────────────────────────┐  ┌────────────────────────────┐         │
+│  │  Flussi di Cassa Mensili  │  │  Transazioni per Giorno    │         │
+│  │     (ultimi 6 mesi)       │  │    (ultimi 30 giorni)      │         │
+│  │         [GRAFICO]         │  │         [GRAFICO]          │         │
+│  └────────────────────────────┘  └────────────────────────────┘         │
+│                                                                           │
+└──────────────────────────────────────────────────────────────────────────┘
 ```
 
-#### 4. Collegare bank_accounts a company tramite user_id
+---
 
-Il campo `user_id` in `bank_accounts` gia esiste e contiene l'ID utente. Basta usare la relazione `user -> company` per aggregare i dati.
+### Sidebar Risultante
 
-#### 5. Aggiornare useGlobalUsers per includere email
-
-**File**: `src/hooks/useGlobalUsers.ts`
-
-Il campo email e vuoto perche non viene estratto da `auth.users`. Per motivi di sicurezza, creare un hook che usa RPC:
-
-```sql
--- Funzione per ottenere utenti con email (solo super_admin)
-CREATE OR REPLACE FUNCTION get_users_with_email()
-RETURNS TABLE (
-  id uuid,
-  email text,
-  created_at timestamptz,
-  last_sign_in_at timestamptz
-)
-SECURITY DEFINER
-AS $$
-BEGIN
-  -- Verifica che il chiamante sia super_admin
-  IF NOT EXISTS (
-    SELECT 1 FROM user_roles 
-    WHERE user_id = auth.uid() AND role = 'super_admin'
-  ) THEN
-    RAISE EXCEPTION 'Access denied';
-  END IF;
-
-  RETURN QUERY
-  SELECT 
-    u.id,
-    u.email::text,
-    u.created_at,
-    u.last_sign_in_at
-  FROM auth.users u;
-END;
-$$ LANGUAGE plpgsql;
-```
-
-#### 6. Popolare subscription_plans con piani di default
-
-```sql
-INSERT INTO subscription_plans (
-  name, price, billing_cycle, status, 
-  max_users, max_bank_accounts, max_transactions_month,
-  ai_features_enabled, features
-) VALUES 
-('Starter', 29, 'monthly', 'active', 5, 2, 1000, false, 
- ARRAY['dashboard', 'transactions', 'basic_reports']),
-('Professional', 79, 'monthly', 'active', 15, 10, 10000, true, 
- ARRAY['dashboard', 'transactions', 'basic_reports', 'cash_flow', 'budget', 'ai_categorization']),
-('Enterprise', 199, 'monthly', 'active', -1, -1, -1, true, 
- ARRAY['dashboard', 'transactions', 'basic_reports', 'cash_flow', 'budget', 'ai_categorization', 'ai_forecast', 'api_access', 'sso', 'dedicated_support']);
-```
-
-#### 7. Popolare integration_providers
-
-```sql
-INSERT INTO integration_providers (
-  name, provider_type, status, uptime, error_rate, rate_limit_hits, config
-) VALUES 
-('Enable Banking', 'open_banking', 'ok', 99.8, 0.2, 12, '{"api_base_url": "https://api.enablebanking.com"}'),
-('Lovable AI', 'ai', 'ok', 99.9, 0.1, 45, '{"model": "lovable-ai"}');
+```text
+┌──────────────────────────┐
+│        FINEXA            │
+├──────────────────────────┤
+│  👑 Super Admin          │
+├──────────────────────────┤
+│                          │
+│  📊 Dashboard di Sistema │
+│  👥 Utenti               │
+│  💳 Piani                │
+│                          │
+├──────────────────────────┤
+│  [User Avatar]           │
+│  Super Amministratore    │
+│                    [🚪]  │
+└──────────────────────────┘
 ```
 
 ---
@@ -184,55 +178,29 @@ INSERT INTO integration_providers (
 
 | File | Azione |
 |------|--------|
-| `src/pages/Aziende.tsx` | Rimuovere mock data, usare `useCompanies()`, aggiungere loading states |
-| `src/hooks/useCompanies.ts` | Aggiungere `useCompaniesWithMetrics()` per KPI aggregati |
-| `src/hooks/useGlobalUsers.ts` | Aggiungere query RPC per ottenere email utenti |
-| **Migrazione DB** | Creare company per utente esistente |
-| **Migrazione DB** | Popolare `subscription_plans` con piani default |
-| **Migrazione DB** | Popolare `integration_providers` con Enable Banking |
-| **Migrazione DB** | Creare funzione RPC `get_users_with_email()` |
+| `src/components/layout/Sidebar.tsx` | Ridurre `superAdminSidebarSections` a 3 voci |
+| `src/pages/DashboardSuperAdmin.tsx` | Riscrivere con KPI finanziari reali |
+| `src/App.tsx` | Rimuovere 5 route e relativi import |
+| `src/hooks/useSuperAdminDashboard.ts` | Nuovo hook per KPI aggregati |
 
 ---
 
-### Flusso Dati Dopo le Modifiche
+### File da Eliminare (opzionale, per pulizia)
 
-```text
-┌─────────────────────────────────────────────────────────────────┐
-│                    SUPER ADMIN DASHBOARD                         │
-├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
-│   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐   │
-│   │  companies   │────▶│   Aziende    │     │  profiles    │   │
-│   │   (reale)    │     │   (pagina)   │     │   (reale)    │   │
-│   └──────────────┘     └──────────────┘     └──────────────┘   │
-│          │                                         │            │
-│          ▼                                         ▼            │
-│   ┌─────────────────────────────────────────────────────────┐   │
-│   │  useCompaniesWithMetrics()                              │   │
-│   │  - Conta utenti per company (via user_id)               │   │
-│   │  - Conta bank_accounts per user della company           │   │
-│   │  - Conta transazioni ultimi 30gg                        │   │
-│   │  - Conta sync falliti ultimi 7gg                        │   │
-│   └─────────────────────────────────────────────────────────┘   │
-│                              │                                   │
-│                              ▼                                   │
-│   ┌─────────────────────────────────────────────────────────┐   │
-│   │  Dashboard KPI Cards (dati reali)                       │   │
-│   │  - Aziende totali: COUNT(companies)                     │   │
-│   │  - Utenti totali: COUNT(profiles)                       │   │
-│   │  - Sessioni attive: COUNT(sync_jobs WHERE running)      │   │
-│   └─────────────────────────────────────────────────────────┘   │
-│                                                                  │
-└─────────────────────────────────────────────────────────────────┘
-```
+Questi file non saranno piu accessibili ma possono essere mantenuti per riferimento futuro:
+- `src/pages/Aziende.tsx`
+- `src/pages/Integrazioni.tsx`
+- `src/pages/MonitoraggioLog.tsx`
+- `src/pages/SicurezzaCompliance.tsx`
+- `src/pages/ConfigurazioniGlobali.tsx`
 
 ---
 
 ### Risultato Atteso
 
-1. **Aziende.tsx** mostra dati reali dal database invece di mock
-2. **Utenti Globali** mostra email degli utenti (tramite RPC sicura)
-3. **Piani** mostra piani commerciali reali
-4. **Integrazioni** mostra Enable Banking come provider attivo
-5. **Dashboard Super Admin** calcola KPI da dati reali (companies, users, transactions)
-6. La company e collegata all'utente esistente (`7c09c8f0-1dfa-4951-86cd-2920509bbfa5`)
+1. Super Admin con solo 3 sezioni nella sidebar (Dashboard, Utenti, Piani)
+2. Dashboard mostra KPI reali dal database (utenti, conti, transazioni, flussi)
+3. Nessun mock data o sezioni tecniche non necessarie
+4. Piani commerciali reali gestibili (3 piani gia configurati)
+5. Gestione utenti funzionante con dati reali
+
