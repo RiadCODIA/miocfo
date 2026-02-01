@@ -85,7 +85,7 @@ function buildPsuHeaders(psuContext: PsuContext): Record<string, string> {
     headers["Psu-Referer"] = psuContext.referer;
   }
   
-  // Always include Accept header
+  // Always include Accept headers
   headers["Psu-Accept"] = "application/json";
   
   return headers;
@@ -109,9 +109,10 @@ async function createJWT(): Promise<string> {
     kid: ENABLE_BANKING_APP_ID,
   };
   
+  // FIXED: Updated audience to current API spec (was api.tilisy.com which is deprecated)
   const payload = {
     iss: "enablebanking.com",
-    aud: "api.tilisy.com",
+    aud: "api.enablebanking.com",
     iat: now,
     exp: now + 3600,
   };
@@ -168,6 +169,11 @@ async function createJWT(): Promise<string> {
   return `${unsignedToken}.${encodedSignature}`;
 }
 
+// Simple delay helper for retry/backoff
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 // Make authenticated request to Enable Banking API with structured error handling
 async function enableBankingRequest(
   endpoint: string,
@@ -180,6 +186,7 @@ async function enableBankingRequest(
   const headers: Record<string, string> = {
     "Authorization": `Bearer ${jwt}`,
     "Content-Type": "application/json",
+    "Accept": "application/json", // Standard HTTP Accept header
     ...psuHeaders,
   };
   
@@ -291,79 +298,111 @@ const toNumber = (value: unknown): number => {
   return 0;
 };
 
+// Get "yesterday" date in YYYY-MM-DD format (many banks reject "today")
+function getYesterday(): string {
+  const d = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  return d.toISOString().split("T")[0];
+}
+
+// Get "today" date in YYYY-MM-DD format
+function getToday(): string {
+  return new Date().toISOString().split("T")[0];
+}
+
 // Sync transactions with automatic fallback to shorter periods
+// Uses "yesterday" as default endDate (many banks don't allow "today")
+// Adds transaction_status=BOOK for reliable results
 // Tries 365 → 90 → 30 → 7 days on ASPSP_ERROR or period errors
 async function syncAccountTransactionsWithFallback(
   dbAccountId: string,
   enableBankingUid: string,
-  endDate: string,
   // deno-lint-ignore no-explicit-any
   supabase: any,
   psuContext: PsuContext,
-  windowsDays: number[] = [365, 90, 30, 7]
+  windowsDays: number[] = [365, 90, 30, 7],
+  retryCount: number = 2
 ): Promise<{ transactions_synced: number; period_used: number }> {
   
   const psuHeaders = buildPsuHeaders(psuContext);
   console.log(`[Enable Banking] syncWithFallback: ${enableBankingUid}, windows: ${windowsDays.join(", ")} days`);
   console.log(`[Enable Banking] PSU context: IP=${psuContext.ip || "none"}, UA=${psuContext.userAgent?.substring(0, 50) || "none"}`);
   
+  // Try "yesterday" first (many PSD2 banks close day at midnight and reject "today")
+  const endDates = [getYesterday(), getToday()];
+  
   let lastError: EnableBankingError | null = null;
   
-  for (const days of windowsDays) {
-    const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  for (const endDate of endDates) {
+    console.log(`[Enable Banking] Trying endDate: ${endDate}`);
     
-    console.log(`[Enable Banking] Trying ${days}-day window: ${startDate} to ${endDate}`);
-    
-    try {
-      const result = await syncAccountTransactionsCore(
-        dbAccountId,
-        enableBankingUid,
-        startDate,
-        endDate,
-        supabase,
-        psuHeaders
-      );
+    for (const days of windowsDays) {
+      const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
       
-      console.log(`[Enable Banking] SUCCESS with ${days}-day window: ${result.transactions_synced} transactions`);
-      return { transactions_synced: result.transactions_synced, period_used: days };
+      console.log(`[Enable Banking] Trying ${days}-day window: ${startDate} to ${endDate}`);
       
-    } catch (error) {
-      lastError = error as EnableBankingError;
-      const status = lastError.status || 0;
-      const isRetryable = lastError.isRetryable || false;
-      
-      console.log(`[Enable Banking] ${days}-day window failed: status=${status}, retryable=${isRetryable}`);
-      
-      // Non-retryable errors: stop immediately
-      if (status === 429) {
-        console.log(`[Enable Banking] Rate limit (429) - stopping retries`);
-        throw new Error("Limite di accesso alla banca raggiunto. Riprova tra qualche ora.");
-      }
-      
-      if (status === 401 || status === 403) {
-        console.log(`[Enable Banking] Auth/consent error (${status}) - stopping retries`);
-        throw new Error("Consenso scaduto o revocato: scollega e ricollega il conto.");
-      }
-      
-      // Retryable error: try next shorter window
-      if (isRetryable) {
-        console.log(`[Enable Banking] Will try shorter window...`);
-        continue;
-      }
-      
-      // Unknown error on non-retryable: throw
-      if (!isRetryable) {
-        throw error;
+      // Retry loop for transient ASPSP errors
+      for (let attempt = 1; attempt <= retryCount; attempt++) {
+        try {
+          const result = await syncAccountTransactionsCore(
+            dbAccountId,
+            enableBankingUid,
+            startDate,
+            endDate,
+            supabase,
+            psuHeaders
+          );
+          
+          console.log(`[Enable Banking] SUCCESS with ${days}-day window (endDate=${endDate}): ${result.transactions_synced} transactions`);
+          return { transactions_synced: result.transactions_synced, period_used: days };
+          
+        } catch (error) {
+          lastError = error as EnableBankingError;
+          const status = lastError.status || 0;
+          const isRetryable = lastError.isRetryable || false;
+          
+          console.log(`[Enable Banking] ${days}-day window failed (attempt ${attempt}/${retryCount}): status=${status}, retryable=${isRetryable}`);
+          
+          // Non-retryable errors: stop immediately
+          if (status === 429) {
+            console.log(`[Enable Banking] Rate limit (429) - stopping retries`);
+            throw new Error("Limite di accesso alla banca raggiunto. Riprova tra qualche ora.");
+          }
+          
+          if (status === 401 || status === 403) {
+            console.log(`[Enable Banking] Auth/consent error (${status}) - stopping retries`);
+            throw new Error("Consenso scaduto o revocato: scollega e ricollega il conto.");
+          }
+          
+          // ASPSP_ERROR on first attempt: wait and retry (bank might be temporarily busy)
+          if (isRetryable && attempt < retryCount) {
+            const waitMs = 1000 * Math.pow(2, attempt - 1); // 1s, 2s
+            console.log(`[Enable Banking] Waiting ${waitMs}ms before retry...`);
+            await delay(waitMs);
+            continue;
+          }
+          
+          // Retryable error after all attempts: try next shorter window
+          if (isRetryable) {
+            console.log(`[Enable Banking] Will try shorter window...`);
+            break; // break retry loop, continue to next window
+          }
+          
+          // Unknown error on non-retryable: throw
+          if (!isRetryable) {
+            throw error;
+          }
+        }
       }
     }
   }
   
-  // All windows failed
+  // All windows and endDates failed
   console.error(`[Enable Banking] All period windows failed`);
   throw lastError || new Error("Impossibile recuperare le transazioni dalla banca.");
 }
 
 // Core transaction sync logic (used by fallback wrapper)
+// Now includes transaction_status=BOOK for reliable results
 async function syncAccountTransactionsCore(
   dbAccountId: string,
   enableBankingUid: string,
@@ -400,6 +439,7 @@ async function syncAccountTransactionsCore(
   }
   
   // Fetch all transactions with pagination
+  // Use transaction_status=BOOK to get confirmed/booked transactions (more reliable)
   let allTransactions: EnableBankingTransaction[] = [];
   let continuationKey: string | undefined;
   let pageCount = 0;
@@ -407,7 +447,8 @@ async function syncAccountTransactionsCore(
   
   do {
     pageCount++;
-    const url = `/accounts/${enableBankingUid}/transactions?date_from=${startDate}&date_to=${endDate}` +
+    // FIXED: Added transaction_status=BOOK for more reliable results
+    const url = `/accounts/${enableBankingUid}/transactions?date_from=${startDate}&date_to=${endDate}&transaction_status=BOOK` +
       (continuationKey ? `&continuation_key=${encodeURIComponent(continuationKey)}` : "");
     
     console.log(`[Enable Banking] Fetching transactions page ${pageCount}...`);
@@ -476,6 +517,147 @@ async function syncAccountTransactionsCore(
   }
   
   return { transactions_synced: transactionsSynced };
+}
+
+// ============== DEBUG TRANSACTIONS ACTION ==============
+// Diagnostic endpoint to test different parameter combinations
+// Returns raw API responses to help troubleshoot bank-specific issues
+async function debugTransactions(
+  accountId: string,
+  userId: string | null,
+  psuContext: PsuContext
+): Promise<{
+  account_id: string;
+  enable_banking_uid: string;
+  psu_context: { ip: string | null; userAgent: string | null };
+  test_results: Array<{
+    variant: string;
+    params: Record<string, string>;
+    status: number | string;
+    body: unknown;
+    success: boolean;
+  }>;
+}> {
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  
+  // Verify ownership
+  if (userId) {
+    const isOwner = await verifyAccountOwnership(supabase, accountId, userId);
+    if (!isOwner) {
+      throw new Error("Account not found or access denied");
+    }
+  }
+  
+  // Get account from database
+  const { data: account, error: accountError } = await supabase
+    .from("bank_accounts")
+    .select("*")
+    .eq("id", accountId)
+    .single();
+  
+  if (accountError || !account) {
+    throw new Error("Account not found");
+  }
+  
+  const accountUid = account.plaid_account_id;
+  const psuHeaders = buildPsuHeaders(psuContext);
+  
+  console.log(`[Enable Banking] DEBUG_TRANSACTIONS for ${accountUid}`);
+  console.log(`[Enable Banking] PSU context: IP=${psuContext.ip || "none"}, UA=${psuContext.userAgent?.substring(0, 50) || "none"}`);
+  
+  const yesterday = getYesterday();
+  const today = getToday();
+  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+  
+  // Test variants to try
+  const variants = [
+    { 
+      name: "no_dates", 
+      url: `/accounts/${accountUid}/transactions`
+    },
+    { 
+      name: "yesterday_7d", 
+      url: `/accounts/${accountUid}/transactions?date_from=${sevenDaysAgo}&date_to=${yesterday}`
+    },
+    { 
+      name: "yesterday_7d_BOOK", 
+      url: `/accounts/${accountUid}/transactions?date_from=${sevenDaysAgo}&date_to=${yesterday}&transaction_status=BOOK`
+    },
+    { 
+      name: "today_7d", 
+      url: `/accounts/${accountUid}/transactions?date_from=${sevenDaysAgo}&date_to=${today}`
+    },
+    { 
+      name: "today_30d_BOOK", 
+      url: `/accounts/${accountUid}/transactions?date_from=${thirtyDaysAgo}&date_to=${today}&transaction_status=BOOK`
+    },
+    { 
+      name: "yesterday_30d_BOOK", 
+      url: `/accounts/${accountUid}/transactions?date_from=${thirtyDaysAgo}&date_to=${yesterday}&transaction_status=BOOK`
+    },
+  ];
+  
+  const results: Array<{
+    variant: string;
+    params: Record<string, string>;
+    status: number | string;
+    body: unknown;
+    success: boolean;
+  }> = [];
+  
+  for (const variant of variants) {
+    console.log(`[Enable Banking] Testing variant: ${variant.name}`);
+    
+    try {
+      const jwt = await createJWT();
+      const response = await fetch(`${ENABLE_BANKING_API_URL}${variant.url}`, {
+        method: "GET",
+        headers: {
+          "Authorization": `Bearer ${jwt}`,
+          "Content-Type": "application/json",
+          "Accept": "application/json",
+          ...psuHeaders,
+        },
+      });
+      
+      let body: unknown;
+      try {
+        body = await response.json();
+      } catch {
+        body = await response.text();
+      }
+      
+      results.push({
+        variant: variant.name,
+        params: Object.fromEntries(new URL(`${ENABLE_BANKING_API_URL}${variant.url}`).searchParams),
+        status: response.status,
+        body,
+        success: response.ok,
+      });
+      
+      console.log(`[Enable Banking] Variant ${variant.name}: status=${response.status}, ok=${response.ok}`);
+      
+    } catch (error) {
+      results.push({
+        variant: variant.name,
+        params: Object.fromEntries(new URL(`${ENABLE_BANKING_API_URL}${variant.url}`).searchParams),
+        status: "error",
+        body: { error: error instanceof Error ? error.message : String(error) },
+        success: false,
+      });
+    }
+  }
+  
+  return {
+    account_id: accountId,
+    enable_banking_uid: accountUid,
+    psu_context: {
+      ip: psuContext.ip,
+      userAgent: psuContext.userAgent?.substring(0, 80) || null,
+    },
+    test_results: results,
+  };
 }
 
 // Complete the authorization after user returns with code
@@ -660,9 +842,11 @@ async function completeSession(code: string, userId: string | null, psuContext: 
   console.log(`[Enable Banking] Saved ${savedAccounts.length} accounts for user ${userId}`);
   
   // ============ AUTO-SYNC TRANSACTIONS FOR NEW ACCOUNTS ============
-  console.log("[Enable Banking] Starting auto-sync of transactions for new accounts...");
+  // Wait a short moment before first sync (some banks need time)
+  console.log("[Enable Banking] Waiting 2s before auto-sync (bank stabilization)...");
+  await delay(2000);
   
-  const endDate = new Date().toISOString().split("T")[0];
+  console.log("[Enable Banking] Starting auto-sync of transactions for new accounts...");
   
   for (const savedAccount of savedAccounts) {
     try {
@@ -674,7 +858,6 @@ async function completeSession(code: string, userId: string | null, psuContext: 
       const syncResult = await syncAccountTransactionsWithFallback(
         savedAccount.id,
         accountUid,
-        endDate,
         supabase,
         psuContext,
         [365, 90, 30, 7]
@@ -802,7 +985,6 @@ async function syncAccount(accountId: string, userId: string | null, psuContext:
     const isFreshConnection = hoursSinceCreation <= 1;
     
     // Determine windows to try
-    const endDate = new Date().toISOString().split("T")[0];
     const windowsDays = isFreshConnection ? [365, 90, 30, 7] : [90, 30, 7];
     
     console.log(`[Enable Banking] Fresh connection: ${isFreshConnection}, windows: ${windowsDays.join(", ")}`);
@@ -811,7 +993,6 @@ async function syncAccount(accountId: string, userId: string | null, psuContext:
     const syncResult = await syncAccountTransactionsWithFallback(
       accountId,
       accountUid,
-      endDate,
       supabase,
       psuContext,
       windowsDays
@@ -1022,6 +1203,13 @@ serve(async (req: Request) => {
           throw new Error("aspsp_country is required");
         }
         result = await getASPSPs(body.aspsp_country);
+        break;
+        
+      case "debug_transactions":
+        if (!body.account_id) {
+          throw new Error("account_id is required");
+        }
+        result = await debugTransactions(body.account_id, userId ?? null, psuContext);
         break;
         
       default:
