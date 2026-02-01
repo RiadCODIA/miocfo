@@ -36,6 +36,12 @@ interface CategoryAggregation {
   percentage: number;
 }
 
+interface MonthlyData {
+  month: string;
+  spending: number;
+  income: number;
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === "OPTIONS") {
@@ -43,7 +49,7 @@ serve(async (req) => {
   }
 
   try {
-    console.log("Starting spending analysis...");
+    console.log("Starting enhanced spending analysis...");
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -59,21 +65,24 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch all transactions (expenses only - negative amounts)
-    const { data: transactions, error: txError } = await supabase
+    // Fetch ALL transactions (both income and expenses)
+    const { data: allTransactions, error: allTxError } = await supabase
       .from("bank_transactions")
       .select("id, name, merchant_name, amount, date, ai_category_id")
-      .lt("amount", 0)
       .order("date", { ascending: false });
 
-    if (txError) {
-      console.error("Error fetching transactions:", txError);
-      throw txError;
+    if (allTxError) {
+      console.error("Error fetching transactions:", allTxError);
+      throw allTxError;
     }
 
-    console.log(`Found ${transactions?.length || 0} expense transactions`);
+    // Separate expenses and income
+    const expenses = allTransactions?.filter((tx) => tx.amount < 0) || [];
+    const incomes = allTransactions?.filter((tx) => tx.amount > 0) || [];
 
-    if (!transactions || transactions.length === 0) {
+    console.log(`Found ${expenses.length} expenses, ${incomes.length} incomes`);
+
+    if (expenses.length === 0) {
       return new Response(
         JSON.stringify({
           error: "Nessuna transazione di spesa trovata. Importa prima un estratto conto.",
@@ -96,9 +105,44 @@ serve(async (req) => {
     const categoryMap = new Map<string, CostCategory>();
     categories?.forEach((cat) => categoryMap.set(cat.id, cat));
 
-    // Aggregate by supplier
+    // Calculate totals
+    const totalSpent = expenses.reduce((sum, tx) => sum + Math.abs(tx.amount), 0);
+    const totalIncome = incomes.reduce((sum, tx) => sum + tx.amount, 0);
+
+    // === NEW: Monthly aggregation ===
+    const monthlyDataMap = new Map<string, MonthlyData>();
+    allTransactions?.forEach((tx) => {
+      const month = tx.date.substring(0, 7); // YYYY-MM
+      const existing = monthlyDataMap.get(month) || { month, spending: 0, income: 0 };
+      if (tx.amount < 0) {
+        existing.spending += Math.abs(tx.amount);
+      } else {
+        existing.income += tx.amount;
+      }
+      monthlyDataMap.set(month, existing);
+    });
+
+    const monthlyData = Array.from(monthlyDataMap.values())
+      .sort((a, b) => a.month.localeCompare(b.month));
+
+    // Calculate month-over-month changes
+    const monthlyTrend = monthlyData.map((m, i) => {
+      const prev = i > 0 ? monthlyData[i - 1].spending : m.spending;
+      const changePercent = prev > 0 ? ((m.spending - prev) / prev) * 100 : 0;
+      return {
+        month: m.month,
+        spending: Math.round(m.spending * 100) / 100,
+        income: Math.round(m.income * 100) / 100,
+        changePercent: Math.round(changePercent * 10) / 10,
+      };
+    });
+
+    // === Calculate period in months ===
+    const months = monthlyData.length || 1;
+
+    // Aggregate by supplier with enhanced metrics
     const supplierMap = new Map<string, SupplierAggregation>();
-    transactions.forEach((tx: Transaction) => {
+    expenses.forEach((tx: Transaction) => {
       const supplierName = (tx.merchant_name || tx.name || "Sconosciuto").toUpperCase().trim();
       const existing = supplierMap.get(supplierName);
       const catName = tx.ai_category_id ? categoryMap.get(tx.ai_category_id)?.name || null : null;
@@ -118,7 +162,7 @@ serve(async (req) => {
 
     // Aggregate by category
     const categoryAggMap = new Map<string, { name: string; totalAmount: number; transactionCount: number }>();
-    transactions.forEach((tx: Transaction) => {
+    expenses.forEach((tx: Transaction) => {
       const catId = tx.ai_category_id || "uncategorized";
       const catName = tx.ai_category_id
         ? categoryMap.get(tx.ai_category_id)?.name || "Altro"
@@ -137,13 +181,16 @@ serve(async (req) => {
       }
     });
 
-    // Calculate totals
-    const totalSpent = transactions.reduce((sum: number, tx: Transaction) => sum + Math.abs(tx.amount), 0);
-
-    // Sort suppliers by amount
+    // Sort suppliers by amount with enhanced metrics
     const topSuppliers = Array.from(supplierMap.values())
       .sort((a, b) => b.totalAmount - a.totalAmount)
-      .slice(0, 15);
+      .slice(0, 15)
+      .map((s) => ({
+        ...s,
+        monthlyAverage: Math.round((s.totalAmount / months) * 100) / 100,
+        avgTransactionAmount: Math.round((s.totalAmount / s.transactionCount) * 100) / 100,
+        monthlyFrequency: Math.round((s.transactionCount / months) * 10) / 10,
+      }));
 
     // Sort categories by amount and calculate percentages
     const categoryBreakdown: CategoryAggregation[] = Array.from(categoryAggMap.values())
@@ -153,14 +200,41 @@ serve(async (req) => {
       }))
       .sort((a, b) => b.totalAmount - a.totalAmount);
 
-    // Prepare data summary for AI
+    // === Detect potential anomalies (simple heuristics) ===
+    const avgTransaction = totalSpent / expenses.length;
+    const potentialAnomalies = expenses
+      .filter((tx) => Math.abs(tx.amount) > avgTransaction * 5) // 5x average
+      .slice(0, 10)
+      .map((tx) => ({
+        name: tx.merchant_name || tx.name,
+        amount: Math.abs(tx.amount),
+        date: tx.date,
+        deviation: Math.round((Math.abs(tx.amount) / avgTransaction) * 10) / 10,
+      }));
+
+    // Prepare enhanced data summary for AI
     const dataSummary = {
       totalSpent: totalSpent.toFixed(2),
-      transactionCount: transactions.length,
-      topSuppliers: topSuppliers.slice(0, 10).map((s) => ({
+      totalIncome: totalIncome.toFixed(2),
+      netCashFlow: (totalIncome - totalSpent).toFixed(2),
+      cashFlowRatio: totalSpent > 0 ? (totalIncome / totalSpent).toFixed(2) : "N/A",
+      transactionCount: expenses.length,
+      periodMonths: months,
+      avgMonthlySpending: (totalSpent / months).toFixed(2),
+      avgTransactionAmount: avgTransaction.toFixed(2),
+      monthlyTrend: monthlyTrend.map((m) => ({
+        month: m.month,
+        spending: m.spending.toFixed(2),
+        income: m.income.toFixed(2),
+        changePercent: m.changePercent.toFixed(1),
+      })),
+      topSuppliers: topSuppliers.slice(0, 12).map((s) => ({
         name: s.name,
-        amount: s.totalAmount.toFixed(2),
+        totalAmount: s.totalAmount.toFixed(2),
         transactions: s.transactionCount,
+        monthlyAverage: s.monthlyAverage.toFixed(2),
+        avgPerTransaction: s.avgTransactionAmount.toFixed(2),
+        monthlyFrequency: s.monthlyFrequency,
         category: s.categoryName || "Non categorizzato",
       })),
       categoryBreakdown: categoryBreakdown.map((c) => ({
@@ -168,57 +242,117 @@ serve(async (req) => {
         amount: c.totalAmount.toFixed(2),
         percentage: c.percentage.toFixed(1),
         transactions: c.transactionCount,
+        avgPerTransaction: (c.totalAmount / c.transactionCount).toFixed(2),
+      })),
+      potentialAnomalies: potentialAnomalies.map((a) => ({
+        supplier: a.name,
+        amount: a.amount.toFixed(2),
+        date: a.date,
+        timesAverage: a.deviation,
       })),
     };
 
-    console.log("Data summary prepared, calling AI...");
+    console.log("Enhanced data summary prepared, calling AI...");
 
-    // Call Lovable AI for analysis
-    const systemPrompt = `Sei un CFO virtuale esperto in ottimizzazione costi aziendali italiani.
-Analizza i dati finanziari forniti e genera un report JSON strutturato con:
+    // Enhanced AI prompt for detailed analysis
+    const systemPrompt = `Sei un CFO virtuale senior con 20 anni di esperienza in PMI italiane.
+Analizza i dati finanziari forniti e genera un report DETTAGLIATO e SPECIFICO in formato JSON.
 
-1. criticalAreas: Array di aree dove l'azienda spende troppo (max 3-4)
+IMPORTANTE: Fornisci analisi APPROFONDITA con cifre specifiche, percentuali precise e step operativi concreti.
+
+Genera un oggetto JSON con queste sezioni:
+
+1. criticalAreas: Array di 5-6 aree problematiche
    - category: nome categoria
-   - amount: importo in euro (numero)
+   - amount: importo (numero)
    - percentage: percentuale sul totale (numero)
-   - warning: breve spiegazione del problema (max 20 parole)
+   - warning: spiegazione dettagliata del problema (max 50 parole)
+   - benchmark: confronto con benchmark PMI italiane (es: "Sopra media settore del 15%")
 
-2. savingSuggestions: Array di suggerimenti concreti per risparmiare (max 4-5)
-   - title: titolo breve del suggerimento
-   - description: descrizione dettagliata (max 30 parole)
-   - estimatedSaving: risparmio stimato in euro (numero, stima realistica)
+2. savingSuggestions: Array di 6-8 suggerimenti concreti
+   - title: titolo del suggerimento
+   - description: descrizione dettagliata con step operativi (max 80 parole)
+   - estimatedSaving: risparmio mensile stimato (numero)
+   - priority: "alta" | "media" | "bassa"
+   - timeline: tempo di implementazione (es: "2-4 settimane")
+   - steps: array di 2-3 step specifici da seguire
 
-3. supplierAnalysis: Array analisi fornitori principali (max 8)
+3. supplierAnalysis: Array di 10-12 fornitori
    - name: nome fornitore
    - amount: spesa totale (numero)
-   - category: categoria principale
-   - status: "high" se costo elevato, "ok" se nella norma, "low" se buon prezzo
-   - note: breve nota (max 15 parole)
+   - category: categoria
+   - status: "high" | "ok" | "low"
+   - note: analisi dettagliata (max 40 parole, includi confronto con altri fornitori simili)
+   - recommendation: azione specifica consigliata
 
-4. actionItems: Array di 3-5 azioni prioritarie (stringhe brevi)
+4. actionItems: Array di 6-8 azioni prioritarie
+   Per ogni azione:
+   - action: descrizione dell'azione
+   - priority: "urgente" | "alta" | "media"
+   - impact: impatto atteso (es: "Risparmio €500/mese")
 
 5. summary: oggetto con:
-   - potentialSavings: stima risparmio mensile possibile (numero)
-   - criticalAlerts: numero di alert critici
-   - mainRisk: rischio principale identificato (stringa breve)
-   - recommendation: raccomandazione principale (max 25 parole)
+   - potentialSavings: risparmio mensile totale possibile (numero)
+   - criticalAlerts: numero di alert critici (numero)
+   - mainRisk: rischio principale identificato (max 30 parole)
+   - recommendation: raccomandazione principale dettagliata (max 50 parole)
 
-Rispondi SOLO con JSON valido, senza markdown o altro testo.
-Sii specifico con nomi e cifre reali basandoti sui dati forniti.
-Se un fornitore ha spese significativamente alte rispetto al volume, segnalalo.`;
+6. trendAnalysis: oggetto con:
+   - monthlyTrend: array con { month (YYYY-MM), amount (numero), changePercent (numero) }
+   - overallTrend: "increasing" | "stable" | "decreasing"
+   - seasonalPattern: pattern stagionale identificato o null
+   - forecast: previsione spesa prossimo mese (numero)
+   - trendNote: spiegazione del trend (max 40 parole)
 
-    const userPrompt = `Analizza questi dati di spesa aziendale:
+7. cashFlowHealth: oggetto con:
+   - score: punteggio 1-100 (salute finanziaria complessiva)
+   - ratio: rapporto entrate/uscite (numero)
+   - diagnosis: diagnosi dettagliata della situazione (max 60 parole)
+   - riskLevel: "low" | "medium" | "high" | "critical"
+   - recommendations: array di 2-3 raccomandazioni specifiche per il cash flow
 
-SPESA TOTALE: €${dataSummary.totalSpent}
-NUMERO TRANSAZIONI: ${dataSummary.transactionCount}
+8. anomalies: Array di max 5 transazioni anomale identificate
+   - description: cosa rende anomala questa transazione
+   - amount: importo (numero)
+   - supplier: nome fornitore
+   - date: data (YYYY-MM-DD)
+   - reason: perché è sospetta o fuori norma (max 30 parole)
+   - recommendation: cosa fare (verificare, contestare, etc.)
 
-TOP FORNITORI:
-${dataSummary.topSuppliers.map((s) => `- ${s.name}: €${s.amount} (${s.transactions} transazioni, ${s.category})`).join("\n")}
+REGOLE:
+- Rispondi SOLO con JSON valido, senza markdown o altro testo
+- Usa i dati reali forniti, non inventare cifre
+- Sii specifico con nomi di fornitori e cifre esatte
+- Confronta con benchmark PMI italiane quando possibile
+- Identifica pattern e correlazioni tra i dati
+- Prioritizza le azioni per impatto e facilità di implementazione`;
 
-BREAKDOWN PER CATEGORIA:
-${dataSummary.categoryBreakdown.map((c) => `- ${c.name}: €${c.amount} (${c.percentage}%, ${c.transactions} transazioni)`).join("\n")}
+    const userPrompt = `Analizza questi dati finanziari aziendali in dettaglio:
 
-Genera il report di analisi in formato JSON.`;
+=== RIEPILOGO PERIODO ===
+Periodo analizzato: ${dataSummary.periodMonths} mesi
+Spesa totale: €${dataSummary.totalSpent}
+Entrate totali: €${dataSummary.totalIncome}
+Cash Flow Netto: €${dataSummary.netCashFlow}
+Rapporto Entrate/Uscite: ${dataSummary.cashFlowRatio}
+
+Spesa media mensile: €${dataSummary.avgMonthlySpending}
+Importo medio transazione: €${dataSummary.avgTransactionAmount}
+Numero transazioni: ${dataSummary.transactionCount}
+
+=== TREND MENSILE ===
+${dataSummary.monthlyTrend.map((m) => `${m.month}: Spese €${m.spending}, Entrate €${m.income}, Variazione ${m.changePercent}%`).join("\n")}
+
+=== TOP FORNITORI (con dettagli) ===
+${dataSummary.topSuppliers.map((s) => `- ${s.name}: Totale €${s.totalAmount}, ${s.transactions} transazioni, Media €${s.avgPerTransaction}/tx, €${s.monthlyAverage}/mese, ${s.monthlyFrequency} pagamenti/mese, Categoria: ${s.category}`).join("\n")}
+
+=== BREAKDOWN PER CATEGORIA ===
+${dataSummary.categoryBreakdown.map((c) => `- ${c.name}: €${c.amount} (${c.percentage}%), ${c.transactions} tx, Media €${c.avgPerTransaction}/tx`).join("\n")}
+
+=== TRANSAZIONI POTENZIALMENTE ANOMALE ===
+${dataSummary.potentialAnomalies.length > 0 ? dataSummary.potentialAnomalies.map((a) => `- ${a.supplier}: €${a.amount} il ${a.date} (${a.timesAverage}x la media)`).join("\n") : "Nessuna anomalia significativa rilevata"}
+
+Genera il report completo in formato JSON.`;
 
     const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -279,19 +413,27 @@ Genera il report di analisi in formato JSON.`;
     // Combine with raw data
     const result = {
       totalSpent,
-      transactionCount: transactions.length,
+      totalIncome,
+      netCashFlow: totalIncome - totalSpent,
+      transactionCount: expenses.length,
+      periodMonths: months,
+      avgMonthlySpending: totalSpent / months,
       topCategory: categoryBreakdown[0] || null,
-      categoryBreakdown: categoryBreakdown.slice(0, 8),
+      categoryBreakdown: categoryBreakdown.slice(0, 10),
       topSuppliers: topSuppliers.map((s) => ({
         name: s.name,
         amount: s.totalAmount,
         transactionCount: s.transactionCount,
         category: s.categoryName || "Non categorizzato",
+        monthlyAverage: s.monthlyAverage,
+        avgTransactionAmount: s.avgTransactionAmount,
       })),
+      monthlyTrend: monthlyTrend,
+      rawAnomalies: potentialAnomalies,
       aiAnalysis: analysisResult,
     };
 
-    console.log("Analysis complete, returning result");
+    console.log("Enhanced analysis complete, returning result");
 
     return new Response(JSON.stringify(result), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },

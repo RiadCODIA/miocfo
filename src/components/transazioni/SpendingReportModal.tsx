@@ -11,18 +11,30 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { Progress } from "@/components/ui/progress";
 import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
+import {
   BarChart3,
   AlertTriangle,
   Lightbulb,
   TrendingDown,
+  TrendingUp,
   Users,
   CheckCircle2,
   Loader2,
   PieChart,
   ArrowRight,
   Euro,
+  Activity,
+  Target,
+  AlertCircle,
+  Clock,
+  Zap,
 } from "lucide-react";
-import { useSpendingAnalysis, SpendingAnalysis } from "@/hooks/useSpendingAnalysis";
+import { useSpendingAnalysis, SpendingAnalysis, ActionItem } from "@/hooks/useSpendingAnalysis";
 import {
   PieChart as RechartsPie,
   Pie,
@@ -33,6 +45,9 @@ import {
   XAxis,
   YAxis,
   Tooltip,
+  LineChart,
+  Line,
+  CartesianGrid,
   Legend,
 } from "recharts";
 
@@ -61,7 +76,6 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
 
   const handleClose = () => {
     onOpenChange(false);
-    // Reset state when closing
     setTimeout(() => setHasStarted(false), 300);
   };
 
@@ -85,6 +99,37 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
     }
   };
 
+  const getRiskLevelColor = (level: "low" | "medium" | "high" | "critical") => {
+    switch (level) {
+      case "low": return "text-success";
+      case "medium": return "text-warning";
+      case "high": return "text-orange-500";
+      case "critical": return "text-destructive";
+    }
+  };
+
+  const getScoreColor = (score: number) => {
+    if (score >= 80) return "text-success";
+    if (score >= 60) return "text-warning";
+    if (score >= 40) return "text-orange-500";
+    return "text-destructive";
+  };
+
+  const getPriorityBadge = (priority: "urgente" | "alta" | "media" | "bassa" | undefined) => {
+    switch (priority) {
+      case "urgente":
+        return <Badge variant="destructive" className="text-xs">Urgente</Badge>;
+      case "alta":
+        return <Badge className="bg-orange-500/10 text-orange-500 border-orange-500/20 text-xs">Alta</Badge>;
+      case "media":
+        return <Badge variant="secondary" className="text-xs">Media</Badge>;
+      case "bassa":
+        return <Badge variant="outline" className="text-xs">Bassa</Badge>;
+      default:
+        return null;
+    }
+  };
+
   // Prepare chart data
   const pieData = data?.categoryBreakdown.slice(0, 6).map((cat, i) => ({
     name: cat.name,
@@ -99,48 +144,52 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
     fullName: s.name,
   })) || [];
 
+  // Trend chart data
+  const trendData = data?.monthlyTrend?.map((m) => ({
+    month: m.month.substring(5), // Only show MM
+    spese: m.spending,
+    entrate: m.income,
+  })) || [];
+
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="max-w-5xl max-h-[90vh] p-0 overflow-hidden">
+      <DialogContent className="max-w-6xl max-h-[90vh] p-0 overflow-hidden">
         <DialogHeader className="p-6 pb-0">
           <DialogTitle className="flex items-center gap-2 text-xl">
             <BarChart3 className="h-6 w-6 text-primary" />
-            Report AI - Analisi Spese
+            Report CFO - Analisi Spese Avanzata
           </DialogTitle>
         </DialogHeader>
 
         <ScrollArea className="h-[calc(90vh-100px)] px-6 pb-6">
           {!hasStarted && !isLoading && !data ? (
-            // Initial state - Start button
             <div className="flex flex-col items-center justify-center py-16 space-y-6">
               <div className="w-20 h-20 rounded-full bg-primary/10 flex items-center justify-center">
                 <BarChart3 className="h-10 w-10 text-primary" />
               </div>
               <div className="text-center space-y-2">
-                <h3 className="text-lg font-semibold">Analisi Intelligente delle Spese</h3>
+                <h3 className="text-lg font-semibold">Analisi CFO Intelligente</h3>
                 <p className="text-muted-foreground max-w-md">
-                  L'AI analizzerà tutte le tue transazioni per identificare pattern di spesa,
-                  aree critiche e opportunità di risparmio.
+                  L'AI analizzerà tutte le tue transazioni per generare un report dettagliato
+                  con trend, score di salute finanziaria, anomalie e suggerimenti operativi.
                 </p>
               </div>
               <Button size="lg" onClick={handleStart} className="gap-2">
                 <Lightbulb className="h-5 w-5" />
-                Avvia Analisi AI
+                Avvia Analisi CFO
               </Button>
             </div>
           ) : isLoading ? (
-            // Loading state
             <div className="flex flex-col items-center justify-center py-16 space-y-6">
               <Loader2 className="h-12 w-12 animate-spin text-primary" />
               <div className="text-center space-y-2">
                 <h3 className="text-lg font-semibold">Analisi in corso...</h3>
                 <p className="text-muted-foreground">
-                  Sto analizzando le tue transazioni con l'AI
+                  Sto elaborando un report CFO completo delle tue spese
                 </p>
               </div>
             </div>
           ) : error ? (
-            // Error state
             <div className="flex flex-col items-center justify-center py-16 space-y-6">
               <div className="w-20 h-20 rounded-full bg-destructive/10 flex items-center justify-center">
                 <AlertTriangle className="h-10 w-10 text-destructive" />
@@ -154,9 +203,8 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
               </Button>
             </div>
           ) : data ? (
-            // Results
             <div className="space-y-6 pt-4">
-              {/* Summary Cards */}
+              {/* Summary Cards Row 1 */}
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div className="bg-card border border-border rounded-lg p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
@@ -164,26 +212,24 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                     Totale Spese
                   </div>
                   <div className="text-2xl font-bold">{formatCurrency(data.totalSpent)}</div>
-                </div>
-                <div className="bg-card border border-border rounded-lg p-4">
-                  <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                    <PieChart className="h-4 w-4" />
-                    Categoria Top
-                  </div>
-                  <div className="text-lg font-semibold truncate">
-                    {data.topCategory?.name || "N/A"}
-                  </div>
-                  <div className="text-sm text-muted-foreground">
-                    {data.topCategory?.percentage.toFixed(0)}% del totale
+                  <div className="text-xs text-muted-foreground">
+                    {data.periodMonths} mesi analizzati
                   </div>
                 </div>
                 <div className="bg-card border border-border rounded-lg p-4">
                   <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
-                    <AlertTriangle className="h-4 w-4" />
-                    Alert Critici
+                    <TrendingUp className="h-4 w-4" />
+                    Totale Entrate
                   </div>
-                  <div className="text-2xl font-bold text-warning">
-                    {data.aiAnalysis?.summary?.criticalAlerts || 0}
+                  <div className="text-2xl font-bold text-success">{formatCurrency(data.totalIncome)}</div>
+                </div>
+                <div className="bg-card border border-border rounded-lg p-4">
+                  <div className="flex items-center gap-2 text-muted-foreground text-sm mb-1">
+                    <Activity className="h-4 w-4" />
+                    Cash Flow Netto
+                  </div>
+                  <div className={`text-2xl font-bold ${data.netCashFlow >= 0 ? "text-success" : "text-destructive"}`}>
+                    {formatCurrency(data.netCashFlow)}
                   </div>
                 </div>
                 <div className="bg-card border border-border rounded-lg p-4">
@@ -191,13 +237,129 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                     <TrendingDown className="h-4 w-4" />
                     Risparmio Potenziale
                   </div>
-                  <div className="text-2xl font-bold text-success">
+                  <div className="text-2xl font-bold text-primary">
                     {formatCurrency(data.aiAnalysis?.summary?.potentialSavings || 0)}
                   </div>
+                  <div className="text-xs text-muted-foreground">/mese</div>
                 </div>
               </div>
 
+              {/* Cash Flow Health Score */}
+              {data.aiAnalysis?.cashFlowHealth && (
+                <div className="bg-card border border-border rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <Target className="h-5 w-5 text-primary" />
+                      Salute Finanziaria
+                    </h3>
+                    <Badge className={`${getRiskLevelColor(data.aiAnalysis.cashFlowHealth.riskLevel)} bg-transparent border`}>
+                      Rischio: {data.aiAnalysis.cashFlowHealth.riskLevel.toUpperCase()}
+                    </Badge>
+                  </div>
+                  <div className="grid md:grid-cols-3 gap-6">
+                    <div className="flex flex-col items-center">
+                      <div className={`text-5xl font-bold ${getScoreColor(data.aiAnalysis.cashFlowHealth.score)}`}>
+                        {data.aiAnalysis.cashFlowHealth.score}
+                      </div>
+                      <div className="text-sm text-muted-foreground">Score /100</div>
+                      <Progress 
+                        value={data.aiAnalysis.cashFlowHealth.score} 
+                        className="w-full mt-2 h-2"
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <p className="text-sm text-muted-foreground mb-3">
+                        {data.aiAnalysis.cashFlowHealth.diagnosis}
+                      </p>
+                      {data.aiAnalysis.cashFlowHealth.recommendations && (
+                        <div className="space-y-1">
+                          {data.aiAnalysis.cashFlowHealth.recommendations.map((rec, i) => (
+                            <div key={i} className="flex items-start gap-2 text-sm">
+                              <CheckCircle2 className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                              <span>{rec}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Trend Chart */}
+              {trendData.length > 0 && (
+                <div className="bg-card border border-border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="font-semibold flex items-center gap-2">
+                      <Activity className="h-5 w-5" />
+                      Trend Mensile
+                    </h3>
+                    {data.aiAnalysis?.trendAnalysis && (
+                      <Badge variant="outline" className="capitalize">
+                        {data.aiAnalysis.trendAnalysis.overallTrend === "increasing" ? "↑ In aumento" :
+                         data.aiAnalysis.trendAnalysis.overallTrend === "decreasing" ? "↓ In calo" : "→ Stabile"}
+                      </Badge>
+                    )}
+                  </div>
+                  <div className="h-[200px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={trendData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                        <XAxis dataKey="month" tick={{ fontSize: 12 }} />
+                        <YAxis tickFormatter={(v) => `€${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 12 }} />
+                        <Tooltip
+                          formatter={(value: number) => formatCurrency(value)}
+                          contentStyle={{
+                            backgroundColor: "hsl(var(--card))",
+                            border: "1px solid hsl(var(--border))",
+                            borderRadius: "8px",
+                          }}
+                        />
+                        <Legend />
+                        <Line type="monotone" dataKey="spese" stroke="hsl(var(--destructive))" strokeWidth={2} name="Spese" />
+                        <Line type="monotone" dataKey="entrate" stroke="hsl(var(--success))" strokeWidth={2} name="Entrate" />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                  {data.aiAnalysis?.trendAnalysis?.trendNote && (
+                    <p className="text-sm text-muted-foreground mt-2">
+                      {data.aiAnalysis.trendAnalysis.trendNote}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <Separator />
+
+              {/* Anomalies Section */}
+              {data.aiAnalysis?.anomalies && data.aiAnalysis.anomalies.length > 0 && (
+                <div className="space-y-3">
+                  <h3 className="font-semibold flex items-center gap-2 text-orange-500">
+                    <AlertCircle className="h-5 w-5" />
+                    Anomalie Rilevate
+                  </h3>
+                  <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg divide-y divide-orange-500/10">
+                    {data.aiAnalysis.anomalies.map((anomaly, i) => (
+                      <div key={i} className="p-4">
+                        <div className="flex items-start justify-between gap-4">
+                          <div className="flex-1">
+                            <div className="font-medium flex items-center gap-2">
+                              <AlertTriangle className="h-4 w-4 text-orange-500" />
+                              {anomaly.supplier}
+                              <span className="text-destructive font-bold">{formatCurrency(anomaly.amount)}</span>
+                            </div>
+                            <p className="text-sm text-muted-foreground mt-1">{anomaly.reason}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 mt-2 text-sm text-primary">
+                          <Lightbulb className="h-4 w-4" />
+                          {anomaly.recommendation}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Critical Areas */}
               {data.aiAnalysis?.criticalAreas && data.aiAnalysis.criticalAreas.length > 0 && (
@@ -206,11 +368,11 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                     <AlertTriangle className="h-5 w-5" />
                     Aree Critiche - Attenzione
                   </h3>
-                  <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-4 space-y-3">
+                  <div className="bg-destructive/5 border border-destructive/20 rounded-lg p-4 space-y-4">
                     {data.aiAnalysis.criticalAreas.map((area, i) => (
                       <div key={i} className="flex items-start gap-3">
                         <div className="w-2 h-2 rounded-full bg-destructive mt-2 shrink-0" />
-                        <div>
+                        <div className="flex-1">
                           <div className="font-medium">
                             {area.category}: {formatCurrency(area.amount)}{" "}
                             <span className="text-muted-foreground">
@@ -218,6 +380,11 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                             </span>
                           </div>
                           <div className="text-sm text-muted-foreground">{area.warning}</div>
+                          {area.benchmark && (
+                            <div className="text-xs text-primary mt-1">
+                              📊 Benchmark: {area.benchmark}
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}
@@ -225,29 +392,59 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                 </div>
               )}
 
-              {/* Saving Suggestions */}
+              {/* Saving Suggestions with Accordion */}
               {data.aiAnalysis?.savingSuggestions && data.aiAnalysis.savingSuggestions.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="font-semibold flex items-center gap-2 text-primary">
                     <Lightbulb className="h-5 w-5" />
                     Suggerimenti di Risparmio
                   </h3>
-                  <div className="bg-primary/5 border border-primary/20 rounded-lg p-4 space-y-4">
+                  <Accordion type="single" collapsible className="bg-primary/5 border border-primary/20 rounded-lg">
                     {data.aiAnalysis.savingSuggestions.map((suggestion, i) => (
-                      <div key={i} className="flex items-start gap-3">
-                        <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-medium shrink-0">
-                          {i + 1}
-                        </div>
-                        <div className="flex-1">
-                          <div className="font-medium">{suggestion.title}</div>
-                          <div className="text-sm text-muted-foreground">{suggestion.description}</div>
-                        </div>
-                        <Badge variant="outline" className="bg-success/10 text-success border-success/20 shrink-0">
-                          -{formatCurrency(suggestion.estimatedSaving)}
-                        </Badge>
-                      </div>
+                      <AccordionItem key={i} value={`suggestion-${i}`} className="border-primary/10">
+                        <AccordionTrigger className="px-4 hover:no-underline">
+                          <div className="flex items-center gap-3 flex-1 text-left">
+                            <div className="w-6 h-6 rounded-full bg-primary/20 flex items-center justify-center text-primary text-sm font-medium shrink-0">
+                              {i + 1}
+                            </div>
+                            <div className="flex-1">
+                              <span className="font-medium">{suggestion.title}</span>
+                              {suggestion.priority && (
+                                <span className="ml-2">
+                                  {getPriorityBadge(suggestion.priority)}
+                                </span>
+                              )}
+                            </div>
+                            <Badge variant="outline" className="bg-success/10 text-success border-success/20 shrink-0">
+                              -{formatCurrency(suggestion.estimatedSaving)}/mese
+                            </Badge>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-4 pb-4">
+                          <div className="pl-9 space-y-3">
+                            <p className="text-sm text-muted-foreground">{suggestion.description}</p>
+                            {suggestion.timeline && (
+                              <div className="flex items-center gap-2 text-sm">
+                                <Clock className="h-4 w-4 text-muted-foreground" />
+                                <span>Timeline: {suggestion.timeline}</span>
+                              </div>
+                            )}
+                            {suggestion.steps && suggestion.steps.length > 0 && (
+                              <div className="space-y-1">
+                                <div className="text-sm font-medium">Step da seguire:</div>
+                                {suggestion.steps.map((step, si) => (
+                                  <div key={si} className="flex items-start gap-2 text-sm">
+                                    <Zap className="h-4 w-4 text-primary shrink-0 mt-0.5" />
+                                    <span>{step}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
                     ))}
-                  </div>
+                  </Accordion>
                 </div>
               )}
 
@@ -340,25 +537,33 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                 <div className="space-y-3">
                   <h3 className="font-semibold flex items-center gap-2">
                     <Users className="h-5 w-5" />
-                    Analisi Fornitori
+                    Analisi Dettagliata Fornitori
                   </h3>
                   <div className="bg-card border border-border rounded-lg overflow-hidden">
                     <div className="divide-y divide-border">
-                      {data.aiAnalysis.supplierAnalysis.slice(0, 8).map((supplier, i) => (
-                        <div key={i} className="flex items-center gap-4 p-3 hover:bg-secondary/50">
-                          <div className="flex-1 min-w-0">
-                            <div className="font-medium truncate">{supplier.name}</div>
-                            <div className="text-sm text-muted-foreground">{supplier.category}</div>
-                          </div>
-                          <div className="text-right">
-                            <div className="font-semibold">{formatCurrency(supplier.amount)}</div>
-                            {supplier.note && (
-                              <div className="text-xs text-muted-foreground max-w-[150px] truncate">
-                                {supplier.note}
+                      {data.aiAnalysis.supplierAnalysis.slice(0, 10).map((supplier, i) => (
+                        <div key={i} className="p-4 hover:bg-secondary/50">
+                          <div className="flex items-start gap-4">
+                            <div className="flex-1 min-w-0">
+                              <div className="flex items-center gap-2">
+                                <span className="font-medium truncate">{supplier.name}</span>
+                                {getStatusBadge(supplier.status)}
                               </div>
-                            )}
+                              <div className="text-sm text-muted-foreground">{supplier.category}</div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="font-semibold">{formatCurrency(supplier.amount)}</div>
+                            </div>
                           </div>
-                          {getStatusBadge(supplier.status)}
+                          {supplier.note && (
+                            <p className="text-sm text-muted-foreground mt-2">{supplier.note}</p>
+                          )}
+                          {supplier.recommendation && (
+                            <div className="flex items-center gap-2 mt-2 text-sm text-primary">
+                              <Lightbulb className="h-4 w-4" />
+                              {supplier.recommendation}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -371,15 +576,32 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                 <div className="space-y-3">
                   <h3 className="font-semibold flex items-center gap-2 text-success">
                     <CheckCircle2 className="h-5 w-5" />
-                    Azioni Consigliate
+                    Azioni Prioritarie
                   </h3>
-                  <div className="bg-success/5 border border-success/20 rounded-lg p-4 space-y-2">
-                    {data.aiAnalysis.actionItems.map((action, i) => (
-                      <div key={i} className="flex items-center gap-3">
-                        <ArrowRight className="h-4 w-4 text-success shrink-0" />
-                        <span className="text-sm">{action}</span>
-                      </div>
-                    ))}
+                  <div className="bg-success/5 border border-success/20 rounded-lg p-4 space-y-3">
+                    {data.aiAnalysis.actionItems.map((item, i) => {
+                      const isString = typeof item === "string";
+                      const action = isString ? item : (item as ActionItem).action;
+                      const priority = isString ? undefined : (item as ActionItem).priority;
+                      const impact = isString ? undefined : (item as ActionItem).impact;
+                      
+                      return (
+                        <div key={i} className="flex items-start gap-3">
+                          <ArrowRight className="h-4 w-4 text-success shrink-0 mt-0.5" />
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm">{action}</span>
+                              {priority && getPriorityBadge(priority)}
+                            </div>
+                            {impact && (
+                              <div className="text-xs text-muted-foreground mt-1">
+                                💰 {impact}
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
@@ -394,6 +616,11 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                       <p className="text-sm text-muted-foreground">
                         {data.aiAnalysis.summary.recommendation}
                       </p>
+                      {data.aiAnalysis.summary.mainRisk && (
+                        <p className="text-sm text-orange-500 mt-2">
+                          ⚠️ Rischio principale: {data.aiAnalysis.summary.mainRisk}
+                        </p>
+                      )}
                     </div>
                   </div>
                 </div>
