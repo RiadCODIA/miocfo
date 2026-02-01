@@ -10,7 +10,6 @@ import { useEnableBanking, BankAccount } from "@/hooks/useEnableBanking";
 export default function ContiBancari() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [reconnectAccountId, setReconnectAccountId] = useState<string | null>(null);
   const { accounts, isLoading, fetchAccounts, syncAccount, removeAccount, completeSession } = useEnableBanking();
 
   // Fetch accounts on mount (callback handling is done by ConnectBankModal)
@@ -31,16 +30,9 @@ export default function ContiBancari() {
     await removeAccount(id);
   };
 
-  const handleReconnect = (id: string) => {
-    // Store the account ID for reconnection and open the modal
-    setReconnectAccountId(id);
-    setIsModalOpen(true);
-  };
-
   const handleConnect = (newAccounts: BankAccount[]) => {
     // Accounts are already added by the hook
     console.log("Connected accounts:", newAccounts);
-    setReconnectAccountId(null); // Clear reconnect state
   };
 
   const handleUploadSuccess = () => {
@@ -160,7 +152,6 @@ export default function ContiBancari() {
               onSync={handleSync}
               onTest={handleTest}
               onRemove={handleRemove}
-              onReconnect={handleReconnect}
             />
           ))}
         </div>
