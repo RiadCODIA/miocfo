@@ -1,184 +1,196 @@
 
 
-## Analisi Completa Piattaforma Finexa - Bug e Flussi Mancanti
+## Analisi e Miglioramento Sezione Scadenzario
 
-Ho analizzato l'intera piattaforma e identificato i seguenti problemi, suddivisi per gravità e area.
+### Problemi Identificati
 
----
+#### 1. Manca la possibilità di inserire scadenze
+**Gravità: CRITICA**
 
-## BUONA NOTIZIA
+La sezione mostra "Nessuna scadenza programmata" ma non esiste NESSUN modo per l'utente di creare scadenze:
+- Non c'è un bottone "Aggiungi scadenza"
+- Non esiste un modale o form di inserimento
+- La tabella `deadlines` è vuota (0 record)
 
-**Le transazioni ora funzionano!** Il database contiene 743 transazioni sincronizzate correttamente dal conto Revolut. I dati sono visibili nella pagina `/transazioni` con importi correttamente firmati (DBIT = negativi, CRDT = positivi).
-
----
-
-## PROBLEMI CRITICI (Sicurezza)
-
-### 1. RLS Policies "Allow All" su tabelle sensibili ⏳ DA FARE
+#### 2. Nessun collegamento con le fatture
 **Gravità: ALTA**
 
-Diverse tabelle hanno policy RLS con `USING (true)` che permettono a chiunque di leggere/modificare tutti i dati:
+La tabella `deadlines` ha un campo `invoice_id` che collega alle fatture, ma:
+- Quando si carica una fattura, NON viene creata automaticamente una scadenza
+- Manca il flusso: fattura → data scadenza → creazione deadline
 
-| Tabella | Rischio |
-|---------|---------|
-| `bank_transactions` | Tutti possono vedere tutte le transazioni di tutti gli utenti |
-| `budgets` | Chiunque può leggere/modificare i budget di altri |
-| `deadlines` | Scadenze accessibili a tutti |
-| `alerts` | Alert di tutti gli utenti esposti |
-| `invoices` | Fatture accessibili a tutti |
-| `cost_categories` | Accesso aperto |
-| `employees` | Dati dipendenti esposti |
-| `categorization_rules` | Regole di tutti |
-| `revenue_centers` | Centri di incasso |
-| `vat_rates` | Aliquote IVA |
-
-**Fix necessario**: Aggiungere RLS policies corrette che filtrino per `user_id` o attraverso join con tabelle che hanno `user_id`.
-
----
-
-## PROBLEMI FUNZIONALI
-
-### 2. Conti bancari duplicati senza transazioni ⏳ DA FARE
+#### 3. Mancano azioni sulle scadenze esistenti
 **Gravità: MEDIA**
 
-Nel database ci sono 6 conti bancari ma solo 1 ha transazioni (743):
-- 5 conti Revolut con `tx_count: 0` e `current_balance: 0`
-- 1 conto Revolut con `tx_count: 743`
-- 1 conto BCC con `current_balance: 107975.17` ma `tx_count: 0`
+L'hook `useCompleteDeadline` esiste ma non è usato nella UI:
+- Non c'è bottone "Segna come completato"
+- Non c'è possibilità di modificare o eliminare scadenze
+- Non c'è filtro per vedere scadenze passate/completate
 
-**Causa**: Ogni tentativo di connessione ha creato un nuovo record invece di aggiornare quello esistente.
-
-**Fix suggerito**: 
-- Pulire i conti duplicati senza transazioni
-- Aggiungere logica per evitare duplicati basata su `iban` o `plaid_account_id`
-
----
-
-### 3. Dati mancanti in sezioni dipendenti da configurazione
+#### 4. Spiegazione dello scopo poco chiara
 **Gravità: MEDIA**
 
-Le seguenti sezioni mostrano "Nessun dato" perché non ci sono record nelle tabelle corrispondenti:
-
-| Sezione | Tabella | Count |
-|---------|---------|-------|
-| Marginalità | `products_services` | 0 |
-| Budget & Previsioni | `budgets` | 0 |
-| Scadenzario | `deadlines` | 0 |
-| Alert & Notifiche | `alerts` | 0 |
-| Configurazione > Dipendenti | `employees` | 0 |
-
-**Non è un bug di codice** - queste sezioni funzionano, ma dipendono da dati che l'utente deve inserire manualmente.
+Il sottotitolo "Gestione incassi e pagamenti futuri" è generico. Manca:
+- Spiegazione del concetto di scadenzario
+- Guida su come usarlo
+- Connessione visiva con la previsione di liquidità
 
 ---
 
-### 4. Budget: bottone "Inserisci Budget" non funziona ✅ RISOLTO
-**Gravità: MEDIA**
+### Soluzione Proposta
 
-~~Il bottone "Inserisci Budget" nella pagina `/budget` non ha un handler collegato - è solo un `<Button>` senza `onClick`.~~
+#### A. Nuovo componente `CreateDeadlineModal`
+Form modale per inserire manualmente scadenze:
+- **Descrizione** (es. "Fattura fornitore ABC", "Incasso cliente XYZ")
+- **Tipo**: Incasso o Pagamento (dropdown)
+- **Importo** (€)
+- **Data scadenza** (date picker)
+- **Collega a fattura** (opzionale, dropdown fatture)
 
-**Fix applicato**: Creato `CreateBudgetModal` e collegato al bottone. Ora apre un modale per inserire nuovo budget mensile.
+#### B. Azioni inline sulle scadenze
+Per ogni scadenza nella lista:
+- **✓ Completa**: Segna come pagato/incassato
+- **✎ Modifica**: Apre form precompilato
+- **✕ Elimina**: Con conferma
 
----
+#### C. Generazione automatica da fatture
+Quando viene caricata una fattura:
+- Estrarre la data di scadenza pagamento (se presente nel PDF)
+- Creare automaticamente una scadenza di tipo "pagamento"
+- Collegare la scadenza alla fattura (`invoice_id`)
 
-### 5. Alert automatici non vengono generati ⏳ DA FARE
-**Gravità: MEDIA**
+#### D. Filtri e visualizzazione migliorata
+- **Filtro stato**: Tutte / Pendenti / Completate / Scadute
+- **Filtro tipo**: Tutti / Incassi / Pagamenti
+- **Range date**: Prossimi 7/30/90 giorni
 
-La tabella `alerts` è vuota. Il sistema di alert esiste ma:
-- Non c'è trigger automatico che crea alert basati su condizioni
-- L'edge function `check-alerts` esiste ma non viene chiamata periodicamente
-
----
-
-### 6. Fatture: nessuna integrazione con transazioni ⏳ DA FARE
-**Gravità: MEDIA**
-
-La sezione Fatture ha 0 record. Manca:
-- Flusso di generazione automatica scadenze da fatture
-- Collegamento fatture → deadlines → previsione liquidità
-
----
-
-## PROBLEMI UI/UX
-
-### 7. Console warning: SpendingReportModal ref error ✅ NON NECESSARIO
-**Gravità: BASSA**
-
-~~Warning React in console - il componente Badge viene passato come children in un contesto che richiede forwardRef.~~
-
-**Analisi**: Il warning è intermittente e potrebbe provenire dalla libreria recharts, non dal nostro codice.
+#### E. Header migliorato con spiegazione
+Aggiungere una descrizione più chiara dello scopo:
+> "Pianifica incassi e pagamenti futuri per prevedere la liquidità disponibile. Le scadenze alimentano il grafico di proiezione."
 
 ---
 
-### 8. Impostazioni profilo non salvano ✅ RISOLTO
-**Gravità: MEDIA**
+### File da modificare
 
-~~La sezione profilo in `/impostazioni` (nome, email, password) ha campi input ma il bottone "Salva" salva solo le preferenze notifiche, non i dati profilo.~~
+1. **`src/pages/Scadenzario.tsx`**
+   - Aggiungere bottone "Nuova Scadenza"
+   - Implementare filtri stato/tipo
+   - Aggiungere azioni (completa/modifica/elimina) su ogni scadenza
+   - Migliorare header con spiegazione
 
-**Fix applicato**: Aggiunto `useUpdateProfile` hook e bottone "Salva Profilo" separato che:
-- Salva nome e cognome nel profilo
-- Permette di cambiare la password
-- Mostra l'email corrente (non modificabile)
+2. **Nuovo: `src/components/scadenzario/CreateDeadlineModal.tsx`**
+   - Form completo per inserimento scadenza
+   - Validazione importo > 0 e data futura
+   - Collegamento opzionale a fattura
 
----
+3. **`src/hooks/useDeadlines.ts`**
+   - Aggiungere `useCreateDeadline` mutation
+   - Aggiungere `useUpdateDeadline` mutation  
+   - Aggiungere `useDeleteDeadline` mutation
+   - Aggiungere parametri filtro a `useDeadlines`
 
-### 9. Filtro categoria in Transazioni usa valori hardcoded ✅ RISOLTO
-**Gravità: BASSA**
-
-~~In `/transazioni`, il dropdown "Categoria" ha opzioni statiche (transfer, payment, food, travel).~~
-
-**Fix applicato**: Il dropdown ora:
-- Carica dinamicamente le categorie da `cost_categories`
-- Include opzione "Non categorizzate" per trovare transazioni da categorizzare
-- Filtra correttamente per `ai_category_id`
-
----
-
-## FLUSSI MANCANTI
-
-### 10. Nessun flusso di onboarding ⏳ DA FARE
-L'utente dopo la registrazione vede sezioni vuote ovunque. Manca un wizard che guidi attraverso:
-1. Collegamento primo conto bancario
-2. Configurazione categorie costi
-3. Inserimento budget iniziale
-4. Configurazione alert personalizzati
-
-### 11. Nessuna sincronizzazione automatica periodica ⏳ DA FARE
-I conti bancari vengono sincronizzati solo manualmente. Manca:
-- Scheduled job per sync giornaliero/orario
-- Webhook per sync real-time (se supportato dalla banca)
-
-### 12. Nessuna esportazione dati completa ⏳ DA FARE
-Il bottone "Esporta" in Transazioni non fa nulla. Solo il report KPI ha export funzionante.
-
-### 13. Scadenzario non collegato a nulla ⏳ DA FARE
-Le scadenze devono essere inserite manualmente. Non esiste:
-- Generazione automatica da fatture
-- Import da calendario esterno
-- Ricorrenze automatiche
+4. **`supabase/functions/process-invoice/index.ts`** (opzionale follow-up)
+   - Estrarre data scadenza dal PDF con AI
+   - Creare automaticamente deadline dopo upload fattura
 
 ---
 
-## RIEPILOGO STATO FIX
+### Schema Flusso Migliorato
 
-| Problema | Stato |
-|----------|-------|
-| 🔴 RLS policies "Allow All" | ⏳ Da fare |
-| 🟠 Pulizia conti duplicati | ⏳ Da fare |
-| 🟠 Bottone "Inserisci Budget" | ✅ Risolto |
-| 🟡 Alert automatici | ⏳ Da fare |
-| 🟡 Profilo non salva | ✅ Risolto |
-| 🟢 Console warning SpendingReportModal | ✅ Non necessario |
-| 🟢 Filtro categoria hardcoded | ✅ Risolto |
+```text
+┌─────────────────────────────────────────────────────────────────┐
+│                        SCADENZARIO                              │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────────┐    ┌─────────────────┐    ┌─────────────┐ │
+│  │ Upload Fattura  │───▶│ AI Estrae Data │───▶│ Auto-crea   │ │
+│  │                 │    │ Scadenza       │    │ Deadline    │ │
+│  └─────────────────┘    └─────────────────┘    └─────────────┘ │
+│                                                       │         │
+│  ┌─────────────────┐                                  ▼         │
+│  │ [+ Nuova Scad.] │──────────────────────▶ ┌─────────────────┐│
+│  │ (Manuale)       │                        │   Deadlines DB  ││
+│  └─────────────────┘                        └────────┬────────┘│
+│                                                      │         │
+│                                                      ▼         │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │  Lista Scadenze                                           │ │
+│  │  ┌─────────────────────────────────────────────────────┐  │ │
+│  │  │ 📅 Feb 05  Fattura ABC    Pagamento  -€5.000  [✓][✎]│  │ │
+│  │  │ 📅 Feb 10  Cliente XYZ    Incasso    +€8.000  [✓][✎]│  │ │
+│  │  └─────────────────────────────────────────────────────┘  │ │
+│  └───────────────────────────────────────────────────────────┘ │
+│                                                      │         │
+│                                                      ▼         │
+│  ┌───────────────────────────────────────────────────────────┐ │
+│  │  📈 Proiezione Liquidità 30gg (grafico)                   │ │
+│  │     Saldo attuale + incassi - pagamenti = saldo futuro    │ │
+│  └───────────────────────────────────────────────────────────┘ │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-## STATO ATTUALE DELLE TRANSAZIONI
+### Dettagli Tecnici
 
-**CONFERMA: Il flusso Enable Banking → transazioni → DB → UI funziona correttamente!**
+#### CreateDeadlineModal - Struttura Form
 
-- `bank_transactions`: 743 record
-- Importi correttamente firmati (DBIT = negativo, CRDT = positivo)
-- La query network ritorna status 200 con dati
-- La pagina `/transazioni` dovrebbe mostrare i dati
+```text
+┌────────────────────────────────────────────┐
+│         Nuova Scadenza                  ✕  │
+├────────────────────────────────────────────┤
+│                                            │
+│  Descrizione                               │
+│  ┌────────────────────────────────────┐   │
+│  │ Es. Fattura Fornitore ABC          │   │
+│  └────────────────────────────────────┘   │
+│                                            │
+│  Tipo              Importo                 │
+│  ┌──────────────┐  ┌──────────────────┐   │
+│  │ ▾ Pagamento  │  │ € 1.500,00       │   │
+│  └──────────────┘  └──────────────────┘   │
+│                                            │
+│  Data Scadenza                             │
+│  ┌────────────────────────────────────┐   │
+│  │ 📅 15/02/2026                      │   │
+│  └────────────────────────────────────┘   │
+│                                            │
+│  Collega a fattura (opzionale)             │
+│  ┌────────────────────────────────────┐   │
+│  │ ▾ Seleziona fattura...             │   │
+│  └────────────────────────────────────┘   │
+│                                            │
+│                        ┌──────────────────┐│
+│                        │  Salva Scadenza  ││
+│                        └──────────────────┘│
+└────────────────────────────────────────────┘
+```
 
-Se non li vedi nella UI, ricarica la pagina (`Cmd+Shift+R` / `Ctrl+Shift+R`).
+#### Hook useDeadlines - Nuove mutations
+
+- `useCreateDeadline({ description, type, amount, dueDate, invoiceId? })`
+- `useUpdateDeadline({ id, description?, type?, amount?, dueDate?, status? })`
+- `useDeleteDeadline(id)`
+
+#### Filtri nella query
+
+```typescript
+useDeadlines({
+  status?: "pending" | "completed" | "overdue" | "all",
+  type?: "incasso" | "pagamento" | "all",
+  fromDate?: string,
+  toDate?: string,
+})
+```
+
+---
+
+### Risultato Atteso
+
+1. **Inserimento manuale scadenze**: Bottone "Nuova Scadenza" apre modale → salva in DB → appare nella lista
+2. **Azioni rapide**: Completare scadenze con un click, vedere lo stato aggiornarsi
+3. **Proiezione funzionante**: Con scadenze inserite, il grafico proiezione liquidità si popola
+4. **Collegamento fatture**: Possibilità di collegare scadenza a fattura esistente
+5. **Filtri utili**: Vedere solo scadenze pendenti, solo pagamenti, ecc.
+
