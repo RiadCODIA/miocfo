@@ -17,6 +17,10 @@ export const useGlobalUsers = () => {
   return useQuery({
     queryKey: ['global-users'],
     queryFn: async () => {
+      // Try to get users with email via RPC (only works for super_admin)
+      const { data: usersWithEmail, error: rpcError } = await supabase
+        .rpc('get_users_with_email');
+
       // Get profiles
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
@@ -32,18 +36,31 @@ export const useGlobalUsers = () => {
 
       if (rolesError) throw rolesError;
 
-      // Map profiles with roles
+      // Create email lookup map from RPC results
+      const emailMap = new Map<string, { email: string; lastSignIn: string | null }>();
+      if (!rpcError && usersWithEmail) {
+        usersWithEmail.forEach((u: { id: string; email: string; last_sign_in_at: string | null }) => {
+          emailMap.set(u.id, { 
+            email: u.email, 
+            lastSignIn: u.last_sign_in_at 
+          });
+        });
+      }
+
+      // Map profiles with roles and emails
       const users: GlobalUser[] = (profiles || []).map(profile => {
         const userRole = roles?.find(r => r.user_id === profile.id);
+        const emailData = emailMap.get(profile.id);
+        
         return {
           id: profile.id,
-          email: '', // Email not available from profiles table
+          email: emailData?.email || '',
           firstName: profile.first_name,
           lastName: profile.last_name,
           companyName: profile.company_name,
           role: userRole?.role || 'user',
           createdAt: profile.created_at,
-          lastSignIn: null,
+          lastSignIn: emailData?.lastSignIn || null,
         };
       });
 
