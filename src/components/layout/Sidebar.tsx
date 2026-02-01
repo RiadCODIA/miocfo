@@ -78,11 +78,12 @@ const superAdminSidebarSections: SidebarSection[] = [
 export function Sidebar() {
   const { collapsed, setCollapsed } = useSidebarState();
   const location = useLocation();
-  const { user, profile, signOut, demoRole, isDemoMode } = useAuth();
+  const { user, profile, signOut, demoRole, userRole, isDemoMode } = useAuth();
   const { data: alertsCount } = useActiveAlertsCount();
 
-  const isAdmin = demoRole === 'admin_aziendale';
-  const isSuperAdmin = demoRole === 'super_admin';
+  const effectiveRole = demoRole || userRole;
+  const isAdmin = effectiveRole === 'admin_aziendale';
+  const isSuperAdmin = effectiveRole === 'super_admin';
 
   // Completely different sidebar based on role
   const sidebarSections: SidebarSection[] = isSuperAdmin
