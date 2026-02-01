@@ -43,6 +43,7 @@ interface AuthContextType {
   loading: boolean;
   isDemoMode: boolean;
   demoRole: AppRole | null;
+  userRole: AppRole | null;
   permissions: AdminPermissions | null;
   superAdminPermissions: SuperAdminPermissions | null;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
@@ -97,6 +98,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [isDemoMode, setIsDemoMode] = useState(false);
   const [demoRole, setDemoRole] = useState<AppRole | null>(null);
+  const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [permissions, setPermissions] = useState<AdminPermissions | null>(null);
   const [superAdminPermissions, setSuperAdminPermissions] = useState<SuperAdminPermissions | null>(null);
 
@@ -121,6 +123,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     
     if (!error && data) {
       const role = data.role as AppRole;
+      setUserRole(role);
+      
       if (role === 'admin_aziendale') {
         setPermissions(ADMIN_PERMISSIONS);
         setSuperAdminPermissions(null);
@@ -149,6 +153,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           }, 0);
         } else {
           setProfile(null);
+          setUserRole(null);
           setPermissions(null);
           setSuperAdminPermissions(null);
         }
@@ -204,12 +209,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setIsDemoMode(false);
       setDemoRole(null);
       setProfile(null);
+      setUserRole(null);
       setPermissions(null);
       setSuperAdminPermissions(null);
       return;
     }
     await supabase.auth.signOut();
     setProfile(null);
+    setUserRole(null);
     setPermissions(null);
     setSuperAdminPermissions(null);
   };
@@ -267,6 +274,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         isDemoMode,
         demoRole,
+        userRole,
         permissions,
         superAdminPermissions,
         signIn,
