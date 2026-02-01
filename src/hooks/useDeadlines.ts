@@ -12,15 +12,59 @@ export interface Deadline {
   invoiceId: string | null;
 }
 
-export function useDeadlines() {
+export interface DeadlineFilters {
+  status?: "pending" | "completed" | "overdue" | "all";
+  type?: "incasso" | "pagamento" | "all";
+  fromDate?: string;
+  toDate?: string;
+}
+
+export interface CreateDeadlineInput {
+  description: string;
+  type: "incasso" | "pagamento";
+  amount: number;
+  dueDate: string;
+  invoiceId?: string | null;
+}
+
+export interface UpdateDeadlineInput {
+  id: string;
+  description?: string;
+  type?: "incasso" | "pagamento";
+  amount?: number;
+  dueDate?: string;
+  status?: "pending" | "completed" | "overdue";
+  invoiceId?: string | null;
+}
+
+export function useDeadlines(filters?: DeadlineFilters) {
   return useQuery({
-    queryKey: ["deadlines"],
+    queryKey: ["deadlines", filters],
     queryFn: async (): Promise<Deadline[]> => {
-      const { data, error } = await supabase
+      let query = supabase
         .from("deadlines")
         .select("*")
-        .order("due_date", { ascending: true })
-        .limit(50);
+        .order("due_date", { ascending: true });
+
+      // Apply status filter
+      if (filters?.status && filters.status !== "all") {
+        query = query.eq("status", filters.status);
+      }
+
+      // Apply type filter
+      if (filters?.type && filters.type !== "all") {
+        query = query.eq("type", filters.type);
+      }
+
+      // Apply date range filters
+      if (filters?.fromDate) {
+        query = query.gte("due_date", filters.fromDate);
+      }
+      if (filters?.toDate) {
+        query = query.lte("due_date", filters.toDate);
+      }
+
+      const { data, error } = await query.limit(100);
 
       if (error) throw error;
 
@@ -52,12 +96,14 @@ export function useDeadlinesSummary() {
       const pagamentiTotali = data?.filter(d => d.type === "pagamento").reduce((sum, d) => sum + Number(d.amount), 0) || 0;
       const incassiCount = data?.filter(d => d.type === "incasso").length || 0;
       const pagamentiCount = data?.filter(d => d.type === "pagamento").length || 0;
+      const overdueCount = data?.filter(d => d.status === "overdue").length || 0;
 
       return {
         incassiTotali,
         pagamentiTotali,
         incassiCount,
         pagamentiCount,
+        overdueCount,
         saldoNetto: incassiTotali - pagamentiTotali,
       };
     },
@@ -130,6 +176,87 @@ export function useLiquidityForecast() {
   });
 }
 
+export function useCreateDeadline() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: CreateDeadlineInput) => {
+      const { data, error } = await supabase
+        .from("deadlines")
+        .insert({
+          description: input.description,
+          type: input.type,
+          amount: input.amount,
+          due_date: input.dueDate,
+          invoice_id: input.invoiceId || null,
+          status: "pending",
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deadlines"] });
+      queryClient.invalidateQueries({ queryKey: ["deadlines-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["liquidity-forecast"] });
+    },
+  });
+}
+
+export function useUpdateDeadline() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: UpdateDeadlineInput) => {
+      const updateData: Record<string, unknown> = {};
+      
+      if (input.description !== undefined) updateData.description = input.description;
+      if (input.type !== undefined) updateData.type = input.type;
+      if (input.amount !== undefined) updateData.amount = input.amount;
+      if (input.dueDate !== undefined) updateData.due_date = input.dueDate;
+      if (input.status !== undefined) updateData.status = input.status;
+      if (input.invoiceId !== undefined) updateData.invoice_id = input.invoiceId;
+
+      const { data, error } = await supabase
+        .from("deadlines")
+        .update(updateData)
+        .eq("id", input.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deadlines"] });
+      queryClient.invalidateQueries({ queryKey: ["deadlines-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["liquidity-forecast"] });
+    },
+  });
+}
+
+export function useDeleteDeadline() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (deadlineId: string) => {
+      const { error } = await supabase
+        .from("deadlines")
+        .delete()
+        .eq("id", deadlineId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deadlines"] });
+      queryClient.invalidateQueries({ queryKey: ["deadlines-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["liquidity-forecast"] });
+    },
+  });
+}
+
 export function useCompleteDeadline() {
   const queryClient = useQueryClient();
 
@@ -146,6 +273,22 @@ export function useCompleteDeadline() {
       queryClient.invalidateQueries({ queryKey: ["deadlines"] });
       queryClient.invalidateQueries({ queryKey: ["deadlines-summary"] });
       queryClient.invalidateQueries({ queryKey: ["liquidity-forecast"] });
+    },
+  });
+}
+
+export function useInvoicesForDeadlines() {
+  return useQuery({
+    queryKey: ["invoices-for-deadlines"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("invoices")
+        .select("id, invoice_number, supplier_name, amount, invoice_date")
+        .order("invoice_date", { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+      return data || [];
     },
   });
 }
