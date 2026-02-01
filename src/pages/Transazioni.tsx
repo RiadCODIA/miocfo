@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Search, Filter, Download, Edit2, BarChart3, Loader2, X, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -119,19 +119,42 @@ export default function Transazioni() {
     (tx) => !tx.aiCategoryId && !tx.categoryConfirmed
   ).length || 0;
 
-  const handleCategorizeAll = async () => {
-    try {
-      const results = await categorizeBatch();
-      if (results.length > 0) {
-        toast.success(`${results.length} transazioni categorizzate con AI`);
-        refetch();
-      } else {
-        toast.info("Nessuna transazione da categorizzare");
-      }
-    } catch (error) {
-      // Error toast already shown by hook
+  // Ref to prevent multiple concurrent categorization runs
+  const isCategorizingRef = useRef(false);
+  const hasTriggeredRef = useRef(false);
+
+  // Automatic categorization when uncategorized transactions exist
+  useEffect(() => {
+    // Only run if:
+    // 1. There are uncategorized transactions
+    // 2. Not already categorizing
+    // 3. Haven't triggered in this session (reset when count changes to 0)
+    if (uncategorizedCount > 0 && !isCategorizing && !isCategorizingRef.current && !hasTriggeredRef.current) {
+      isCategorizingRef.current = true;
+      hasTriggeredRef.current = true;
+      
+      const runCategorization = async () => {
+        try {
+          const results = await categorizeBatch();
+          if (results.length > 0) {
+            toast.success(`${results.length} transazioni categorizzate con AI`);
+            refetch();
+          }
+        } catch (error) {
+          // Error toast already shown by hook
+        } finally {
+          isCategorizingRef.current = false;
+        }
+      };
+      
+      runCategorization();
     }
-  };
+    
+    // Reset trigger flag when all transactions are categorized
+    if (uncategorizedCount === 0) {
+      hasTriggeredRef.current = false;
+    }
+  }, [uncategorizedCount, isCategorizing, categorizeBatch, refetch]);
 
   const handleCategorizeOne = async (transaction: any) => {
     setSelectedTransaction(transaction);
@@ -323,26 +346,18 @@ export default function Transazioni() {
           </PopoverContent>
         </Popover>
 
-        {/* AI Categorization Button */}
-        {uncategorizedCount > 0 && (
-          <Button
-            variant="outline"
-            className="gap-2 bg-card border-border hover:bg-secondary"
-            onClick={handleCategorizeAll}
-            disabled={isCategorizing}
-          >
-            {isCategorizing ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Categorizzazione AI in corso...</span>
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" />
-                <span>Categorizza {uncategorizedCount} transazioni</span>
-              </>
-            )}
-          </Button>
+        {/* Auto-categorization status indicator */}
+        {isCategorizing && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-sm">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Categorizzazione AI in corso...</span>
+          </div>
+        )}
+        {uncategorizedCount > 0 && !isCategorizing && (
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 text-muted-foreground text-sm">
+            <Sparkles className="h-4 w-4" />
+            <span>{uncategorizedCount} da categorizzare</span>
+          </div>
         )}
 
         {/* AI Spending Analysis Button */}
