@@ -51,7 +51,6 @@ const userSidebarSections: SidebarSection[] = [
   { id: "conti_bancari", label: "Conti Bancari", icon: Landmark, path: "/conti-bancari" },
   { id: "fatture", label: "Fatture", icon: FileText, path: "/fatture" },
   { id: "flussi_cassa", label: "Flussi di Cassa", icon: TrendingUp, path: "/flussi-cassa" },
-  { id: "marginalita", label: "Marginalità", icon: PieChart, path: "/marginalita" },
   { id: "budget_previsioni", label: "Budget & Previsioni", icon: CalendarRange, path: "/budget" },
   { id: "scadenzario", label: "Scadenzario", icon: Calendar, path: "/scadenzario" },
   { id: "kpi_report", label: "KPI & Report", icon: BarChart3, path: "/kpi-report" },

@@ -16,7 +16,7 @@ import Transazioni from "./pages/Transazioni";
 import ContiBancari from "./pages/ContiBancari";
 import Fatture from "./pages/Fatture";
 import FlussiCassa from "./pages/FlussiCassa";
-import Marginalita from "./pages/Marginalita";
+
 import BudgetPrevisioni from "./pages/BudgetPrevisioni";
 import Scadenzario from "./pages/Scadenzario";
 import KPIReport from "./pages/KPIReport";
@@ -222,16 +222,6 @@ const App = () => (
                 <ProtectedRoute>
                   <MainLayout>
                     <FlussiCassa />
-                  </MainLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/marginalita"
-              element={
-                <ProtectedRoute>
-                  <MainLayout>
-                    <Marginalita />
                   </MainLayout>
                 </ProtectedRoute>
               }
