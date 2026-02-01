@@ -33,6 +33,8 @@ import FlussiClienti from "./pages/FlussiClienti";
 import DashboardSuperAdmin from "./pages/DashboardSuperAdmin";
 import UtentiGlobali from "./pages/UtentiGlobali";
 import Piani from "./pages/Piani";
+import Fatturazione from "./pages/Fatturazione";
+import KPIInterni from "./pages/KPIInterni";
 
 const queryClient = new QueryClient();
 
@@ -125,6 +127,26 @@ const App = () => (
                 <ProtectedRoute>
                   <MainLayout>
                     <Piani />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/fatturazione"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Fatturazione />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/kpi-interni"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <KPIInterni />
                   </MainLayout>
                 </ProtectedRoute>
               }
