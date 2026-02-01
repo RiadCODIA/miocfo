@@ -65,7 +65,8 @@ export default function ContiBancari() {
     fetchAccounts();
   };
 
-  const totalBalance = accounts.reduce((sum, acc) => sum + (acc.current_balance || 0), 0);
+  // Use available_balance when present (matches what users see in their bank app)
+  const totalBalance = accounts.reduce((sum, acc) => sum + (acc.available_balance || acc.current_balance || 0), 0);
 
   // Map the account format to the card format
   const mapAccountToCard = (account: BankAccount) => ({
