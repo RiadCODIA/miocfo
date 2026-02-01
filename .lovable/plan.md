@@ -1,119 +1,100 @@
 
 
-## Obiettivo
-Sincronizzare automaticamente le transazioni dopo il collegamento di un nuovo conto bancario, così l'utente vedrà immediatamente le transazioni nella sezione Transazioni senza dover cliccare manualmente "Sincronizza".
+## Piano: Fix Endpoint Transazioni + Rimozione Pulsante "Ricollega"
 
 ## Problema Identificato
 
-Attualmente il flusso è:
-1. Utente collega il conto → viene recuperato solo il **saldo**
-2. Le transazioni vengono scaricate **solo** quando l'utente clicca "Sincronizza" manualmente
-3. La modale dice "Le transazioni verranno sincronizzate automaticamente" ma non è vero
+Dall'analisi approfondita ho trovato 2 problemi:
 
-**Risultato**: Il conto BCC di Cherasco è collegato con status "active" ma ha **0 transazioni** nel database.
+### 1. Header PSU Mancanti per le Transazioni
+
+La documentazione di Enable Banking mostra che l'endpoint `/accounts/{id}/transactions` accetta header PSU opzionali:
+- `Psu-Ip-Address`
+- `Psu-User-Agent`
+- `Psu-Referer`
+- `Psu-Accept`
+- `Psu-Accept-Language`
+- `Psu-Geo-Location`
+
+Alcune banche PSD2 italiane (come BCC di Cherasco) potrebbero richiedere questi header per le transazioni, anche se sono marcati come "opzionali" nella documentazione. Il fatto che i **saldi funzionino** ma le **transazioni falliscano** suggerisce che la banca ha requisiti più stringenti per l'accesso ai movimenti.
+
+### 2. Pulsante "Ricollega" Non Funzionante
+
+Il pulsante "Ricollega" apre la modale di connessione ma non gestisce correttamente la riconnessione di un conto esistente, creando confusione.
 
 ---
 
 ## Soluzione Proposta
 
-### Opzione A: Sincronizzazione Automatica nel Backend (Consigliata)
+### Parte A: Aggiungere Header PSU alle Richieste Transazioni
 
-Dopo aver salvato i conti durante `complete_session`, chiamare automaticamente la logica di sincronizzazione transazioni per ogni conto.
+Modificare la funzione `enableBankingRequest` per accettare header PSU opzionali e passarli alle chiamate API per le transazioni:
 
-**Vantaggi**:
-- Tutto avviene in un'unica operazione
-- L'utente vede immediatamente le transazioni
-- Nessuna modifica al frontend necessaria
+```text
+File: supabase/functions/enable-banking/index.ts
 
-**File da modificare**: `supabase/functions/enable-banking/index.ts`
+1. Aggiornare la firma della funzione enableBankingRequest per accettare header opzionali:
+   
+   async function enableBankingRequest(
+     endpoint: string,
+     method: string = "GET",
+     body?: Record<string, unknown>,
+     psuHeaders?: Record<string, string>  // NUOVO
+   )
 
-```typescript
-// In completeSession(), dopo aver salvato gli account:
+2. Unire gli header PSU se presenti:
 
-// Auto-sync transactions for each newly connected account
-console.log("[Enable Banking] Auto-syncing transactions for new accounts...");
+   const headers: Record<string, string> = {
+     "Authorization": `Bearer ${jwt}`,
+     "Content-Type": "application/json",
+     ...psuHeaders,  // NUOVO
+   };
 
-for (const savedAccount of savedAccounts) {
-  try {
-    // Get the account UID from the database (plaid_account_id stores the Enable Banking uid)
-    const accountUid = savedAccount.plaid_account_id;
-    
-    // Fetch transactions for the last 90 days (safe default)
-    const endDate = new Date().toISOString().split("T")[0];
-    const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
-    
-    console.log(`[Enable Banking] Auto-syncing transactions for ${accountUid} from ${startDate} to ${endDate}`);
-    
-    // Call transaction fetch logic (reuse existing syncAccountTransactions function)
-    const result = await syncAccountTransactions(
-      savedAccount.id, // DB account ID
-      accountUid,      // Enable Banking account UID
-      startDate,
-      endDate,
-      userId
-    );
-    
-    console.log(`[Enable Banking] Auto-synced ${result.transactions_synced} transactions for ${savedAccount.bank_name}`);
-  } catch (syncError) {
-    // Log but don't fail the whole operation - account is still connected
-    console.error(`[Enable Banking] Auto-sync failed for ${savedAccount.bank_name}:`, syncError);
-  }
-}
+3. Nelle funzioni che chiamano l'endpoint transactions, passare header PSU:
+
+   // In syncAccountTransactions()
+   const psuHeaders = {
+     "Psu-Ip-Address": "0.0.0.0",  // Edge function, IP non disponibile
+     "Psu-User-Agent": "Finexa/1.0",
+     "Psu-Accept": "application/json",
+     "Psu-Accept-Language": "it-IT",
+   };
+   
+   const transactionsResponse = await enableBankingRequest(url, "GET", undefined, psuHeaders);
 ```
 
-### Opzione B: Sincronizzazione Automatica nel Frontend
+### Parte B: Rimuovere Pulsante "Ricollega"
 
-Dopo che `completeSession` ritorna con i conti collegati, chiamare `syncAccount` per ogni conto.
+```text
+File: src/components/conti-bancari/BankAccountCard.tsx
 
-**File da modificare**: `src/components/conti-bancari/ConnectBankModal.tsx`
+1. Rimuovere la prop onReconnect dall'interfaccia
+2. Rimuovere lo stato isReconnecting e la funzione handleReconnect
+3. Rimuovere il pulsante "Ricollega" dal JSX
+4. Cambiare il testo dello status "error" da "Riconnessione richiesta" a "Errore sincronizzazione"
 
-```typescript
-// In useEffect callback after completeSession succeeds:
-const accounts = await completeSession(authCode);
-setConnectedAccounts(accounts);
+File: src/pages/ContiBancari.tsx
 
-// Auto-sync transactions for each account
-for (const account of accounts) {
-  try {
-    await syncAccount(account.id);
-  } catch (error) {
-    console.error("Auto-sync failed for", account.bank_name, error);
-    // Continue with other accounts
-  }
-}
-
-setStep("success");
+1. Rimuovere la funzione handleReconnect
+2. Rimuovere lo stato reconnectAccountId
+3. Rimuovere la prop onReconnect passata a BankAccountCard
 ```
 
----
+### Parte C: Migliorare Messaggio Errore per ASPSP_ERROR
 
-## Piano di Implementazione (Opzione A - Backend)
+```text
+File: supabase/functions/enable-banking/index.ts
 
-### Fase 1: Refactoring della funzione sync_account
+Nella gestione errori di syncAccount, cambiare il messaggio per ASPSP_ERROR:
 
-Estrarre la logica di sincronizzazione transazioni in una funzione riutilizzabile:
+Prima:
+"Errore banca (ASPSP_ERROR): la banca non ha risposto correttamente tramite PSD2. 
+ Riprova più tardi o ricollega il conto."
 
-```typescript
-async function syncAccountTransactions(
-  dbAccountId: string,
-  enableBankingUid: string,
-  startDate: string,
-  endDate: string,
-  userId: string
-): Promise<{ transactions_synced: number }> {
-  // [logica esistente di sync_account per le transazioni]
-  // ...
-  return { transactions_synced: count };
-}
+Dopo:
+"La banca non ha risposto correttamente. Riprova tra qualche minuto. 
+ Se il problema persiste, scollega e ricollega il conto."
 ```
-
-### Fase 2: Chiamare la sincronizzazione in complete_session
-
-Dopo aver salvato i conti nel database, iterare su ogni conto e sincronizzare le transazioni.
-
-### Fase 3: Gestione errori resiliente
-
-Se la sincronizzazione fallisce per un conto (es. rate limit), non bloccare l'intero processo. Il conto rimane collegato e l'utente può sincronizzare manualmente dopo.
 
 ---
 
@@ -121,21 +102,28 @@ Se la sincronizzazione fallisce per un conto (es. rate limit), non bloccare l'in
 
 | File | Modifica |
 |------|----------|
-| `supabase/functions/enable-banking/index.ts` | Aggiungere auto-sync in `completeSession()` |
+| `supabase/functions/enable-banking/index.ts` | Aggiungere header PSU alle richieste transazioni |
+| `src/components/conti-bancari/BankAccountCard.tsx` | Rimuovere pulsante "Ricollega" e aggiornare stato |
+| `src/pages/ContiBancari.tsx` | Rimuovere logica handleReconnect |
 
 ---
 
 ## Risultato Atteso
 
-Dopo questa modifica:
-1. Utente collega un conto → il conto viene salvato
-2. **Le transazioni degli ultimi 90 giorni vengono scaricate automaticamente**
-3. L'utente vede immediatamente le transazioni nella sezione Transazioni
-4. Se la sincronizzazione fallisce, il conto è comunque collegato e l'utente può sincronizzare manualmente
+1. Le richieste transazioni includeranno gli header PSU che alcune banche italiane richiedono
+2. Il pulsante "Ricollega" (che non funzionava) sarà rimosso
+3. L'utente vedrà messaggi di errore più chiari
+4. Per ricollegare, l'utente dovrà scollegare e collegare di nuovo (flusso funzionante)
 
 ---
 
 ## Nota Importante
 
-Per il conto BCC di Cherasco già collegato, dovrai comunque cliccare "Sincronizza" manualmente una volta per importare le transazioni storiche. La sincronizzazione automatica si applicherà ai **nuovi** conti collegati.
+Se anche con gli header PSU la banca BCC di Cherasco continua a dare errore ASPSP_ERROR, significa che:
+- La banca ha un problema temporaneo sul loro sistema PSD2
+- Oppure è necessario ricollegare il conto per ottenere un nuovo consenso
+
+In quel caso, l'unica soluzione è:
+1. Scollegare il conto (pulsante cestino)
+2. Collegare nuovamente il conto (pulsante "Collega nuovo conto")
 
