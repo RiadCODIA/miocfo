@@ -16,6 +16,8 @@ import {
   LogOut,
   Users,
   CreditCard,
+  Receipt,
+  LineChart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import finexaLogo from "@/assets/finexa-logo.png";
@@ -68,6 +70,9 @@ const superAdminSidebarSections: SidebarSection[] = [
   { id: "system_dashboard", label: "Dashboard di Sistema", icon: LayoutDashboard, path: "/" },
   { id: "global_users", label: "Utenti", icon: Users, path: "/utenti-globali" },
   { id: "plans_limits", label: "Piani", icon: CreditCard, path: "/piani" },
+  { id: "fatturazione", label: "Fatturazione", icon: Receipt, path: "/fatturazione" },
+  { id: "kpi_interni", label: "KPI Interni", icon: LineChart, path: "/kpi-interni" },
+  { id: "impostazioni_admin", label: "Impostazioni", icon: Settings, path: "/impostazioni" },
 ];
 
 export function Sidebar() {
