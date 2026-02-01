@@ -1,44 +1,60 @@
-# Piano di Sicurezza: Isolamento dei Dati per Utente
 
-## ✅ COMPLETATO
+# Correzione Registrazione: Email Non Ricevuta
 
-### Modifiche Database Eseguite
+## Problema Identificato
 
-1. **Colonne `user_id` aggiunte** a:
-   - `budgets`
-   - `deadlines`
-   - `alerts`
-   - `employees`
+La registrazione richiede la conferma via email, ma l'email di Supabase non arriva. Questo può accadere per:
+- Limite di email di Supabase raggiunto
+- Email finita nello spam
+- Servizio email di base non configurato correttamente
 
-2. **Policy permissive rimosse** da:
-   - `bank_accounts`
-   - `bank_transactions`
-   - `budgets`
-   - `deadlines`
-   - `alerts`
-   - `employees`
-   - `categorization_rules`
-   - `invoices`
-   - `cost_categories`
-   - `revenue_centers`
-   - `vat_rates`
+## Soluzioni Proposte
 
-3. **Nuove policy RLS create** per:
-   - Ogni utente vede solo i propri dati
-   - `bank_transactions` filtrate via join con `bank_accounts.user_id`
-   - Tabelle di configurazione: SELECT pubblico, modifiche solo per admin
+### Opzione A: Disabilitare Conferma Email (Consigliata per Sviluppo)
 
-### Modifiche Frontend Eseguite
+Vai su **Supabase Dashboard > Authentication > Providers > Email** e:
+1. Disabilita "Confirm email"
+2. Gli utenti potranno accedere immediatamente dopo la registrazione
 
-- `src/hooks/useBudgets.ts`: aggiunto `user_id` in `useCreateBudget`
-- `src/hooks/useDeadlines.ts`: aggiunto `user_id` in `useCreateDeadline`
-- `src/components/configurazione/EmployeesManager.tsx`: aggiunto `user_id` in creazione
+Link diretto: https://supabase.com/dashboard/project/ublsnradzhfpqhunfqbn/auth/providers
 
-### Warning Accettati
+### Opzione B: Configurare Servizio Email Custom (Consigliato per Produzione)
 
-- `application_logs` e `audit_trail`: `WITH CHECK (true)` intenzionale per logging di sistema
-- Leaked Password Protection: configurazione Supabase Dashboard (consigliato attivare)
+Se vuoi mantenere la conferma email in produzione, devi configurare un servizio email esterno come **Resend**:
 
-### Risultato
+1. Creare account su https://resend.com
+2. Verificare il tuo dominio email
+3. Creare API key su https://resend.com/api-keys
+4. Configurare la chiave in Supabase
 
-I dati finanziari di ogni utente sono ora isolati. Un nuovo utente vedrà solo i propri dati (inizialmente vuoti) e non avrà accesso ai dati degli altri utenti.
+## Dettagli Tecnici
+
+### Stato Attuale
+- L'app usa `supabase.auth.signUp()` con `emailRedirectTo` configurato correttamente
+- La registrazione viene chiamata ma l'email non arriva
+- Nel database ci sono solo 2 utenti esistenti (nessun nuovo signup recente)
+
+### Verifica Immediata
+
+Per verificare se la registrazione ha funzionato ma l'email non è arrivata:
+1. Controlla la cartella Spam della tua email
+2. Vai su Supabase Dashboard > Authentication > Users per vedere se l'utente è stato creato
+3. Se l'utente esiste ma non è confermato, puoi confermarlo manualmente dal dashboard
+
+### Configurazione Alternativa: Auto-conferma Email
+
+Se preferisci mantenere il flusso email ma sbloccare gli utenti esistenti:
+1. Vai su Authentication > Users
+2. Trova l'utente non confermato
+3. Clicca sui tre puntini e seleziona "Confirm email"
+
+## Azioni Richieste
+
+1. **Controllo immediato**: Verifica in Supabase Dashboard se l'utente consulente è stato creato
+2. **Per sviluppo**: Disabilita "Confirm email" nelle impostazioni
+3. **Per produzione**: Configura Resend per email affidabili
+
+## Link Utili
+
+- [Impostazioni Auth Supabase](https://supabase.com/dashboard/project/ublsnradzhfpqhunfqbn/auth/providers)
+- [Utenti registrati](https://supabase.com/dashboard/project/ublsnradzhfpqhunfqbn/auth/users)
