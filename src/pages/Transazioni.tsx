@@ -202,10 +202,27 @@ export default function Transazioni() {
           Altri filtri
         </Button>
 
+        {/* Auto-categorize All Button */}
+        {uncategorizedCount > 0 && (
+          <Button
+            variant="default"
+            className="gap-2"
+            onClick={handleCategorizeAll}
+            disabled={isCategorizing}
+          >
+            {isCategorizing ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Edit2 className="h-4 w-4" />
+            )}
+            Categorizza tutto ({uncategorizedCount})
+          </Button>
+        )}
+
         {/* AI Spending Analysis Button */}
         <Button
-          variant="default"
-          className="gap-2"
+          variant="outline"
+          className="gap-2 bg-card border-border hover:bg-secondary"
           onClick={() => setReportModalOpen(true)}
         >
           <BarChart3 className="h-4 w-4" />
