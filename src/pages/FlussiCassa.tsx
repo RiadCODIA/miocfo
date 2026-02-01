@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Target, Percent } from "lucide-react";
+import { TrendingUp, TrendingDown, Target, Percent, Wallet, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import {
   Table,
@@ -10,11 +10,17 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { useCashFlowData, useCashFlowKPIs } from "@/hooks/useCashFlowData";
+import { useCashFlowData, useCashFlowKPIs, useCashFlowVsBudget } from "@/hooks/useCashFlowData";
+import { useLiquidityForecast } from "@/hooks/useDeadlines";
+import { CashFlowChart } from "@/components/flussi-cassa/CashFlowChart";
+import { BudgetComparisonChart } from "@/components/flussi-cassa/BudgetComparisonChart";
+import { LiquidityProjection } from "@/components/flussi-cassa/LiquidityProjection";
 
 export default function FlussiCassa() {
   const { data: monthlyData = [], isLoading: isLoadingData } = useCashFlowData();
   const { data: kpis, isLoading: isLoadingKPIs } = useCashFlowKPIs();
+  const { data: budgetComparison = [], isLoading: isLoadingBudget } = useCashFlowVsBudget();
+  const { data: liquidityForecast, isLoading: isLoadingForecast } = useLiquidityForecast();
 
   const totals = monthlyData.reduce(
     (acc, row) => ({
@@ -29,6 +35,14 @@ export default function FlussiCassa() {
   const formatCurrency = (value: number) => {
     return `€${Math.abs(value).toLocaleString("it-IT")}`;
   };
+
+  // Prepare chart data (reversed for chronological order)
+  const chartData = [...monthlyData].map(row => ({
+    mese: row.meseShort,
+    incassi: row.incassi,
+    pagamenti: row.pagamenti,
+    cashflow: row.cashflow,
+  }));
 
   return (
     <div className="space-y-6">
@@ -52,11 +66,22 @@ export default function FlussiCassa() {
         ) : (
           <>
             <KPICard
-              title="Break-Even Point"
-              value={formatCurrency(kpis?.breakEvenPoint ?? 0)}
-              icon={<Target className="h-5 w-5" />}
-              variant="warning"
+              title="Cashflow Cumulativo"
+              value={formatCurrency(kpis?.cashflowCumulativo ?? 0)}
+              change={kpis?.cashflowChange}
+              changeLabel="vs 6 mesi prec."
+              icon={<Wallet className="h-5 w-5" />}
+              variant={(kpis?.cashflowCumulativo ?? 0) >= 0 ? "success" : "destructive"}
               delay={0}
+            />
+            <KPICard
+              title="Margine Operativo"
+              value={`${kpis?.margineOperativo ?? 0}%`}
+              change={kpis?.margineOperativoChange}
+              changeLabel="vs trimestre prec."
+              icon={<TrendingUp className="h-5 w-5" />}
+              variant={(kpis?.margineOperativo ?? 0) >= 20 ? "success" : "warning"}
+              delay={50}
             />
             <KPICard
               title="Incidenza Costi"
@@ -64,36 +89,53 @@ export default function FlussiCassa() {
               change={kpis?.incidenzaCostiChange ? -kpis.incidenzaCostiChange : undefined}
               changeLabel="vs trimestre prec."
               icon={<Percent className="h-5 w-5" />}
-              variant="default"
-              delay={50}
-            />
-            <KPICard
-              title="Cashflow Cumulativo"
-              value={formatCurrency(kpis?.cashflowCumulativo ?? 0)}
-              change={kpis?.cashflowChange}
-              changeLabel="vs anno prec."
-              icon={<TrendingUp className="h-5 w-5" />}
-              variant="success"
+              variant={(kpis?.incidenzaCosti ?? 0) <= 80 ? "default" : "warning"}
               delay={100}
             />
             <KPICard
-              title="Margine Operativo"
-              value={`${kpis?.margineOperativo ?? 0}%`}
-              change={kpis?.margineOperativoChange}
-              changeLabel="vs trimestre prec."
-              icon={<TrendingDown className="h-5 w-5" />}
-              variant="success"
+              title="Costi Operativi"
+              value={formatCurrency(kpis?.breakEvenPoint ?? 0)}
+              icon={<Target className="h-5 w-5" />}
+              variant="default"
               delay={150}
             />
           </>
         )}
       </div>
 
+      {/* Charts Row */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 opacity-0 animate-fade-in" style={{ animationDelay: "200ms" }}>
+        {isLoadingData ? (
+          <>
+            <Skeleton className="h-[380px]" />
+            <Skeleton className="h-[380px]" />
+          </>
+        ) : (
+          <>
+            <CashFlowChart data={chartData} />
+            <BudgetComparisonChart data={budgetComparison} />
+          </>
+        )}
+      </div>
+
+      {/* Liquidity Projection */}
+      <div className="opacity-0 animate-fade-in" style={{ animationDelay: "300ms" }}>
+        {isLoadingForecast ? (
+          <Skeleton className="h-[280px]" />
+        ) : (
+          <LiquidityProjection
+            data={liquidityForecast?.forecast ?? []}
+            minBalance={liquidityForecast?.minBalance ?? 0}
+            minBalanceDate={liquidityForecast?.minBalanceDate ?? ""}
+          />
+        )}
+      </div>
+
       {/* Monthly Table */}
-      <div className="glass rounded-xl overflow-hidden opacity-0 animate-fade-in" style={{ animationDelay: "200ms" }}>
+      <div className="glass rounded-xl overflow-hidden opacity-0 animate-fade-in" style={{ animationDelay: "400ms" }}>
         <div className="p-5 border-b border-border">
           <h3 className="text-lg font-semibold text-foreground">Riepilogo Mensile</h3>
-          <p className="text-sm text-muted-foreground">Logica di cassa - Aggregazione mensile</p>
+          <p className="text-sm text-muted-foreground">Logica di cassa - Aggregazione mensile ultimi 6 mesi</p>
         </div>
         
         {isLoadingData ? (
@@ -111,40 +153,55 @@ export default function FlussiCassa() {
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent">
                 <TableHead className="text-muted-foreground">Mese</TableHead>
-                <TableHead className="text-muted-foreground text-right">Incassi</TableHead>
-                <TableHead className="text-muted-foreground text-right">Pagamenti</TableHead>
-                <TableHead className="text-muted-foreground text-right">Utile/Perdita</TableHead>
+                <TableHead className="text-muted-foreground text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <ArrowUpRight className="h-4 w-4 text-success" />
+                    Incassi
+                  </div>
+                </TableHead>
+                <TableHead className="text-muted-foreground text-right">
+                  <div className="flex items-center justify-end gap-1">
+                    <ArrowDownRight className="h-4 w-4 text-destructive" />
+                    Pagamenti
+                  </div>
+                </TableHead>
+                <TableHead className="text-muted-foreground text-right">Margine</TableHead>
                 <TableHead className="text-muted-foreground text-right">Cashflow Netto</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {monthlyData.map((row, index) => (
-                <TableRow
-                  key={row.mese}
-                  className="border-border hover:bg-secondary/50 opacity-0 animate-fade-in"
-                  style={{ animationDelay: `${300 + index * 50}ms` }}
-                >
-                  <TableCell className="font-medium capitalize">{row.mese}</TableCell>
-                  <TableCell className="text-right text-success font-medium">
-                    €{row.incassi.toLocaleString("it-IT")}
-                  </TableCell>
-                  <TableCell className="text-right text-destructive font-medium">
-                    €{row.pagamenti.toLocaleString("it-IT")}
-                  </TableCell>
-                  <TableCell className={cn(
-                    "text-right font-semibold",
-                    row.utile >= 0 ? "text-success" : "text-destructive"
-                  )}>
-                    {row.utile >= 0 ? "+" : "-"}€{Math.abs(row.utile).toLocaleString("it-IT")}
-                  </TableCell>
-                  <TableCell className={cn(
-                    "text-right font-semibold",
-                    row.cashflow >= 0 ? "text-success" : "text-destructive"
-                  )}>
-                    {row.cashflow >= 0 ? "+" : "-"}€{Math.abs(row.cashflow).toLocaleString("it-IT")}
-                  </TableCell>
-                </TableRow>
-              ))}
+              {monthlyData.map((row, index) => {
+                const marginPercent = row.incassi > 0 
+                  ? ((row.utile / row.incassi) * 100).toFixed(1) 
+                  : "0.0";
+                return (
+                  <TableRow
+                    key={row.mese}
+                    className="border-border hover:bg-secondary/50 opacity-0 animate-fade-in"
+                    style={{ animationDelay: `${500 + index * 50}ms` }}
+                  >
+                    <TableCell className="font-medium capitalize">{row.mese}</TableCell>
+                    <TableCell className="text-right text-success font-medium">
+                      €{row.incassi.toLocaleString("it-IT")}
+                    </TableCell>
+                    <TableCell className="text-right text-destructive font-medium">
+                      €{row.pagamenti.toLocaleString("it-IT")}
+                    </TableCell>
+                    <TableCell className={cn(
+                      "text-right font-medium",
+                      parseFloat(marginPercent) >= 0 ? "text-success" : "text-destructive"
+                    )}>
+                      {marginPercent}%
+                    </TableCell>
+                    <TableCell className={cn(
+                      "text-right font-semibold",
+                      row.cashflow >= 0 ? "text-success" : "text-destructive"
+                    )}>
+                      {row.cashflow >= 0 ? "+" : "-"}€{Math.abs(row.cashflow).toLocaleString("it-IT")}
+                    </TableCell>
+                  </TableRow>
+                );
+              })}
               {/* Totals Row */}
               <TableRow className="border-border bg-secondary/30 font-bold">
                 <TableCell>Totale Periodo</TableCell>
@@ -156,9 +213,9 @@ export default function FlussiCassa() {
                 </TableCell>
                 <TableCell className={cn(
                   "text-right",
-                  totals.utile >= 0 ? "text-success" : "text-destructive"
+                  totals.incassi > 0 && ((totals.utile / totals.incassi) * 100) >= 0 ? "text-success" : "text-destructive"
                 )}>
-                  {totals.utile >= 0 ? "+" : "-"}€{Math.abs(totals.utile).toLocaleString("it-IT")}
+                  {totals.incassi > 0 ? ((totals.utile / totals.incassi) * 100).toFixed(1) : "0.0"}%
                 </TableCell>
                 <TableCell className={cn(
                   "text-right",

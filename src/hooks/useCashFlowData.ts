@@ -5,6 +5,8 @@ import { it } from "date-fns/locale";
 
 interface MonthlyData {
   mese: string;
+  meseShort: string;
+  monthKey: string;
   incassi: number;
   pagamenti: number;
   utile: number;
@@ -67,10 +69,85 @@ export function useCashFlowData() {
         const utile = value.incassi - value.pagamenti;
         result.push({
           mese: format(date, "MMMM yyyy", { locale: it }),
+          meseShort: format(date, "MMM", { locale: it }),
+          monthKey: key,
           incassi: value.incassi,
           pagamenti: value.pagamenti,
           utile,
           cashflow: utile,
+        });
+      });
+
+      return result;
+    },
+  });
+}
+
+// Hook per confronto con budget
+export function useCashFlowVsBudget() {
+  return useQuery({
+    queryKey: ["cashflow-vs-budget"],
+    queryFn: async () => {
+      const now = new Date();
+      const sixMonthsAgo = subMonths(startOfMonth(now), 5);
+
+      // Get transactions grouped by month
+      const { data: transactions, error: txError } = await supabase
+        .from("bank_transactions")
+        .select("amount, date")
+        .gte("date", sixMonthsAgo.toISOString().split("T")[0])
+        .order("date", { ascending: true });
+
+      if (txError) throw txError;
+
+      // Get budgets
+      const { data: budgets, error: budgetError } = await supabase
+        .from("budgets")
+        .select("*")
+        .gte("month", format(sixMonthsAgo, "yyyy-MM-dd"))
+        .order("month", { ascending: true });
+
+      if (budgetError) throw budgetError;
+
+      // Group transactions by month
+      const monthlyMap = new Map<string, { incassi: number; pagamenti: number }>();
+      
+      for (let i = 5; i >= 0; i--) {
+        const monthDate = subMonths(now, i);
+        const key = format(monthDate, "yyyy-MM");
+        monthlyMap.set(key, { incassi: 0, pagamenti: 0 });
+      }
+
+      transactions?.forEach((t) => {
+        const key = t.date.substring(0, 7);
+        if (monthlyMap.has(key)) {
+          const current = monthlyMap.get(key)!;
+          if (t.amount > 0) {
+            current.incassi += t.amount;
+          } else {
+            current.pagamenti += Math.abs(t.amount);
+          }
+        }
+      });
+
+      // Build comparison data
+      const result: { mese: string; consuntivo: number; previsionale: number }[] = [];
+      
+      monthlyMap.forEach((value, key) => {
+        const [year, month] = key.split("-");
+        const date = new Date(parseInt(year), parseInt(month) - 1, 1);
+        const consuntivo = value.incassi - value.pagamenti;
+        
+        // Find matching budget
+        const budget = budgets?.find(b => b.month.startsWith(key));
+        const previsionale = budget 
+          ? Number(budget.predicted_income) - Number(budget.predicted_expenses)
+          : 0;
+        
+        result.push({
+          mese: format(date, "MMM", { locale: it }),
+          consuntivo,
+          previsionale,
         });
       });
 
