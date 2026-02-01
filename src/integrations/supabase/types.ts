@@ -49,6 +49,7 @@ export type Database = {
           title: string
           type: string
           updated_at: string | null
+          user_id: string | null
         }
         Insert: {
           alert_type: string
@@ -63,6 +64,7 @@ export type Database = {
           title: string
           type: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
           alert_type?: string
@@ -77,6 +79,7 @@ export type Database = {
           title?: string
           type?: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -354,6 +357,7 @@ export type Database = {
           predicted_expenses: number | null
           predicted_income: number | null
           updated_at: string | null
+          user_id: string | null
         }
         Insert: {
           actual_expenses?: number | null
@@ -365,6 +369,7 @@ export type Database = {
           predicted_expenses?: number | null
           predicted_income?: number | null
           updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
           actual_expenses?: number | null
@@ -376,6 +381,7 @@ export type Database = {
           predicted_expenses?: number | null
           predicted_income?: number | null
           updated_at?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -576,6 +582,7 @@ export type Database = {
           status: string | null
           type: string
           updated_at: string | null
+          user_id: string | null
         }
         Insert: {
           amount: number
@@ -587,6 +594,7 @@ export type Database = {
           status?: string | null
           type: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
           amount?: number
@@ -598,6 +606,7 @@ export type Database = {
           status?: string | null
           type?: string
           updated_at?: string | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -622,6 +631,7 @@ export type Database = {
           role: string | null
           start_date: string | null
           updated_at: string | null
+          user_id: string | null
         }
         Insert: {
           annual_cost: number
@@ -635,6 +645,7 @@ export type Database = {
           role?: string | null
           start_date?: string | null
           updated_at?: string | null
+          user_id?: string | null
         }
         Update: {
           annual_cost?: number
@@ -648,6 +659,7 @@ export type Database = {
           role?: string | null
           start_date?: string | null
           updated_at?: string | null
+          user_id?: string | null
         }
         Relationships: []
       }
