@@ -3,7 +3,6 @@ import {
   LayoutDashboard,
   ArrowLeftRight,
   TrendingUp,
-  PieChart,
   CalendarRange,
   Calendar,
   BarChart3,
@@ -16,11 +15,7 @@ import {
   Cog,
   LogOut,
   Users,
-  Building2,
   CreditCard,
-  Plug,
-  FileSearch,
-  Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import finexaLogo from "@/assets/finexa-logo.png";
@@ -71,13 +66,8 @@ const adminSidebarSections: SidebarSection[] = [
 // Sidebar sections for super_admin (platform administration)
 const superAdminSidebarSections: SidebarSection[] = [
   { id: "system_dashboard", label: "Dashboard di Sistema", icon: LayoutDashboard, path: "/" },
-  { id: "companies", label: "Aziende", icon: Building2, path: "/aziende" },
-  { id: "global_users", label: "Utenti Globali", icon: Users, path: "/utenti-globali" },
-  { id: "plans_limits", label: "Piani e Limiti", icon: CreditCard, path: "/piani" },
-  { id: "integrations", label: "Integrazioni", icon: Plug, path: "/integrazioni" },
-  { id: "monitoring_logs", label: "Monitoraggio & Log", icon: FileSearch, path: "/log" },
-  { id: "security_compliance", label: "Sicurezza & Compliance", icon: Shield, path: "/sicurezza" },
-  { id: "global_configuration", label: "Configurazioni Globali", icon: Settings, path: "/configurazioni" },
+  { id: "global_users", label: "Utenti", icon: Users, path: "/utenti-globali" },
+  { id: "plans_limits", label: "Piani", icon: CreditCard, path: "/piani" },
 ];
 
 export function Sidebar() {

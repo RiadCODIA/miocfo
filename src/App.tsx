@@ -31,13 +31,8 @@ import KpiClienti from "./pages/KpiClienti";
 import FlussiClienti from "./pages/FlussiClienti";
 // Super Admin pages
 import DashboardSuperAdmin from "./pages/DashboardSuperAdmin";
-import Aziende from "./pages/Aziende";
 import UtentiGlobali from "./pages/UtentiGlobali";
 import Piani from "./pages/Piani";
-import Integrazioni from "./pages/Integrazioni";
-import MonitoraggioLog from "./pages/MonitoraggioLog";
-import SicurezzaCompliance from "./pages/SicurezzaCompliance";
-import ConfigurazioniGlobali from "./pages/ConfigurazioniGlobali";
 
 const queryClient = new QueryClient();
 
@@ -115,16 +110,6 @@ const App = () => (
             
             {/* Super Admin routes */}
             <Route
-              path="/aziende"
-              element={
-                <ProtectedRoute>
-                  <MainLayout>
-                    <Aziende />
-                  </MainLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
               path="/utenti-globali"
               element={
                 <ProtectedRoute>
@@ -140,46 +125,6 @@ const App = () => (
                 <ProtectedRoute>
                   <MainLayout>
                     <Piani />
-                  </MainLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/integrazioni"
-              element={
-                <ProtectedRoute>
-                  <MainLayout>
-                    <Integrazioni />
-                  </MainLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/log"
-              element={
-                <ProtectedRoute>
-                  <MainLayout>
-                    <MonitoraggioLog />
-                  </MainLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/sicurezza"
-              element={
-                <ProtectedRoute>
-                  <MainLayout>
-                    <SicurezzaCompliance />
-                  </MainLayout>
-                </ProtectedRoute>
-              }
-            />
-            <Route
-              path="/configurazioni"
-              element={
-                <ProtectedRoute>
-                  <MainLayout>
-                    <ConfigurazioniGlobali />
                   </MainLayout>
                 </ProtectedRoute>
               }
