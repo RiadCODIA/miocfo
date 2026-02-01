@@ -1,200 +1,156 @@
 
+# Piano di Sicurezza: Isolamento dei Dati per Utente
 
-## Piano: Nuove Sezioni Super Admin
+## Problema Critico Identificato
 
-### Sezioni da Aggiungere
+I dati finanziari di un utente sono visibili a TUTTI gli altri utenti autenticati. Questo accade perché:
 
-| Sezione | Descrizione | Icona |
-|---------|-------------|-------|
-| **Fatturazione** | Visualizza tutte le transazioni della piattaforma | Receipt |
-| **KPI Interni** | Metriche di business (MRR, crescita utenti, utilizzo) | LineChart |
-| **Impostazioni** | Gestione profilo Super Admin (riutilizza componente esistente) | Settings |
+1. Molte tabelle hanno policy RLS con `USING (true)` che permettono accesso globale
+2. Alcune tabelle critiche NON hanno la colonna `user_id` per filtrare i dati
+3. Le transazioni bancarie non sono filtrate in base al proprietario del conto
 
----
+## Analisi delle Tabelle
 
-### 1. Modifica Sidebar Super Admin
+| Tabella | Ha user_id? | Policy Attuale | Azione Richiesta |
+|---------|-------------|----------------|------------------|
+| `bank_accounts` | Si (nullable) | Mista (permissiva + user) | Rimuovere policy permissiva, rendere NOT NULL |
+| `bank_transactions` | No (via bank_account_id) | `USING (true)` | Filtrare via bank_accounts.user_id |
+| `budgets` | No | `USING (true)` | Aggiungere user_id + RLS |
+| `deadlines` | No | `USING (true)` | Aggiungere user_id + RLS |
+| `alerts` | No | `USING (true)` | Aggiungere user_id + RLS |
+| `invoices` | Si (NOT NULL) | Permissiva | Correggere RLS per user_id |
+| `employees` | No | `USING (true)` | Aggiungere user_id + RLS |
+| `categorization_rules` | Si (nullable) | `USING (true)` | Correggere RLS + NOT NULL |
 
-**File**: `src/components/layout/Sidebar.tsx`
+## Piano di Implementazione
 
-Aggiornare `superAdminSidebarSections` da 3 a 6 voci:
+### Fase 1: Correzione Schema Database
 
-```typescript
-const superAdminSidebarSections: SidebarSection[] = [
-  { id: "system_dashboard", label: "Dashboard di Sistema", icon: LayoutDashboard, path: "/" },
-  { id: "global_users", label: "Utenti", icon: Users, path: "/utenti-globali" },
-  { id: "plans_limits", label: "Piani", icon: CreditCard, path: "/piani" },
-  { id: "fatturazione", label: "Fatturazione", icon: Receipt, path: "/fatturazione" },
-  { id: "kpi_interni", label: "KPI Interni", icon: LineChart, path: "/kpi-interni" },
-  { id: "impostazioni_admin", label: "Impostazioni", icon: Settings, path: "/impostazioni" },
-];
+Migrazioni SQL per:
+
+1. **Aggiungere colonna `user_id`** alle tabelle mancanti:
+   - `budgets`
+   - `deadlines`  
+   - `alerts`
+   - `employees`
+
+2. **Rendere `user_id` NOT NULL** dove attualmente nullable:
+   - `bank_accounts`
+   - `categorization_rules`
+
+### Fase 2: Rimozione Policy Permissive
+
+Rimuovere tutte le policy con `USING (true)`:
+- `bank_accounts`: "Allow all access to bank_accounts"
+- `bank_transactions`: "Allow all access to bank_transactions"
+- `budgets`: "Allow all access to budgets"
+- `deadlines`: "Allow all access to deadlines"
+- `alerts`: "Allow all access to alerts"
+- `invoices`: tutte le policy "Allow public..."
+- `employees`: "Allow all access to employees"
+- `categorization_rules`: "Allow all access..."
+- `cost_categories`, `revenue_centers`, `vat_rates`: valutare se tenere condivisi o per utente
+
+### Fase 3: Creazione Nuove Policy RLS
+
+Per ogni tabella creare policy basate su `user_id`:
+
+```sql
+-- Esempio per budgets
+CREATE POLICY "Users can view their own budgets"
+  ON budgets FOR SELECT
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can insert their own budgets"
+  ON budgets FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update their own budgets"
+  ON budgets FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete their own budgets"
+  ON budgets FOR DELETE
+  USING (auth.uid() = user_id);
 ```
 
----
-
-### 2. Nuova Pagina: Fatturazione
-
-**Nuovo file**: `src/pages/Fatturazione.tsx`
-
-Mostra tutte le transazioni della piattaforma con:
-
-| Elemento | Descrizione |
-|----------|-------------|
-| **Header** | Titolo + contatori totali |
-| **Filtri** | Data range, tipo (entrata/uscita), banca |
-| **Tabella Transazioni** | Tutte le transazioni con paginazione |
-| **KPI Cards** | Totale incassi, pagamenti, netto del periodo |
-| **Export** | Bottone per esportare CSV |
-
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  FATTURAZIONE PIATTAFORMA                                           │
-├─────────────────────────────────────────────────────────────────────┤
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐               │
-│  │  Incassi     │  │  Pagamenti   │  │  Netto       │               │
-│  │  €14.149     │  │  €14.256     │  │  -€107       │               │
-│  └──────────────┘  └──────────────┘  └──────────────┘               │
-│                                                                      │
-│  [Filtro Data] [Tipo] [Banca] [Cerca...]           [Esporta CSV]    │
-│                                                                      │
-│  ┌────────────────────────────────────────────────────────────────┐ │
-│  │ Data       │ Descrizione           │ Banca    │ Importo        │ │
-│  ├────────────────────────────────────────────────────────────────┤ │
-│  │ 01/02/2026 │ Pagamento fornitore   │ BNL      │ -€1.200,00     │ │
-│  │ 31/01/2026 │ Incasso fattura #123  │ Unicredit│ +€3.500,00     │ │
-│  │ ...        │ ...                   │ ...      │ ...            │ │
-│  └────────────────────────────────────────────────────────────────┘ │
-│                                                                      │
-│  [< Precedente]           Pagina 1 di 15          [Successivo >]    │
-└─────────────────────────────────────────────────────────────────────┘
+Per `bank_transactions` (filtro via join):
+```sql
+CREATE POLICY "Users can manage their own transactions"
+  ON bank_transactions FOR ALL
+  USING (
+    EXISTS (
+      SELECT 1 FROM bank_accounts 
+      WHERE bank_accounts.id = bank_transactions.bank_account_id 
+        AND bank_accounts.user_id = auth.uid()
+    )
+  );
 ```
 
----
+### Fase 4: Aggiornamento Codice Frontend
 
-### 3. Nuova Pagina: KPI Interni
+Aggiornare gli hooks per passare `user_id` negli insert:
+- `useBudgets.ts` - aggiungere user_id in `useCreateBudget`
+- `useDeadlines.ts` - aggiungere user_id in `useCreateDeadline`
+- `useAlerts.ts` - aggiungere user_id se necessario
 
-**Nuovo file**: `src/pages/KPIInterni.tsx`
+### Fase 5: Migrazione Dati Esistenti
 
-Dashboard con metriche di business interne:
-
-| KPI | Fonte Dati |
-|-----|------------|
-| **Utenti Attivi** | Utenti con transazioni negli ultimi 30gg |
-| **Crescita Utenti** | % crescita mese su mese |
-| **Conti Collegati** | Totale e nuovi nell'ultimo mese |
-| **Volume Transazionale** | Totale movimentato sulla piattaforma |
-| **Transazioni/Giorno** | Media giornaliera |
-| **Piani Attivi** | Distribuzione per piano |
-
-```text
-┌─────────────────────────────────────────────────────────────────────┐
-│  KPI INTERNI PIATTAFORMA                                            │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                      │
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐ │
-│  │ Utenti      │  │ Crescita    │  │ Conti       │  │ Volume Tot  │ │
-│  │ Attivi: 2   │  │ +50% m/m    │  │ 6 (+2 mese) │  │ €28.405     │ │
-│  └─────────────┘  └─────────────┘  └─────────────┘  └─────────────┘ │
-│                                                                      │
-│  ┌────────────────────────────────┐  ┌────────────────────────────┐ │
-│  │  Crescita Utenti nel Tempo     │  │  Distribuzione per Piano   │ │
-│  │         [LINE CHART]           │  │        [PIE CHART]         │ │
-│  └────────────────────────────────┘  └────────────────────────────┘ │
-│                                                                      │
-│  ┌────────────────────────────────┐  ┌────────────────────────────┐ │
-│  │  Volume Transazionale Mensile  │  │  Metriche di Utilizzo      │ │
-│  │         [AREA CHART]           │  │  - Tx/giorno: 24           │ │
-│  │                                │  │  - Tx/utente: 371          │ │
-│  └────────────────────────────────┘  └────────────────────────────┘ │
-│                                                                      │
-└─────────────────────────────────────────────────────────────────────┘
+Prima di applicare i vincoli NOT NULL, assegnare i dati orfani:
+```sql
+-- Assegnare dati esistenti all'utente admin (o eliminarli)
+UPDATE budgets SET user_id = 'UUID_ADMIN' WHERE user_id IS NULL;
+UPDATE deadlines SET user_id = 'UUID_ADMIN' WHERE user_id IS NULL;
+-- etc.
 ```
 
----
+## Dettagli Tecnici
 
-### 4. Route App.tsx
+### Migrazione Completa SQL
 
-**File**: `src/App.tsx`
+```sql
+-- 1. Aggiungere colonne user_id mancanti
+ALTER TABLE budgets ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE deadlines ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE alerts ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
+ALTER TABLE employees ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE;
 
-Aggiungere le nuove route:
+-- 2. Rimuovere policy permissive esistenti
+DROP POLICY IF EXISTS "Allow all access to bank_accounts" ON bank_accounts;
+DROP POLICY IF EXISTS "Allow all access to bank_transactions" ON bank_transactions;
+DROP POLICY IF EXISTS "Allow all access to budgets" ON budgets;
+DROP POLICY IF EXISTS "Allow all access to deadlines" ON deadlines;
+DROP POLICY IF EXISTS "Allow all access to alerts" ON alerts;
+DROP POLICY IF EXISTS "Allow all access to employees" ON employees;
+DROP POLICY IF EXISTS "Allow all access to categorization_rules" ON categorization_rules;
+DROP POLICY IF EXISTS "Allow public delete invoices" ON invoices;
+DROP POLICY IF EXISTS "Allow public insert invoices" ON invoices;
+DROP POLICY IF EXISTS "Allow public update invoices" ON invoices;
+DROP POLICY IF EXISTS "Allow public view invoices" ON invoices;
 
-```typescript
-// Super Admin routes
-<Route path="/fatturazione" element={<ProtectedRoute><MainLayout><Fatturazione /></MainLayout></ProtectedRoute>} />
-<Route path="/kpi-interni" element={<ProtectedRoute><MainLayout><KPIInterni /></MainLayout></ProtectedRoute>} />
-// /impostazioni gia esiste e funziona per tutti i ruoli
+-- 3. Creare nuove policy per user isolation
+-- (policy dettagliate per ogni tabella)
 ```
 
----
+### File da Modificare
 
-### 5. Hook per Fatturazione
+1. **src/hooks/useBudgets.ts**: Aggiungere `user_id` in insert
+2. **src/hooks/useDeadlines.ts**: Aggiungere `user_id` in insert  
+3. **src/hooks/useAlerts.ts**: Aggiungere `user_id` in insert
+4. **src/components/configurazione/EmployeesManager.tsx**: Aggiungere `user_id`
+5. **Edge functions**: Assicurarsi che passino `user_id` correttamente
 
-**Nuovo file**: `src/hooks/useFatturazione.ts`
+## Rischi e Mitigazioni
 
-```typescript
-// Query per tutte le transazioni con filtri
-export function useAllTransactions(filters) {
-  // Fetch paginato di bank_transactions con join a bank_accounts per nome banca
-}
+| Rischio | Mitigazione |
+|---------|-------------|
+| Dati esistenti persi | Backup prima della migrazione, assegnazione a utente admin |
+| Blocco accesso | Testare policy in ambiente di sviluppo prima |
+| Breaking changes | Deploy graduale, monitoraggio errori |
 
-// KPI del periodo selezionato
-export function usePeriodStats(dateRange) {
-  // Totale incassi, pagamenti, netto
-}
-```
+## Priorita'
 
----
-
-### 6. Hook per KPI Interni
-
-**Estensione**: `src/hooks/useSuperAdminDashboard.ts`
-
-Aggiungere nuove funzioni:
-
-```typescript
-// Utenti attivi (con transazioni negli ultimi 30gg)
-export function useActiveUsers() { ... }
-
-// Crescita utenti mese su mese
-export function useUserGrowth() { ... }
-
-// Distribuzione utenti per piano
-export function usePlanDistribution() { ... }
-
-// Metriche di utilizzo
-export function useUsageMetrics() { ... }
-```
-
----
-
-### Riepilogo File da Modificare/Creare
-
-| File | Azione |
-|------|--------|
-| `src/components/layout/Sidebar.tsx` | Aggiungere 3 nuove voci al menu Super Admin |
-| `src/App.tsx` | Aggiungere 2 nuove route (fatturazione e kpi-interni) |
-| `src/pages/Fatturazione.tsx` | **NUOVO** - Pagina transazioni piattaforma |
-| `src/pages/KPIInterni.tsx` | **NUOVO** - Pagina KPI interni |
-| `src/hooks/useFatturazione.ts` | **NUOVO** - Hook per query transazioni |
-| `src/hooks/useSuperAdminDashboard.ts` | Estendere con nuovi KPI |
-
----
-
-### Sidebar Super Admin Risultante
-
-```text
-┌──────────────────────────┐
-│        FINEXA            │
-├──────────────────────────┤
-│  👑 Super Admin          │
-├──────────────────────────┤
-│                          │
-│  📊 Dashboard di Sistema │
-│  👥 Utenti               │
-│  💳 Piani                │
-│  🧾 Fatturazione         │
-│  📈 KPI Interni          │
-│  ⚙️ Impostazioni         │
-│                          │
-└──────────────────────────┘
-```
-
+1. **CRITICO**: `bank_accounts`, `bank_transactions` - dati bancari sensibili
+2. **ALTO**: `invoices`, `budgets`, `deadlines` - dati finanziari
+3. **MEDIO**: `alerts`, `employees`, `categorization_rules` - dati operativi
+4. **BASSO**: `cost_categories`, `revenue_centers`, `vat_rates` - configurazione (potrebbero rimanere condivisi)
