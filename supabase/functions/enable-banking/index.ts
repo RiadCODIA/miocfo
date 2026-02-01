@@ -108,13 +108,15 @@ async function createJWT(): Promise<string> {
 async function enableBankingRequest(
   endpoint: string,
   method: string = "GET",
-  body?: Record<string, unknown>
+  body?: Record<string, unknown>,
+  psuHeaders?: Record<string, string>
 ): Promise<unknown> {
   const jwt = await createJWT();
   
   const headers: Record<string, string> = {
     "Authorization": `Bearer ${jwt}`,
     "Content-Type": "application/json",
+    ...psuHeaders,
   };
   
   const options: RequestInit = {
@@ -127,6 +129,9 @@ async function enableBankingRequest(
   }
   
   console.log(`[Enable Banking] ${method} ${ENABLE_BANKING_API_URL}${endpoint}`);
+  if (psuHeaders) {
+    console.log(`[Enable Banking] PSU headers included:`, Object.keys(psuHeaders).join(", "));
+  }
   
   const response = await fetch(`${ENABLE_BANKING_API_URL}${endpoint}`, options);
   
@@ -240,6 +245,14 @@ async function syncAccountTransactions(
   let pageCount = 0;
   const maxPages = 50;
   
+  // PSU headers required by some Italian banks for transaction endpoints
+  const psuHeaders: Record<string, string> = {
+    "Psu-Ip-Address": "0.0.0.0",
+    "Psu-User-Agent": "Finexa/1.0",
+    "Psu-Accept": "application/json",
+    "Psu-Accept-Language": "it-IT",
+  };
+  
   do {
     pageCount++;
     const url = `/accounts/${enableBankingUid}/transactions?date_from=${startDate}&date_to=${endDate}` +
@@ -247,7 +260,7 @@ async function syncAccountTransactions(
     
     console.log(`[Enable Banking] Fetching transactions page ${pageCount}...`);
     
-    const transactionsResponse = await enableBankingRequest(url) as {
+    const transactionsResponse = await enableBankingRequest(url, "GET", undefined, psuHeaders) as {
       transactions?: EnableBankingTransaction[];
       continuation_key?: string;
       booked?: EnableBankingTransaction[];
@@ -720,13 +733,13 @@ async function syncAccount(accountId: string, userId?: string | null): Promise<{
       userMessage = "Limite giornaliero raggiunto: la banca limita gli accessi. Riprova tra qualche ora.";
       newStatus = "error";
     } else if (errorMessage.includes("ASPSP_ERROR") || errorMessage.includes("Error interacting with ASPSP")) {
-      userMessage = "Errore banca (ASPSP_ERROR): la banca non ha risposto correttamente tramite PSD2. Riprova più tardi o ricollega il conto.";
+      userMessage = "La banca non ha risposto correttamente. Riprova tra qualche minuto. Se il problema persiste, scollega e ricollega il conto.";
       newStatus = "error";
     } else if (errorMessage.includes("401") || errorMessage.includes("403") || errorMessage.includes("Unauthorized") || errorMessage.includes("consent")) {
-      userMessage = "Consenso scaduto o revocato: premi 'Ricollega' per autorizzare nuovamente.";
+      userMessage = "Consenso scaduto o revocato: scollega e ricollega il conto per autorizzare nuovamente.";
       newStatus = "disconnected";
     } else if (errorMessage.includes("SESSION_EXPIRED") || errorMessage.includes("session")) {
-      userMessage = "Sessione scaduta: ricollega il conto bancario.";
+      userMessage = "Sessione scaduta: scollega e ricollega il conto bancario.";
       newStatus = "disconnected";
     } else if (errorMessage.includes("422") || errorMessage.includes("WRONG_TRANSACTIONS_PERIOD")) {
       userMessage = "Periodo richiesto non supportato dalla banca. Riprova.";
