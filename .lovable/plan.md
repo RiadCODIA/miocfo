@@ -1,121 +1,161 @@
 
-# Correzione Categorizzazione Automatica Bloccata
 
-## Problemi Identificati
+# Miglioramento Analisi AI Spese - Report Più Dettagliato e Specifico
 
-### Problema 1: UI Ingannevole (Critico)
-L'interfaccia mostra:
-```
-Categorizzazione automatica in corso (458 rimanenti)...
-```
-con uno spinner animato, ma **nessun processo viene effettivamente eseguito**. È solo un messaggio statico che appare quando ci sono transazioni non categorizzate.
+## Problema Attuale
 
-### Problema 2: Nessun Trigger Automatico
-La funzione `categorizeBatch()` esiste ed è funzionante, ma non viene mai chiamata:
-- Non c'è `useEffect` che la esegue al caricamento della pagina
-- Non c'è trigger dopo la sincronizzazione bancaria
-- L'utente non ha modo di avviarla manualmente (il pulsante non è visibile)
+L'analisi AI attuale è troppo generica:
+- Fornisce solo 3-4 aree critiche
+- Suggerimenti di risparmio vaghi (max 30 parole)
+- Nessuna analisi temporale (trend mensili)
+- Nessun confronto con benchmark di settore
+- Mancano metriche operative specifiche
+- Note sui fornitori troppo brevi (max 15 parole)
 
-### Problema 3: Stato di Caricamento Inutilizzato
-L'hook espone `isCategorizing` ma non viene usato nell'UI per mostrare lo stato reale.
+## Dati Disponibili per Analisi Più Profonda
 
-### Stato Attuale Database
-- **743** transazioni totali
-- **701** non categorizzate (94%)
-- **42** già categorizzate
+| Dato | Valore Attuale |
+|------|----------------|
+| Transazioni totali | 743 |
+| Periodo coperto | Nov 2025 - Gen 2026 (3 mesi) |
+| Spese totali | €54,803 |
+| Entrate totali | €53,948 |
+| Transazioni categorizzate | 393 (53%) |
 
-## Soluzione Proposta
+## Miglioramenti Proposti
 
-### Fase 1: Rimuovere UI Ingannevole e Aggiungere Pulsante Manuale
+### 1. Arricchimento Dati per l'AI
 
-Sostituire il messaggio statico fuorviante con un pulsante che permette all'utente di avviare la categorizzazione quando vuole:
+Aggiungere al prompt:
+- **Trend mensili**: aggregazione spese mese per mese
+- **Media transazione**: importo medio per categoria
+- **Frequenza pagamenti**: quante volte al mese per ogni fornitore
+- **Rapporto entrate/uscite**: cash flow netto
 
-| Prima | Dopo |
-|-------|------|
-| Spinner statico "in corso..." | Pulsante "Categorizza {n} transazioni" |
-| Nessuna azione possibile | Click per avviare il processo reale |
-| Utente confuso | Feedback chiaro dello stato |
+### 2. Espansione Output AI
 
-### Fase 2: Mostrare Stato Reale Durante l'Elaborazione
+| Sezione | Prima | Dopo |
+|---------|-------|------|
+| Aree critiche | max 3-4, 20 parole | max 5-6, 50 parole con benchmark |
+| Suggerimenti risparmio | max 4-5, 30 parole | max 6-8, 80 parole con step operativi |
+| Analisi fornitori | max 8, 15 parole note | max 12, 40 parole con storico |
+| Azioni | 3-5 generiche | 6-8 con priorità e timeline |
+| **NUOVO: Trend Analysis** | - | Analisi trend 3 mesi |
+| **NUOVO: Cash Flow Health** | - | Salute finanziaria |
+| **NUOVO: Anomalie** | - | Transazioni anomale identificate |
 
-Quando la categorizzazione è effettivamente in corso (`isCategorizing === true`):
-- Mostrare spinner con testo "Elaborazione in corso..."
-- Disabilitare il pulsante
-- Al completamento, mostrare toast con risultati
+### 3. Nuove Sezioni UI
 
-### Fase 3: (Opzionale) Aggiungere Categorizzazione Automatica dopo Sync
-
-Se si desidera mantenere la categorizzazione automatica, aggiungere un `useEffect` che:
-1. Rileva quando ci sono nuove transazioni non categorizzate
-2. Avvia `categorizeBatch()` automaticamente in background
-3. Mostra progresso reale
+- **Trend Temporale**: grafico linea spese mensili
+- **Cash Flow Score**: indicatore salute finanziaria (1-100)
+- **Anomalie Rilevate**: transazioni sospette o fuori media
+- **Confronto Benchmark**: come si posiziona vs PMI italiane
 
 ## File da Modificare
 
 | File | Modifica |
 |------|----------|
-| `src/pages/Transazioni.tsx` | Sostituire messaggio statico con pulsante + stato reale |
+| `supabase/functions/analyze-spending/index.ts` | Arricchire dati inviati all'AI, espandere prompt, nuove sezioni output |
+| `src/hooks/useSpendingAnalysis.ts` | Aggiornare interfacce TypeScript per nuovi campi |
+| `src/components/transazioni/SpendingReportModal.tsx` | Nuove sezioni UI: trend, score, anomalie |
 
-## Dettagli Implementazione
+## Dettagli Tecnici
 
-### Modifica a Transazioni.tsx
+### Edge Function - Nuovi Dati da Calcolare
 
-**Linee 326-332** - Sostituire:
 ```typescript
-{/* Auto-categorization status - now runs automatically after bank sync */}
-{uncategorizedCount > 0 && (
-  <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 text-muted-foreground text-sm">
-    <Loader2 className="h-4 w-4 animate-spin" />
-    <span>Categorizzazione automatica in corso ({uncategorizedCount} rimanenti)...</span>
-  </div>
-)}
+// Aggregazione mensile
+const monthlySpending = new Map<string, number>();
+transactions.forEach((tx) => {
+  const month = tx.date.substring(0, 7); // YYYY-MM
+  monthlySpending.set(month, (monthlySpending.get(month) || 0) + Math.abs(tx.amount));
+});
+
+// Frequenza pagamenti per fornitore
+const supplierFrequency = topSuppliers.map(s => ({
+  ...s,
+  monthlyFrequency: s.transactionCount / 3, // diviso mesi
+  avgTransactionAmount: s.totalAmount / s.transactionCount
+}));
+
+// Cash flow netto
+const netCashFlow = totalIncome - totalSpent;
+const cashFlowRatio = totalIncome / totalSpent;
 ```
 
-**Con:**
-```typescript
-{/* AI Categorization Button */}
-{uncategorizedCount > 0 && (
-  <Button
-    variant="outline"
-    className="gap-2 bg-card border-border hover:bg-secondary"
-    onClick={handleCategorizeAll}
-    disabled={isCategorizing}
-  >
-    {isCategorizing ? (
-      <>
-        <Loader2 className="h-4 w-4 animate-spin" />
-        <span>Categorizzazione AI in corso...</span>
-      </>
-    ) : (
-      <>
-        <Sparkles className="h-4 w-4" />
-        <span>Categorizza {uncategorizedCount} transazioni</span>
-      </>
-    )}
-  </Button>
-)}
+### Prompt AI Migliorato
+
+```
+Sei un CFO virtuale senior con 20 anni di esperienza in PMI italiane.
+Analizza i dati finanziari forniti e genera un report DETTAGLIATO...
+
+NUOVE SEZIONI:
+6. trendAnalysis: oggetto con:
+   - monthlyTrend: array con { month, amount, change% }
+   - overallTrend: "increasing" | "stable" | "decreasing"
+   - seasonalPattern: pattern stagionale se identificato
+   - forecast: previsione prossimo mese
+
+7. cashFlowHealth: oggetto con:
+   - score: 1-100 (salute finanziaria)
+   - ratio: rapporto entrate/uscite
+   - diagnosis: diagnosi dettagliata (max 60 parole)
+   - riskLevel: "low" | "medium" | "high" | "critical"
+
+8. anomalies: Array di transazioni anomale (max 5)
+   - description: cosa è anomalo
+   - amount: importo
+   - supplier: fornitore
+   - reason: perché è sospetto
+   - recommendation: cosa fare
+
+Fornisci analisi APPROFONDITA con:
+- Cifre specifiche e percentuali precise
+- Confronti con benchmark PMI italiane
+- Step operativi concreti (non generici)
+- Timeline per implementare i suggerimenti
 ```
 
-### Import da Aggiungere
+### Nuove Interfacce TypeScript
+
 ```typescript
-import { Sparkles } from "lucide-react";
+export interface TrendAnalysis {
+  monthlyTrend: { month: string; amount: number; changePercent: number }[];
+  overallTrend: "increasing" | "stable" | "decreasing";
+  seasonalPattern: string | null;
+  forecast: number;
+}
+
+export interface CashFlowHealth {
+  score: number;
+  ratio: number;
+  diagnosis: string;
+  riskLevel: "low" | "medium" | "high" | "critical";
+}
+
+export interface Anomaly {
+  description: string;
+  amount: number;
+  supplier: string;
+  reason: string;
+  recommendation: string;
+}
 ```
 
-### Usare isCategorizing dall'Hook
-Modificare la linea 95 per usare effettivamente `isCategorizing`:
-```typescript
-const { categorizeBatch, categorize, isLoading: isCategorizing } = useCategorizeTransactions();
-```
-(già presente, solo da verificare che venga usato)
+### Nuove Sezioni UI
+
+1. **Cash Flow Score Card** - Indicatore visivo 0-100 con colore
+2. **Trend Chart** - LineChart con spese mensili
+3. **Anomalie Section** - Lista transazioni sospette con alert
+4. **Suggerimenti Espansi** - Accordion con dettagli e step
 
 ## Risultato Atteso
 
-Dopo questa modifica:
-1. L'utente vedrà un pulsante chiaro "Categorizza 701 transazioni"
-2. Cliccando, vedrà lo spinner reale durante l'elaborazione
-3. Al completamento, vedrà un toast con il numero di transazioni categorizzate
-4. La pagina si aggiornerà automaticamente (`refetch()` già implementato)
+L'analisi passerà da un report generico di 4-5 bullet point a un report completo da CFO con:
+- Analisi trend su 3 mesi
+- Score salute finanziaria
+- Anomalie identificate
+- Suggerimenti con step operativi e timeline
+- Confronto con benchmark di settore
+- Previsioni cash flow
 
-## Nota sull'AI
-
-L'edge function usa `google/gemini-3-flash-preview` che è un modello valido. Il problema non è l'AI ma il fatto che **la funzione non viene mai chiamata**.
