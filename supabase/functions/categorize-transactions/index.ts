@@ -29,10 +29,12 @@ interface CategorizationResult {
   reasoning: string;
 }
 
-// Batch size for AI processing (avoid timeout)
-const BATCH_SIZE = 50;
+// Batch size for AI processing (optimized for speed vs timeout)
+const BATCH_SIZE = 100;
 // Max transactions per single function call (safety limit)
-const MAX_PER_CALL = 500;
+const MAX_PER_CALL = 1000;
+// Number of parallel batches to process at once
+const PARALLEL_BATCHES = 2;
 
 serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -90,18 +92,18 @@ serve(async (req) => {
       );
     }
 
-    // Batch mode: loop through ALL uncategorized transactions
+    // Batch mode: process ALL uncategorized transactions with parallel batches
     if (batch_mode) {
       let totalProcessed = 0;
       const allResults: CategorizationResult[] = [];
 
       while (totalProcessed < MAX_PER_CALL) {
-        // Fetch next batch of uncategorized transactions
+        // Fetch multiple batches at once for parallel processing
         const { data: transactions, error: txError } = await supabase
           .from("bank_transactions")
           .select("id, name, merchant_name, amount, category")
           .is("ai_category_id", null)
-          .limit(BATCH_SIZE);
+          .limit(BATCH_SIZE * PARALLEL_BATCHES);
 
         if (txError) {
           console.error("Failed to fetch transactions batch:", txError);
@@ -113,19 +115,35 @@ serve(async (req) => {
           break;
         }
 
-        console.log(`[Categorize] Processing batch of ${transactions.length} transactions (total so far: ${totalProcessed})`);
+        console.log(`[Categorize] Fetched ${transactions.length} transactions for parallel processing`);
 
-        try {
-          const batchResults = await processBatch(transactions, categories, rules || [], LOVABLE_API_KEY, supabase);
-          allResults.push(...batchResults);
-          totalProcessed += transactions.length;
-        } catch (batchError) {
-          console.error("[Categorize] Batch processing error:", batchError);
-          // Continue with next batch even if one fails
+        // Split into parallel batches
+        const batches: Transaction[][] = [];
+        for (let i = 0; i < transactions.length; i += BATCH_SIZE) {
+          batches.push(transactions.slice(i, i + BATCH_SIZE));
         }
 
-        // Small delay between batches to avoid rate limits
-        await new Promise(resolve => setTimeout(resolve, 500));
+        // Process batches in parallel
+        const batchPromises = batches.map(async (batch, idx) => {
+          console.log(`[Categorize] Processing parallel batch ${idx + 1}/${batches.length} with ${batch.length} transactions`);
+          try {
+            return await processBatch(batch, categories, rules || [], LOVABLE_API_KEY, supabase);
+          } catch (batchError) {
+            console.error(`[Categorize] Parallel batch ${idx + 1} error:`, batchError);
+            return [];
+          }
+        });
+
+        const batchResults = await Promise.all(batchPromises);
+        for (const results of batchResults) {
+          allResults.push(...results);
+        }
+        totalProcessed += transactions.length;
+
+        // Minimal delay between parallel batch groups to avoid rate limits
+        if (totalProcessed < MAX_PER_CALL) {
+          await new Promise(resolve => setTimeout(resolve, 100));
+        }
       }
 
       console.log(`[Categorize] Completed. Total categorized: ${allResults.length}`);
