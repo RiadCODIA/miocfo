@@ -181,6 +181,9 @@ export function useCreateDeadline() {
 
   return useMutation({
     mutationFn: async (input: CreateDeadlineInput) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
       const { data, error } = await supabase
         .from("deadlines")
         .insert({
@@ -190,6 +193,7 @@ export function useCreateDeadline() {
           due_date: input.dueDate,
           invoice_id: input.invoiceId || null,
           status: "pending",
+          user_id: user.id,
         })
         .select()
         .single();
