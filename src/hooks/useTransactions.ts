@@ -37,13 +37,29 @@ interface UseTransactionsOptions {
   period?: "all" | "today" | "week" | "month";
   accountId?: string;
   category?: string;
+  // Advanced filters
+  minAmount?: number;
+  maxAmount?: number;
+  transactionType?: "all" | "income" | "expense";
+  startDate?: string;
+  endDate?: string;
 }
 
 export function useTransactions(options: UseTransactionsOptions = {}) {
-  const { searchTerm, period = "all", accountId, category } = options;
+  const { 
+    searchTerm, 
+    period = "all", 
+    accountId, 
+    category,
+    minAmount,
+    maxAmount,
+    transactionType = "all",
+    startDate,
+    endDate,
+  } = options;
 
   return useQuery({
-    queryKey: ["transactions", { searchTerm, period, accountId, category }],
+    queryKey: ["transactions", { searchTerm, period, accountId, category, minAmount, maxAmount, transactionType, startDate, endDate }],
     queryFn: async (): Promise<Transaction[]> => {
       let query = supabase
         .from("bank_transactions")
@@ -78,14 +94,24 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
         .order("date", { ascending: false })
         .limit(500);
 
-      // Apply period filter
+      // Apply period filter (only if no custom date range)
       const now = new Date();
-      if (period === "today") {
-        query = query.eq("date", format(now, "yyyy-MM-dd"));
-      } else if (period === "week") {
-        query = query.gte("date", format(subWeeks(now, 1), "yyyy-MM-dd"));
-      } else if (period === "month") {
-        query = query.gte("date", format(subMonths(now, 1), "yyyy-MM-dd"));
+      if (!startDate && !endDate) {
+        if (period === "today") {
+          query = query.eq("date", format(now, "yyyy-MM-dd"));
+        } else if (period === "week") {
+          query = query.gte("date", format(subWeeks(now, 1), "yyyy-MM-dd"));
+        } else if (period === "month") {
+          query = query.gte("date", format(subMonths(now, 1), "yyyy-MM-dd"));
+        }
+      }
+      
+      // Apply custom date range filter
+      if (startDate) {
+        query = query.gte("date", startDate);
+      }
+      if (endDate) {
+        query = query.lte("date", endDate);
       }
 
       // Apply account filter
@@ -146,6 +172,21 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
           // Filter by specific category ID
           transactions = transactions.filter(tx => tx.aiCategoryId === category);
         }
+      }
+
+      // Apply amount filters client-side
+      if (minAmount !== undefined && !isNaN(minAmount)) {
+        transactions = transactions.filter(tx => Math.abs(tx.amount) >= minAmount);
+      }
+      if (maxAmount !== undefined && !isNaN(maxAmount)) {
+        transactions = transactions.filter(tx => Math.abs(tx.amount) <= maxAmount);
+      }
+
+      // Apply transaction type filter
+      if (transactionType === "income") {
+        transactions = transactions.filter(tx => tx.amount > 0);
+      } else if (transactionType === "expense") {
+        transactions = transactions.filter(tx => tx.amount < 0);
       }
 
       return transactions;

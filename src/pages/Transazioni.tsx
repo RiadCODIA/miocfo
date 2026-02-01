@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Filter, Download, Edit2, BarChart3, Loader2 } from "lucide-react";
+import { Search, Filter, Download, Edit2, BarChart3, Loader2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -17,8 +17,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { useTransactions, useBankAccounts } from "@/hooks/useTransactions";
 import { useCategorizeTransactions, CategorizationResult } from "@/hooks/useCategorizeTransactions";
@@ -45,6 +51,14 @@ export default function Transazioni() {
   const [categoryModalOpen, setCategoryModalOpen] = useState(false);
   const [aiSuggestion, setAiSuggestion] = useState<CategorizationResult | null>(null);
   const [reportModalOpen, setReportModalOpen] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  
+  // Advanced filters
+  const [minAmount, setMinAmount] = useState<string>("");
+  const [maxAmount, setMaxAmount] = useState<string>("");
+  const [transactionType, setTransactionType] = useState<"all" | "income" | "expense">("all");
+  const [startDate, setStartDate] = useState<string>("");
+  const [endDate, setEndDate] = useState<string>("");
 
   const queryClient = useQueryClient();
 
@@ -53,7 +67,29 @@ export default function Transazioni() {
     period,
     accountId,
     category,
+    minAmount: minAmount ? parseFloat(minAmount) : undefined,
+    maxAmount: maxAmount ? parseFloat(maxAmount) : undefined,
+    transactionType,
+    startDate: startDate || undefined,
+    endDate: endDate || undefined,
   });
+  
+  const activeFiltersCount = [
+    minAmount,
+    maxAmount,
+    transactionType !== "all",
+    startDate,
+    endDate,
+  ].filter(Boolean).length;
+  
+  const clearAdvancedFilters = () => {
+    setMinAmount("");
+    setMaxAmount("");
+    setTransactionType("all");
+    setStartDate("");
+    setEndDate("");
+    setFiltersOpen(false);
+  };
 
   const { data: accounts } = useBankAccounts();
   const { categorizeBatch, categorize, isLoading: isCategorizing } = useCategorizeTransactions();
@@ -197,10 +233,95 @@ export default function Transazioni() {
           </SelectContent>
         </Select>
 
-        <Button variant="outline" className="gap-2 bg-card border-border hover:bg-secondary">
-          <Filter className="h-4 w-4" />
-          Altri filtri
-        </Button>
+        <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <PopoverTrigger asChild>
+            <Button variant="outline" className="gap-2 bg-card border-border hover:bg-secondary relative">
+              <Filter className="h-4 w-4" />
+              Altri filtri
+              {activeFiltersCount > 0 && (
+                <Badge className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs bg-primary text-primary-foreground">
+                  {activeFiltersCount}
+                </Badge>
+              )}
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-80 bg-card border-border p-4" align="start">
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h4 className="font-medium text-foreground">Filtri avanzati</h4>
+                {activeFiltersCount > 0 && (
+                  <Button variant="ghost" size="sm" onClick={clearAdvancedFilters} className="h-8 text-xs">
+                    <X className="h-3 w-3 mr-1" />
+                    Cancella
+                  </Button>
+                )}
+              </div>
+              
+              {/* Transaction Type */}
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Tipo transazione</Label>
+                <Select value={transactionType} onValueChange={(v) => setTransactionType(v as typeof transactionType)}>
+                  <SelectTrigger className="bg-background border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="all">Tutte</SelectItem>
+                    <SelectItem value="income">Solo entrate</SelectItem>
+                    <SelectItem value="expense">Solo uscite</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Amount Range */}
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Importo (€)</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="number"
+                    placeholder="Min"
+                    value={minAmount}
+                    onChange={(e) => setMinAmount(e.target.value)}
+                    className="bg-background border-border"
+                  />
+                  <Input
+                    type="number"
+                    placeholder="Max"
+                    value={maxAmount}
+                    onChange={(e) => setMaxAmount(e.target.value)}
+                    className="bg-background border-border"
+                  />
+                </div>
+              </div>
+              
+              {/* Date Range */}
+              <div className="space-y-2">
+                <Label className="text-sm text-muted-foreground">Intervallo date</Label>
+                <div className="flex gap-2">
+                  <Input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="bg-background border-border text-sm"
+                  />
+                  <Input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="bg-background border-border text-sm"
+                  />
+                </div>
+              </div>
+              
+              <Button 
+                className="w-full" 
+                size="sm"
+                onClick={() => setFiltersOpen(false)}
+              >
+                Applica filtri
+              </Button>
+            </div>
+          </PopoverContent>
+        </Popover>
 
         {/* Auto-categorization status - now runs automatically after bank sync */}
         {uncategorizedCount > 0 && (
