@@ -245,10 +245,21 @@ export default function Transazioni() {
               ))
             ) : transactions?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-32 text-center">
-                  <div className="text-muted-foreground">
-                    <p>Nessuna transazione trovata</p>
-                    <p className="text-xs mt-1">Collega un conto bancario per visualizzare le transazioni</p>
+                <TableCell colSpan={7} className="h-40 text-center">
+                  <div className="text-muted-foreground space-y-3">
+                    <p className="font-medium">Nessuna transazione importata</p>
+                    <p className="text-sm">
+                      Vai su Conti Bancari e premi Sincronizza, oppure carica un estratto conto (PDF/CSV).
+                    </p>
+                    <div className="flex justify-center gap-3 mt-4">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => window.location.href = "/conti-bancari"}
+                      >
+                        Vai a Conti Bancari
+                      </Button>
+                    </div>
                   </div>
                 </TableCell>
               </TableRow>
