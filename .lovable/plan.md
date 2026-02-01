@@ -1,160 +1,238 @@
 
+## Piano: Collegamento Super Admin a Dati Reali
 
-## Piano: Categorizzazione Automatica Transazioni
+### Analisi Situazione Attuale
 
-### Problema Identificato
+#### Cosa funziona gia con dati reali (hook collegati a Supabase)
+- `useGlobalUsers` - Legge da `profiles` + `user_roles` 
+- `useCompanies` - Legge da `companies`
+- `useSubscriptionPlans` - Legge da `subscription_plans`
+- `useIntegrationProviders` - Legge da `integration_providers`
+- `useSystemLogs` - Legge da `application_logs` + `audit_trail`
+- `useSecurityCompliance` - Legge da `gdpr_requests`, `ip_allowlist`, `security_policies`
+- `useFeatureFlags` - Legge da `feature_flags`
+- `useSystemMetrics` - Legge da `system_metrics`
 
-1. **Pulsante manuale visibile**: L'utente vuole che la categorizzazione sia automatica e in background
-2. **Limite di 20 transazioni**: La edge function ha `.limit(20)` in batch mode (riga 69) - quindi solo 20 vengono processate per chiamata
-3. **Nessun loop**: Non c'è logica che continua a categorizzare finché tutte le transazioni non sono processate
+#### Problemi Identificati
 
-### Soluzione Proposta
+| Problema | Pagina | Causa |
+|----------|--------|-------|
+| Mock data hardcodati | `Aziende.tsx` | Array `companies` hardcodato (righe 68-160) invece di usare `useCompanies()` |
+| Tabella companies vuota | DB | 0 aziende nel database reale |
+| Nessun collegamento user-company | DB | Il campo `user_id` in `companies` non e popolato |
+| KPI non calcolati | Dashboard | I valori (transazioni, conti, sync) sono mock |
+| Metriche sistema vuote | `system_metrics` | Nessun dato reale di telemetria |
 
-#### A. Rimuovere il pulsante "Categorizza tutto"
-Eliminare il bottone dalla UI di Transazioni.tsx
+### Modifiche Necessarie
 
-#### B. Modificare la Edge Function per processare tutte le transazioni
-Invece del limite di 20, implementare un sistema che:
-- Rimuove il `.limit(20)` 
-- Oppure processa in batch da 50-100 transazioni alla volta per evitare timeout
+#### 1. Rimuovere Mock Data da Aziende.tsx
 
-#### C. Categorizzazione automatica in background
-Due opzioni:
+**File**: `src/pages/Aziende.tsx`
 
-**Opzione 1 - Alla sincronizzazione bancaria (preferita)**
-Aggiungere chiamata alla categorizzazione alla fine della `syncAccount` nella edge function `enable-banking`:
+Sostituire l'array mock con l'hook esistente e aggiungere metriche calcolate:
+
 ```typescript
-// Dopo syncAccountTransactionsWithFallback
-// Chiama categorize-transactions in background
-EdgeRuntime.waitUntil(triggerCategorization(supabase))
+// RIMUOVERE righe 68-160 (array companies mock)
+
+// AGGIUNGERE
+import { useCompanies } from "@/hooks/useCompanies";
+
+// Nel componente
+const { data: companies, isLoading } = useCompanies();
 ```
 
-**Opzione 2 - Polling frontend**
-Usare `useEffect` nella pagina Transazioni per avviare la categorizzazione automatica quando rileva transazioni non categorizzate
+#### 2. Aggiornare useCompanies per includere metriche derivate
 
-### Implementazione Tecnica
+**File**: `src/hooks/useCompanies.ts`
 
-#### 1. Modificare `categorize-transactions/index.ts`
-
-**Problema**: Limite di 20 impedisce di processare tutte le 478 transazioni
-
-**Soluzione**: Implementare loop interno che processa a batch di 50 transazioni ciascuno fino al completamento
+Aggiungere un hook per calcolare KPI reali per ogni azienda:
 
 ```typescript
-// Invece di .limit(20), loop con batch di 50
-let processedTotal = 0;
-const batchSize = 50;
+export function useCompanyWithMetrics(companyId: string) {
+  return useQuery({
+    queryKey: ["company-metrics", companyId],
+    queryFn: async () => {
+      // Conta utenti collegati
+      const { count: usersCount } = await supabase
+        .from("profiles")
+        .select("*", { count: "exact", head: true })
+        .eq("company_id", companyId);
 
-while (true) {
-  const { data: transactions } = await supabase
-    .from("bank_transactions")
-    .select("id, name, merchant_name, amount, category")
-    .is("ai_category_id", null)
-    .limit(batchSize);
-  
-  if (!transactions || transactions.length === 0) break;
-  
-  // Processa batch
-  // ... logica AI ...
-  
-  processedTotal += transactions.length;
-  
-  // Safety: max 500 transazioni per chiamata (per evitare timeout)
-  if (processedTotal >= 500) break;
+      // Conta conti bancari
+      const { count: bankAccountsCount } = await supabase
+        .from("bank_accounts")
+        .select("*", { count: "exact", head: true })
+        // Collegamento tramite user_id dell'azienda
+        .in("user_id", [/* users della company */]);
+
+      // Conta transazioni ultimi 30 giorni
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      
+      const { count: transactionsCount } = await supabase
+        .from("bank_transactions")
+        .select("*", { count: "exact", head: true })
+        .gte("date", thirtyDaysAgo.toISOString());
+
+      return {
+        users: usersCount || 0,
+        bankAccounts: bankAccountsCount || 0,
+        transactions30d: transactionsCount || 0,
+        syncFailed7d: 0, // Da sync_jobs
+      };
+    },
+  });
 }
 ```
 
-#### 2. Modificare `enable-banking/index.ts`
+#### 3. Creare company per l'utente esistente
 
-Dopo la sincronizzazione delle transazioni, chiamare automaticamente la categorizzazione:
+**Migrazione SQL** per creare la company dell'utente attivo:
 
-```typescript
-// In syncAccount(), dopo syncAccountTransactionsWithFallback
-const result = await syncAccountTransactionsWithFallback(...);
-
-// Trigger categorization in background (non blocca la risposta)
-triggerBackgroundCategorization();
-
-return result;
+```sql
+-- Crea company per l'utente esistente
+INSERT INTO companies (
+  name, 
+  email, 
+  status, 
+  user_id,
+  vat_number,
+  created_at
+)
+SELECT 
+  COALESCE(p.company_name, p.first_name || ' ' || p.last_name || ' Company'),
+  u.email,
+  'active',
+  p.id,
+  NULL,
+  NOW()
+FROM profiles p
+JOIN auth.users u ON u.id = p.id
+WHERE p.id = '7c09c8f0-1dfa-4951-86cd-2920509bbfa5';
 ```
 
-#### 3. Modificare `src/pages/Transazioni.tsx`
+#### 4. Collegare bank_accounts a company tramite user_id
 
-- Rimuovere il bottone "Categorizza tutto"
-- Aggiungere indicatore "Categorizzazione in corso..." se ci sono transazioni non categorizzate
-- Usare polling o realtime subscription per aggiornare la lista quando le categorie vengono assegnate
+Il campo `user_id` in `bank_accounts` gia esiste e contiene l'ID utente. Basta usare la relazione `user -> company` per aggregare i dati.
+
+#### 5. Aggiornare useGlobalUsers per includere email
+
+**File**: `src/hooks/useGlobalUsers.ts`
+
+Il campo email e vuoto perche non viene estratto da `auth.users`. Per motivi di sicurezza, creare un hook che usa RPC:
+
+```sql
+-- Funzione per ottenere utenti con email (solo super_admin)
+CREATE OR REPLACE FUNCTION get_users_with_email()
+RETURNS TABLE (
+  id uuid,
+  email text,
+  created_at timestamptz,
+  last_sign_in_at timestamptz
+)
+SECURITY DEFINER
+AS $$
+BEGIN
+  -- Verifica che il chiamante sia super_admin
+  IF NOT EXISTS (
+    SELECT 1 FROM user_roles 
+    WHERE user_id = auth.uid() AND role = 'super_admin'
+  ) THEN
+    RAISE EXCEPTION 'Access denied';
+  END IF;
+
+  RETURN QUERY
+  SELECT 
+    u.id,
+    u.email::text,
+    u.created_at,
+    u.last_sign_in_at
+  FROM auth.users u;
+END;
+$$ LANGUAGE plpgsql;
+```
+
+#### 6. Popolare subscription_plans con piani di default
+
+```sql
+INSERT INTO subscription_plans (
+  name, price, billing_cycle, status, 
+  max_users, max_bank_accounts, max_transactions_month,
+  ai_features_enabled, features
+) VALUES 
+('Starter', 29, 'monthly', 'active', 5, 2, 1000, false, 
+ ARRAY['dashboard', 'transactions', 'basic_reports']),
+('Professional', 79, 'monthly', 'active', 15, 10, 10000, true, 
+ ARRAY['dashboard', 'transactions', 'basic_reports', 'cash_flow', 'budget', 'ai_categorization']),
+('Enterprise', 199, 'monthly', 'active', -1, -1, -1, true, 
+ ARRAY['dashboard', 'transactions', 'basic_reports', 'cash_flow', 'budget', 'ai_categorization', 'ai_forecast', 'api_access', 'sso', 'dedicated_support']);
+```
+
+#### 7. Popolare integration_providers
+
+```sql
+INSERT INTO integration_providers (
+  name, provider_type, status, uptime, error_rate, rate_limit_hits, config
+) VALUES 
+('Enable Banking', 'open_banking', 'ok', 99.8, 0.2, 12, '{"api_base_url": "https://api.enablebanking.com"}'),
+('Lovable AI', 'ai', 'ok', 99.9, 0.1, 45, '{"model": "lovable-ai"}');
+```
 
 ---
 
-### Dettaglio Modifiche File
+### Riepilogo File da Modificare
 
-| File | Modifica |
-|------|----------|
-| `supabase/functions/categorize-transactions/index.ts` | Rimuovere `.limit(20)`, aggiungere loop con batch di 50 e max 500 per chiamata |
-| `supabase/functions/enable-banking/index.ts` | Aggiungere chiamata background a `categorize-transactions` dopo sync |
-| `src/pages/Transazioni.tsx` | Rimuovere bottone, mostrare status "in elaborazione" se serve |
-| `src/hooks/useCategorizeTransactions.ts` | Aggiungere opzione per polling background |
+| File | Azione |
+|------|--------|
+| `src/pages/Aziende.tsx` | Rimuovere mock data, usare `useCompanies()`, aggiungere loading states |
+| `src/hooks/useCompanies.ts` | Aggiungere `useCompaniesWithMetrics()` per KPI aggregati |
+| `src/hooks/useGlobalUsers.ts` | Aggiungere query RPC per ottenere email utenti |
+| **Migrazione DB** | Creare company per utente esistente |
+| **Migrazione DB** | Popolare `subscription_plans` con piani default |
+| **Migrazione DB** | Popolare `integration_providers` con Enable Banking |
+| **Migrazione DB** | Creare funzione RPC `get_users_with_email()` |
 
 ---
 
-### Flusso Risultante
+### Flusso Dati Dopo le Modifiche
 
 ```text
-┌──────────────────────────────────────────────────────────────┐
-│                    FLUSSO AUTOMATICO                          │
-├──────────────────────────────────────────────────────────────┤
-│                                                               │
-│  [Utente collega banca]                                       │
-│           │                                                   │
-│           ▼                                                   │
-│  ┌─────────────────────┐                                      │
-│  │ enable-banking      │                                      │
-│  │ sync_account        │                                      │
-│  └──────────┬──────────┘                                      │
-│             │ Sincronizza 743 transazioni                     │
-│             │                                                 │
-│             ▼                                                 │
-│  ┌─────────────────────┐                                      │
-│  │ Trigger automatico  │──┐                                   │
-│  │ categorize-tx       │  │ Background (non blocca)           │
-│  └─────────────────────┘  │                                   │
-│             │             │                                   │
-│             ▼             │                                   │
-│  ┌─────────────────────┐  │                                   │
-│  │ Batch 1: 50 tx      │◀─┘                                   │
-│  │ AI categorizza      │                                      │
-│  └──────────┬──────────┘                                      │
-│             │                                                 │
-│             ▼                                                 │
-│  ┌─────────────────────┐                                      │
-│  │ Batch 2: 50 tx      │                                      │
-│  │ AI categorizza      │                                      │
-│  └──────────┬──────────┘                                      │
-│             │ ... ripeti fino a max 500                       │
-│             ▼                                                 │
-│  ┌─────────────────────┐                                      │
-│  │ Transazioni         │                                      │
-│  │ categorizzate!      │                                      │
-│  └─────────────────────┘                                      │
-│                                                               │
-│  [UI] Pagina Transazioni mostra categorie automaticamente     │
-│                                                               │
-└──────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                    SUPER ADMIN DASHBOARD                         │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│   ┌──────────────┐     ┌──────────────┐     ┌──────────────┐   │
+│   │  companies   │────▶│   Aziende    │     │  profiles    │   │
+│   │   (reale)    │     │   (pagina)   │     │   (reale)    │   │
+│   └──────────────┘     └──────────────┘     └──────────────┘   │
+│          │                                         │            │
+│          ▼                                         ▼            │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │  useCompaniesWithMetrics()                              │   │
+│   │  - Conta utenti per company (via user_id)               │   │
+│   │  - Conta bank_accounts per user della company           │   │
+│   │  - Conta transazioni ultimi 30gg                        │   │
+│   │  - Conta sync falliti ultimi 7gg                        │   │
+│   └─────────────────────────────────────────────────────────┘   │
+│                              │                                   │
+│                              ▼                                   │
+│   ┌─────────────────────────────────────────────────────────┐   │
+│   │  Dashboard KPI Cards (dati reali)                       │   │
+│   │  - Aziende totali: COUNT(companies)                     │   │
+│   │  - Utenti totali: COUNT(profiles)                       │   │
+│   │  - Sessioni attive: COUNT(sync_jobs WHERE running)      │   │
+│   └─────────────────────────────────────────────────────────┘   │
+│                                                                  │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
-
-### Considerazioni
-
-1. **Rate limits**: Lovable AI ha rate limits - processeremo max 500 tx per chiamata con delay tra i batch
-2. **Timeout**: Le Edge Functions hanno timeout di 400s - il loop con batch da 50 evita il problema
-3. **Costi AI**: Ogni chiamata AI costa crediti - l'utente deve essere consapevole
-4. **Error handling**: Se l'AI fallisce su un batch, continuare con il successivo
 
 ### Risultato Atteso
 
-- Nessun bottone manuale visibile
-- Transazioni categorizzate automaticamente dopo ogni sincronizzazione
-- Tutte le 478+ transazioni processate (non solo 20)
-- UI sempre aggiornata con le categorie
-
+1. **Aziende.tsx** mostra dati reali dal database invece di mock
+2. **Utenti Globali** mostra email degli utenti (tramite RPC sicura)
+3. **Piani** mostra piani commerciali reali
+4. **Integrazioni** mostra Enable Banking come provider attivo
+5. **Dashboard Super Admin** calcola KPI da dati reali (companies, users, transactions)
+6. La company e collegata all'utente esistente (`7c09c8f0-1dfa-4951-86cd-2920509bbfa5`)
