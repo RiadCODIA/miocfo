@@ -1,129 +1,120 @@
 
+## Cosa ho verificato (e perché oggi non vedi transazioni)
 
-## Piano: Fix Endpoint Transazioni + Rimozione Pulsante "Ricollega"
+1) **Il frontend sta funzionando**: la pagina **/transazioni** fa una query a Supabase su `bank_transactions` e riceve **200 con body `[]`** (quindi non è un problema di filtri/UI).
 
-## Problema Identificato
+2) **Il database è vuoto**: in questo ambiente `bank_transactions` ha **count = 0**. Quindi il problema è che **le transazioni non vengono mai salvate**.
 
-Dall'analisi approfondita ho trovato 2 problemi:
+3) **Il backend (edge function) fallisce nel fetch delle transazioni**: nei log di `enable-banking` si vede chiaramente che la chiamata:
+`GET /accounts/{uid}/transactions?date_from=...&date_to=...`
+ritorna **400 ASPSP_ERROR** (“Error interacting with ASPSP”).
+Quindi l’import non parte perché **Enable Banking non ci sta consegnando i movimenti in quella chiamata** (anche se i saldi funzionano).
 
-### 1. Header PSU Mancanti per le Transazioni
+## Probabile causa reale (non “la banca non funziona” in generale)
 
-La documentazione di Enable Banking mostra che l'endpoint `/accounts/{id}/transactions` accetta header PSU opzionali:
-- `Psu-Ip-Address`
-- `Psu-User-Agent`
-- `Psu-Referer`
-- `Psu-Accept`
-- `Psu-Accept-Language`
-- `Psu-Geo-Location`
+Oggi noi inviamo header PSU “fissi”, inclusa **Psu-Ip-Address = 0.0.0.0**.
+Per diverse banche PSD2 (Italia in particolare) l’endpoint transazioni è più “rigido” e può rifiutare richieste con:
+- PSU IP non valido/assente
+- user-agent non coerente
+- periodo troppo ampio (alcune banche rispondono 400 invece di 422)
 
-Alcune banche PSD2 italiane (come BCC di Cherasco) potrebbero richiedere questi header per le transazioni, anche se sono marcati come "opzionali" nella documentazione. Il fatto che i **saldi funzionino** ma le **transazioni falliscano** suggerisce che la banca ha requisiti più stringenti per l'accesso ai movimenti.
-
-### 2. Pulsante "Ricollega" Non Funzionante
-
-Il pulsante "Ricollega" apre la modale di connessione ma non gestisce correttamente la riconnessione di un conto esistente, creando confusione.
-
----
-
-## Soluzione Proposta
-
-### Parte A: Aggiungere Header PSU alle Richieste Transazioni
-
-Modificare la funzione `enableBankingRequest` per accettare header PSU opzionali e passarli alle chiamate API per le transazioni:
-
-```text
-File: supabase/functions/enable-banking/index.ts
-
-1. Aggiornare la firma della funzione enableBankingRequest per accettare header opzionali:
-   
-   async function enableBankingRequest(
-     endpoint: string,
-     method: string = "GET",
-     body?: Record<string, unknown>,
-     psuHeaders?: Record<string, string>  // NUOVO
-   )
-
-2. Unire gli header PSU se presenti:
-
-   const headers: Record<string, string> = {
-     "Authorization": `Bearer ${jwt}`,
-     "Content-Type": "application/json",
-     ...psuHeaders,  // NUOVO
-   };
-
-3. Nelle funzioni che chiamano l'endpoint transactions, passare header PSU:
-
-   // In syncAccountTransactions()
-   const psuHeaders = {
-     "Psu-Ip-Address": "0.0.0.0",  // Edge function, IP non disponibile
-     "Psu-User-Agent": "Finexa/1.0",
-     "Psu-Accept": "application/json",
-     "Psu-Accept-Language": "it-IT",
-   };
-   
-   const transactionsResponse = await enableBankingRequest(url, "GET", undefined, psuHeaders);
-```
-
-### Parte B: Rimuovere Pulsante "Ricollega"
-
-```text
-File: src/components/conti-bancari/BankAccountCard.tsx
-
-1. Rimuovere la prop onReconnect dall'interfaccia
-2. Rimuovere lo stato isReconnecting e la funzione handleReconnect
-3. Rimuovere il pulsante "Ricollega" dal JSX
-4. Cambiare il testo dello status "error" da "Riconnessione richiesta" a "Errore sincronizzazione"
-
-File: src/pages/ContiBancari.tsx
-
-1. Rimuovere la funzione handleReconnect
-2. Rimuovere lo stato reconnectAccountId
-3. Rimuovere la prop onReconnect passata a BankAccountCard
-```
-
-### Parte C: Migliorare Messaggio Errore per ASPSP_ERROR
-
-```text
-File: supabase/functions/enable-banking/index.ts
-
-Nella gestione errori di syncAccount, cambiare il messaggio per ASPSP_ERROR:
-
-Prima:
-"Errore banca (ASPSP_ERROR): la banca non ha risposto correttamente tramite PSD2. 
- Riprova più tardi o ricollega il conto."
-
-Dopo:
-"La banca non ha risposto correttamente. Riprova tra qualche minuto. 
- Se il problema persiste, scollega e ricollega il conto."
-```
+Quindi dobbiamo:
+1) **passare l’IP reale dell’utente** (da `x-forwarded-for`) e lo user-agent reale
+2) **aggiungere fallback di periodo** quando l’ASPSP non accetta un range grande
 
 ---
 
-## File da Modificare
+## Modifiche da implementare
 
-| File | Modifica |
-|------|----------|
-| `supabase/functions/enable-banking/index.ts` | Aggiungere header PSU alle richieste transazioni |
-| `src/components/conti-bancari/BankAccountCard.tsx` | Rimuovere pulsante "Ricollega" e aggiornare stato |
-| `src/pages/ContiBancari.tsx` | Rimuovere logica handleReconnect |
+### A) Passare PSU headers reali (IP/UA/Lingua/Referer) alla chiamata transactions
+**File:** `supabase/functions/enable-banking/index.ts`
+
+1. Nel handler `serve(async (req) => ...)` estrarre un “PSU context” dal request:
+   - `ip` da `x-forwarded-for` (primo IP della lista) con fallback su `cf-connecting-ip` / `x-real-ip`
+   - `userAgent` da `user-agent`
+   - `acceptLanguage` da `accept-language`
+   - `referer` da `referer`
+2. Passare questo contesto alle funzioni:
+   - `completeSession(code, userId, psuContext)`
+   - `syncAccount(accountId, userId, psuContext)`
+3. Aggiornare `syncAccountTransactions(...)` per **non usare più** PSU headers hard-coded (0.0.0.0) e costruirli invece da `psuContext`.
+   - Se un valore manca, **meglio omettere l’header** (invece di usare 0.0.0.0).
+
+**Obiettivo:** far sì che la banca riceva parametri PSU “credibili” e non rifiuti la richiesta transazioni.
 
 ---
 
-## Risultato Atteso
+### B) Error handling strutturato in enableBankingRequest (per decidere i retry)
+**File:** `supabase/functions/enable-banking/index.ts`
 
-1. Le richieste transazioni includeranno gli header PSU che alcune banche italiane richiedono
-2. Il pulsante "Ricollega" (che non funzionava) sarà rimosso
-3. L'utente vedrà messaggi di errore più chiari
-4. Per ricollegare, l'utente dovrà scollegare e collegare di nuovo (flusso funzionante)
+1. In `enableBankingRequest`, quando `response.ok` è false:
+   - fare `text()` come oggi
+   - provare `JSON.parse(text)` (se possibile)
+   - creare un `Error` arricchito con:
+     - `(err as any).status = response.status`
+     - `(err as any).payload = parsedJson` (se parse ok)
+2. Questo ci permette di riconoscere in modo affidabile:
+   - 429 rate limit (non bisogna ritentare)
+   - 401/403/consent (non bisogna ritentare)
+   - 400 ASPSP_ERROR (ha senso provare con periodo più corto)
 
 ---
 
-## Nota Importante
+### C) Fallback automatico di periodo (365 → 90 → 30 → 7 giorni)
+**File:** `supabase/functions/enable-banking/index.ts`
 
-Se anche con gli header PSU la banca BCC di Cherasco continua a dare errore ASPSP_ERROR, significa che:
-- La banca ha un problema temporaneo sul loro sistema PSD2
-- Oppure è necessario ricollegare il conto per ottenere un nuovo consenso
+1. Introdurre una funzione wrapper tipo:
+   - `syncAccountTransactionsWithFallback(dbAccountId, accountUid, supabase, endDate, windowsDays[], psuContext)`
+2. Logica:
+   - prova il primo range (es: 365 per “connessione fresca”)
+   - se fallisce con:
+     - **ASPSP_ERROR** (payload.error === "ASPSP_ERROR") oppure status 400
+     - **WRONG_TRANSACTIONS_PERIOD** / status 422
+     allora prova il range successivo più corto
+   - se fallisce con:
+     - **429** → stop immediato (non peggioriamo)
+     - **401/403/consent** → stop immediato (serve scollega/ricollega)
+3. Usare questa wrapper in 2 punti:
+   - **auto-sync** dentro `completeSession` (oggi fa 365 e si ferma al primo 400)
+   - **manual sync** dentro `syncAccount` (oggi fa 365/90 ma fallback solo su 422)
 
-In quel caso, l'unica soluzione è:
-1. Scollegare il conto (pulsante cestino)
-2. Collegare nuovamente il conto (pulsante "Collega nuovo conto")
+**Obiettivo:** anche se la banca rifiuta range lunghi, dovremmo riuscire a importare almeno gli ultimi 7/30 giorni, così in /transazioni comparirà finalmente qualcosa.
 
+---
+
+### D) (Piccola UX) Messaggio empty-state più corretto in /transazioni
+**File:** `src/pages/Transazioni.tsx`
+
+Oggi quando `transactions.length === 0` mostra:
+“Collega un conto bancario...”, che è fuorviante se il conto è collegato ma l’import non è riuscito.
+
+Modifica proposta:
+- testo: “Nessuna transazione importata. Vai su Conti Bancari e premi Sincronizza, oppure importa un estratto conto (PDF/CSV).”
+- bottone “Vai a Conti Bancari” (link) e/o “Carica estratto conto”
+
+(Non risolve il backend, ma evita che l’utente pensi che il collegamento non esista.)
+
+---
+
+## Come verifichiamo che sia risolto (test end-to-end)
+1) Vai su **Conti Bancari** e premi **Sincronizza**
+2) Controlliamo nei log edge function che:
+   - la chiamata a `/transactions` non ritorni 400
+   - venga stampato “Total transactions fetched: …”
+   - vengano eseguiti gli upsert senza errori
+3) Verifica DB: `bank_transactions` deve diventare > 0
+4) Torna su **/transazioni**: la tabella deve popolarsi
+
+---
+
+## Nota importante (sicurezza, non bloccante per vedere le transazioni)
+Ho notato che `bank_transactions` ha RLS “Allow all access … USING true”. È rischioso (potenziale lettura cross-user).
+Non lo tocco in questa fix “transazioni non visibili”, ma appena le transazioni arrivano conviene mettere:
+- RLS corretta (ad es. accesso tramite join su bank_accounts.user_id)
+- oppure aggiungere `user_id` a `bank_transactions` e policy per `auth.uid() = user_id`
+
+---
+
+## File coinvolti
+- `supabase/functions/enable-banking/index.ts` (PSU headers reali + error parsing + fallback periodi)
+- `src/pages/Transazioni.tsx` (solo miglioramento messaggio empty-state, opzionale)
