@@ -20,7 +20,8 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  RefreshCw
+  RefreshCw,
+  Loader2
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -64,109 +65,54 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { toast } from "sonner";
+import { useCompanies, useUpdateCompany, type Company } from "@/hooks/useCompanies";
+import { useCompanyMetrics } from "@/hooks/useCompanyMetrics";
+import { format } from "date-fns";
+import { it } from "date-fns/locale";
 
-// Mock data
-const companies = [
-  { 
-    id: "1", 
-    name: "Acme S.r.l.", 
-    status: "active", 
-    plan: "Professional", 
-    users: 12, 
-    lastActivity: "2 ore fa",
-    vatNumber: "IT12345678901",
-    email: "admin@acme.it",
-    phone: "+39 02 1234567",
-    createdAt: "2023-06-15",
-    bankAccounts: 3,
-    transactions30d: 456,
-    syncFailed7d: 0,
-    integrations: [
-      { name: "Plaid", status: "connected" },
-      { name: "Stripe", status: "connected" },
-    ]
-  },
-  { 
-    id: "2", 
-    name: "TechCorp S.p.A.", 
-    status: "active", 
-    plan: "Enterprise", 
-    users: 45, 
-    lastActivity: "15 min fa",
-    vatNumber: "IT98765432101",
-    email: "info@techcorp.com",
-    phone: "+39 06 9876543",
-    createdAt: "2023-03-20",
-    bankAccounts: 8,
-    transactions30d: 1234,
-    syncFailed7d: 2,
-    integrations: [
-      { name: "Plaid", status: "connected" },
-      { name: "Stripe", status: "error" },
-    ]
-  },
-  { 
-    id: "3", 
-    name: "StartUp Innovation", 
-    status: "pending_onboarding", 
-    plan: "Starter", 
-    users: 3, 
-    lastActivity: "Mai",
-    vatNumber: "IT11122233344",
-    email: "hello@startup.io",
-    phone: "+39 333 1234567",
-    createdAt: "2024-01-10",
-    bankAccounts: 0,
-    transactions30d: 0,
-    syncFailed7d: 0,
-    integrations: []
-  },
-  { 
-    id: "4", 
-    name: "Global Finance Ltd", 
-    status: "active", 
-    plan: "Enterprise", 
-    users: 28, 
-    lastActivity: "1 giorno fa",
-    vatNumber: "IT55566677788",
-    email: "support@globalfinance.com",
-    phone: "+39 02 5556667",
-    createdAt: "2022-11-05",
-    bankAccounts: 12,
-    transactions30d: 2890,
-    syncFailed7d: 1,
-    integrations: [
-      { name: "Plaid", status: "connected" },
-    ]
-  },
-  { 
-    id: "5", 
-    name: "Local Business", 
-    status: "suspended", 
-    plan: "Starter", 
-    users: 5, 
-    lastActivity: "30 giorni fa",
-    vatNumber: "IT99988877766",
-    email: "info@localbiz.it",
-    phone: "+39 055 9998887",
-    createdAt: "2023-09-01",
-    bankAccounts: 1,
-    transactions30d: 0,
-    syncFailed7d: 5,
-    integrations: [
-      { name: "Plaid", status: "error" },
-    ]
-  },
-];
+// Extended company type with calculated fields for display
+interface CompanyDisplay extends Company {
+  users?: number;
+  bankAccounts?: number;
+  transactions30d?: number;
+  syncFailed7d?: number;
+  lastActivity?: string;
+  plan?: string;
+  integrations?: { name: string; status: string }[];
+}
+
+function CompanyMetricsDisplay({ companyId }: { companyId: string }) {
+  const { data: metrics, isLoading } = useCompanyMetrics(companyId);
+  
+  if (isLoading) {
+    return <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />;
+  }
+  
+  return <span>{metrics?.users || 0}</span>;
+}
 
 export default function Aziende() {
-  const [selectedCompany, setSelectedCompany] = useState<typeof companies[0] | null>(null);
+  const { data: companiesData, isLoading, error } = useCompanies();
+  const updateCompany = useUpdateCompany();
+  
+  const [selectedCompany, setSelectedCompany] = useState<CompanyDisplay | null>(null);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
   const [actionDialogOpen, setActionDialogOpen] = useState(false);
   const [actionType, setActionType] = useState<"suspend" | "activate">("suspend");
   const [actionReason, setActionReason] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
-  const [filterPlan, setFilterPlan] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const companies: CompanyDisplay[] = (companiesData || []).map(c => ({
+    ...c,
+    users: 0, // Will be calculated per-company
+    bankAccounts: 0,
+    transactions30d: 0,
+    syncFailed7d: 0,
+    lastActivity: c.updated_at ? format(new Date(c.updated_at), "dd MMM yyyy", { locale: it }) : "Mai",
+    plan: "Professional", // TODO: Link to subscription when implemented
+    integrations: []
+  }));
 
   const getStatusBadge = (status: string) => {
     switch (status) {
@@ -192,31 +138,45 @@ export default function Aziende() {
     }
   };
 
-  const handleViewDetails = (company: typeof companies[0]) => {
+  const handleViewDetails = (company: CompanyDisplay) => {
     setSelectedCompany(company);
     setDetailSheetOpen(true);
   };
 
-  const handleActionClick = (company: typeof companies[0], type: "suspend" | "activate") => {
+  const handleActionClick = (company: CompanyDisplay, type: "suspend" | "activate") => {
     setSelectedCompany(company);
     setActionType(type);
     setActionDialogOpen(true);
   };
 
-  const handleConfirmAction = () => {
+  const handleConfirmAction = async () => {
     if (!actionReason.trim()) {
       toast.error("Inserisci un motivo per l'azione");
       return;
     }
-    const actionLabel = actionType === "suspend" ? "sospesa" : "attivata";
-    toast.success(`Azienda ${actionLabel} con successo`, {
-      description: `${selectedCompany?.name} - Motivo: ${actionReason}`
-    });
+    if (!selectedCompany) return;
+    
+    const newStatus = actionType === "suspend" ? "suspended" : "active";
+    
+    try {
+      await updateCompany.mutateAsync({
+        id: selectedCompany.id,
+        status: newStatus
+      });
+      
+      const actionLabel = actionType === "suspend" ? "sospesa" : "attivata";
+      toast.success(`Azienda ${actionLabel} con successo`, {
+        description: `${selectedCompany?.name} - Motivo: ${actionReason}`
+      });
+    } catch (error) {
+      toast.error("Errore durante l'operazione");
+    }
+    
     setActionDialogOpen(false);
     setActionReason("");
   };
 
-  const handleImpersonate = (company: typeof companies[0]) => {
+  const handleImpersonate = (company: CompanyDisplay) => {
     toast.success("Impersonificazione avviata", {
       description: `Stai visualizzando come ${company.name}`
     });
@@ -224,9 +184,21 @@ export default function Aziende() {
 
   const filteredCompanies = companies.filter(company => {
     if (filterStatus !== "all" && company.status !== filterStatus) return false;
-    if (filterPlan !== "all" && company.plan !== filterPlan) return false;
+    if (searchQuery && !company.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     return true;
   });
+
+  if (error) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="text-center">
+          <AlertTriangle className="h-12 w-12 text-destructive mx-auto mb-4" />
+          <p className="text-lg font-medium">Errore nel caricamento delle aziende</p>
+          <p className="text-muted-foreground">{error.message}</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -251,8 +223,10 @@ export default function Aziende() {
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input 
-                placeholder="Cerca per ragione sociale, ID, piano..." 
+                placeholder="Cerca per ragione sociale..." 
                 className="pl-10"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
             </div>
             <Popover>
@@ -260,10 +234,8 @@ export default function Aziende() {
                 <Button variant="outline">
                   <Filter className="mr-2 h-4 w-4" />
                   Filtri
-                  {(filterStatus !== "all" || filterPlan !== "all") && (
-                    <Badge className="ml-2 bg-violet-600">
-                      {[filterStatus !== "all", filterPlan !== "all"].filter(Boolean).length}
-                    </Badge>
+                  {filterStatus !== "all" && (
+                    <Badge className="ml-2 bg-violet-600">1</Badge>
                   )}
                 </Button>
               </PopoverTrigger>
@@ -284,24 +256,10 @@ export default function Aziende() {
                       </SelectContent>
                     </Select>
                   </div>
-                  <div className="space-y-2">
-                    <Label>Piano</Label>
-                    <Select value={filterPlan} onValueChange={setFilterPlan}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Tutti i piani" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="all">Tutti i piani</SelectItem>
-                        <SelectItem value="Starter">Starter</SelectItem>
-                        <SelectItem value="Professional">Professional</SelectItem>
-                        <SelectItem value="Enterprise">Enterprise</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
                   <Button 
                     variant="outline" 
                     className="w-full"
-                    onClick={() => { setFilterStatus("all"); setFilterPlan("all"); }}
+                    onClick={() => setFilterStatus("all")}
                   >
                     Resetta Filtri
                   </Button>
@@ -317,69 +275,92 @@ export default function Aziende() {
         <CardHeader>
           <CardTitle>Elenco Aziende</CardTitle>
           <CardDescription>
-            {filteredCompanies.length} aziende {filteredCompanies.length !== companies.length && `(filtrate da ${companies.length})`}
+            {isLoading ? (
+              <span className="flex items-center gap-2">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Caricamento...
+              </span>
+            ) : (
+              <>
+                {filteredCompanies.length} aziende {filteredCompanies.length !== companies.length && `(filtrate da ${companies.length})`}
+              </>
+            )}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Ragione Sociale</TableHead>
-                <TableHead>Stato</TableHead>
-                <TableHead>Piano</TableHead>
-                <TableHead>Utenti</TableHead>
-                <TableHead>Ultima Attività</TableHead>
-                <TableHead className="text-right">Azioni</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredCompanies.map((company) => (
-                <TableRow key={company.id}>
-                  <TableCell className="font-medium">{company.name}</TableCell>
-                  <TableCell>{getStatusBadge(company.status)}</TableCell>
-                  <TableCell>{company.plan}</TableCell>
-                  <TableCell>{company.users}</TableCell>
-                  <TableCell className="text-muted-foreground">{company.lastActivity}</TableCell>
-                  <TableCell className="text-right">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => handleViewDetails(company)}>
-                          <Eye className="mr-2 h-4 w-4" />
-                          Visualizza Dettagli
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => handleImpersonate(company)}>
-                          <UserCog className="mr-2 h-4 w-4" />
-                          Impersonifica
-                        </DropdownMenuItem>
-                        {company.status === "active" ? (
-                          <DropdownMenuItem 
-                            className="text-destructive"
-                            onClick={() => handleActionClick(company, "suspend")}
-                          >
-                            <Pause className="mr-2 h-4 w-4" />
-                            Sospendi
-                          </DropdownMenuItem>
-                        ) : (
-                          <DropdownMenuItem 
-                            className="text-emerald-600"
-                            onClick={() => handleActionClick(company, "activate")}
-                          >
-                            <Play className="mr-2 h-4 w-4" />
-                            Attiva
-                          </DropdownMenuItem>
-                        )}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </TableCell>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+          ) : companies.length === 0 ? (
+            <div className="text-center py-12">
+              <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-lg font-medium">Nessuna azienda registrata</p>
+              <p className="text-muted-foreground">Le aziende verranno create quando gli utenti si registrano</p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Ragione Sociale</TableHead>
+                  <TableHead>Stato</TableHead>
+                  <TableHead>P.IVA</TableHead>
+                  <TableHead>Utenti</TableHead>
+                  <TableHead>Ultima Attività</TableHead>
+                  <TableHead className="text-right">Azioni</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {filteredCompanies.map((company) => (
+                  <TableRow key={company.id}>
+                    <TableCell className="font-medium">{company.name}</TableCell>
+                    <TableCell>{getStatusBadge(company.status || "active")}</TableCell>
+                    <TableCell className="text-muted-foreground">{company.vat_number || "-"}</TableCell>
+                    <TableCell>
+                      <CompanyMetricsDisplay companyId={company.id} />
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{company.lastActivity}</TableCell>
+                    <TableCell className="text-right">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => handleViewDetails(company)}>
+                            <Eye className="mr-2 h-4 w-4" />
+                            Visualizza Dettagli
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleImpersonate(company)}>
+                            <UserCog className="mr-2 h-4 w-4" />
+                            Impersonifica
+                          </DropdownMenuItem>
+                          {company.status === "active" ? (
+                            <DropdownMenuItem 
+                              className="text-destructive"
+                              onClick={() => handleActionClick(company, "suspend")}
+                            >
+                              <Pause className="mr-2 h-4 w-4" />
+                              Sospendi
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem 
+                              className="text-emerald-600"
+                              onClick={() => handleActionClick(company, "activate")}
+                            >
+                              <Play className="mr-2 h-4 w-4" />
+                              Attiva
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
         </CardContent>
       </Card>
 
@@ -397,148 +378,7 @@ export default function Aziende() {
           </SheetHeader>
           
           {selectedCompany && (
-            <div className="mt-6 space-y-6">
-              {/* Summary Panel */}
-              <div className="space-y-4">
-                <h4 className="font-medium text-foreground">Informazioni Generali</h4>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">P.IVA</p>
-                    <p className="font-medium">{selectedCompany.vatNumber}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Email</p>
-                    <p className="font-medium">{selectedCompany.email}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Telefono</p>
-                    <p className="font-medium">{selectedCompany.phone}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Data Registrazione</p>
-                    <p className="font-medium">{selectedCompany.createdAt}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Piano</p>
-                    <p className="font-medium">{selectedCompany.plan}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Stato</p>
-                    {getStatusBadge(selectedCompany.status)}
-                  </div>
-                </div>
-              </div>
-
-              {/* KPI Cards */}
-              <div className="space-y-4">
-                <h4 className="font-medium text-foreground">Metriche</h4>
-                <div className="grid grid-cols-2 gap-4">
-                  <Card className="bg-muted/50">
-                    <CardContent className="pt-4">
-                      <div className="flex items-center gap-3">
-                        <Users className="h-5 w-5 text-blue-500" />
-                        <div>
-                          <p className="text-2xl font-bold">{selectedCompany.users}</p>
-                          <p className="text-xs text-muted-foreground">Utenti</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-muted/50">
-                    <CardContent className="pt-4">
-                      <div className="flex items-center gap-3">
-                        <CreditCard className="h-5 w-5 text-violet-500" />
-                        <div>
-                          <p className="text-2xl font-bold">{selectedCompany.bankAccounts}</p>
-                          <p className="text-xs text-muted-foreground">Conti Bancari</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-muted/50">
-                    <CardContent className="pt-4">
-                      <div className="flex items-center gap-3">
-                        <Activity className="h-5 w-5 text-emerald-500" />
-                        <div>
-                          <p className="text-2xl font-bold">{selectedCompany.transactions30d}</p>
-                          <p className="text-xs text-muted-foreground">Transazioni (30g)</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                  <Card className="bg-muted/50">
-                    <CardContent className="pt-4">
-                      <div className="flex items-center gap-3">
-                        <AlertTriangle className="h-5 w-5 text-amber-500" />
-                        <div>
-                          <p className="text-2xl font-bold">{selectedCompany.syncFailed7d}</p>
-                          <p className="text-xs text-muted-foreground">Sync Falliti (7g)</p>
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </div>
-              </div>
-
-              {/* Integrations Status */}
-              <div className="space-y-4">
-                <h4 className="font-medium text-foreground">Stato Integrazioni</h4>
-                {selectedCompany.integrations.length > 0 ? (
-                  <div className="space-y-2">
-                    {selectedCompany.integrations.map((integration, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 rounded-lg bg-muted/50 border border-border">
-                        <div className="flex items-center gap-2">
-                          {getIntegrationStatusIcon(integration.status)}
-                          <span className="font-medium">{integration.name}</span>
-                        </div>
-                        <Button variant="ghost" size="sm">
-                          <RefreshCw className="h-4 w-4 mr-1" />
-                          Sync
-                        </Button>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-muted-foreground">Nessuna integrazione configurata</p>
-                )}
-              </div>
-
-              {/* Actions */}
-              <div className="flex gap-3 pt-4 border-t">
-                <Button 
-                  variant="outline" 
-                  className="flex-1"
-                  onClick={() => handleImpersonate(selectedCompany)}
-                >
-                  <UserCog className="mr-2 h-4 w-4" />
-                  Impersonifica
-                </Button>
-                {selectedCompany.status === "active" ? (
-                  <Button 
-                    variant="destructive" 
-                    className="flex-1"
-                    onClick={() => {
-                      setDetailSheetOpen(false);
-                      handleActionClick(selectedCompany, "suspend");
-                    }}
-                  >
-                    <Pause className="mr-2 h-4 w-4" />
-                    Sospendi
-                  </Button>
-                ) : (
-                  <Button 
-                    className="flex-1 bg-emerald-600 hover:bg-emerald-700"
-                    onClick={() => {
-                      setDetailSheetOpen(false);
-                      handleActionClick(selectedCompany, "activate");
-                    }}
-                  >
-                    <Play className="mr-2 h-4 w-4" />
-                    Attiva
-                  </Button>
-                )}
-              </div>
-            </div>
+            <CompanyDetailContent company={selectedCompany} getStatusBadge={getStatusBadge} getIntegrationStatusIcon={getIntegrationStatusIcon} />
           )}
         </SheetContent>
       </Sheet>
@@ -552,19 +392,18 @@ export default function Aziende() {
             </DialogTitle>
             <DialogDescription>
               {actionType === "suspend" 
-                ? `Stai per sospendere ${selectedCompany?.name}. Gli utenti non potranno più accedere.`
-                : `Stai per riattivare ${selectedCompany?.name}. Gli utenti potranno accedere nuovamente.`
+                ? `Stai per sospendere ${selectedCompany?.name}. L'azienda non potrà più accedere ai servizi.`
+                : `Stai per riattivare ${selectedCompany?.name}. L'azienda potrà nuovamente accedere ai servizi.`
               }
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
             <div className="space-y-2">
-              <Label>Motivo *</Label>
+              <Label>Motivo (obbligatorio)</Label>
               <Textarea 
                 placeholder="Inserisci il motivo dell'azione..."
                 value={actionReason}
                 onChange={(e) => setActionReason(e.target.value)}
-                rows={3}
               />
             </div>
           </div>
@@ -573,15 +412,152 @@ export default function Aziende() {
               Annulla
             </Button>
             <Button 
-              variant={actionType === "suspend" ? "destructive" : "default"}
-              className={actionType === "activate" ? "bg-emerald-600 hover:bg-emerald-700" : ""}
               onClick={handleConfirmAction}
+              variant={actionType === "suspend" ? "destructive" : "default"}
+              disabled={updateCompany.isPending}
             >
+              {updateCompany.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
               Conferma
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+// Separate component for company details with metrics
+function CompanyDetailContent({ 
+  company, 
+  getStatusBadge, 
+  getIntegrationStatusIcon 
+}: { 
+  company: CompanyDisplay; 
+  getStatusBadge: (status: string) => JSX.Element;
+  getIntegrationStatusIcon: (status: string) => JSX.Element;
+}) {
+  const { data: metrics, isLoading: metricsLoading } = useCompanyMetrics(company.id);
+  
+  return (
+    <div className="mt-6 space-y-6">
+      {/* Summary Panel */}
+      <div className="space-y-4">
+        <h4 className="font-medium text-foreground">Informazioni Generali</h4>
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <p className="text-muted-foreground">P.IVA</p>
+            <p className="font-medium">{company.vat_number || "-"}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Email</p>
+            <p className="font-medium">{company.email || "-"}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Telefono</p>
+            <p className="font-medium">{company.phone || "-"}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Data Registrazione</p>
+            <p className="font-medium">
+              {company.created_at 
+                ? format(new Date(company.created_at), "dd MMMM yyyy", { locale: it })
+                : "-"}
+            </p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Piano</p>
+            <p className="font-medium">{company.plan}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Stato</p>
+            {getStatusBadge(company.status || "active")}
+          </div>
+        </div>
+      </div>
+
+      {/* KPI Cards */}
+      <div className="space-y-4">
+        <h4 className="font-medium text-foreground">Metriche</h4>
+        {metricsLoading ? (
+          <div className="flex items-center justify-center py-8">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-4">
+            <Card className="bg-muted/50">
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-3">
+                  <Users className="h-5 w-5 text-blue-500" />
+                  <div>
+                    <p className="text-2xl font-bold">{metrics?.users || 0}</p>
+                    <p className="text-xs text-muted-foreground">Utenti</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-muted/50">
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-3">
+                  <CreditCard className="h-5 w-5 text-violet-500" />
+                  <div>
+                    <p className="text-2xl font-bold">{metrics?.bankAccounts || 0}</p>
+                    <p className="text-xs text-muted-foreground">Conti Bancari</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-muted/50">
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-3">
+                  <Activity className="h-5 w-5 text-emerald-500" />
+                  <div>
+                    <p className="text-2xl font-bold">{metrics?.transactions30d || 0}</p>
+                    <p className="text-xs text-muted-foreground">Transazioni (30g)</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+            <Card className="bg-muted/50">
+              <CardContent className="pt-4">
+                <div className="flex items-center gap-3">
+                  <AlertTriangle className="h-5 w-5 text-amber-500" />
+                  <div>
+                    <p className="text-2xl font-bold">{metrics?.syncFailed7d || 0}</p>
+                    <p className="text-xs text-muted-foreground">Sync Falliti (7g)</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        )}
+      </div>
+
+      {/* Integrations Status */}
+      <div className="space-y-4">
+        <h4 className="font-medium text-foreground">Stato Integrazioni</h4>
+        {company.integrations && company.integrations.length > 0 ? (
+          <div className="space-y-2">
+            {company.integrations.map((integration, index) => (
+              <div key={index} className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                <span className="font-medium">{integration.name}</span>
+                <div className="flex items-center gap-2">
+                  {getIntegrationStatusIcon(integration.status)}
+                  <span className="text-sm text-muted-foreground capitalize">
+                    {integration.status}
+                  </span>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-6 bg-muted/50 rounded-lg">
+            <RefreshCw className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm text-muted-foreground">Nessuna integrazione configurata</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
