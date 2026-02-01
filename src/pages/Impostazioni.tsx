@@ -14,11 +14,22 @@ import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { useNotificationPreferences, useUpdateNotificationPreferences } from "@/hooks/useNotificationPreferences";
+import { useUpdateProfile, useUpdatePassword } from "@/hooks/useProfile";
+import { useAuth } from "@/contexts/AuthContext";
 import { toast } from "sonner";
 
 export default function Impostazioni() {
   const { data: preferences, isLoading } = useNotificationPreferences();
   const updatePreferences = useUpdateNotificationPreferences();
+  const updateProfile = useUpdateProfile();
+  const updatePassword = useUpdatePassword();
+  const { profile, user } = useAuth();
+
+  // Profile state
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [profileSaving, setProfileSaving] = useState(false);
 
   const [emailNotifiche, setEmailNotifiche] = useState(true);
   const [pushNotifiche, setPushNotifiche] = useState(true);
@@ -29,6 +40,14 @@ export default function Impostazioni() {
   const [notifyBudget, setNotifyBudget] = useState(true);
   const [notifyCashflow, setNotifyCashflow] = useState(true);
   const [notificationEmail, setNotificationEmail] = useState("");
+
+  // Load profile data
+  useEffect(() => {
+    if (profile) {
+      setFirstName(profile.first_name || "");
+      setLastName(profile.last_name || "");
+    }
+  }, [profile]);
 
   // Load preferences when data is available
   useEffect(() => {
@@ -44,6 +63,32 @@ export default function Impostazioni() {
       setNotificationEmail(preferences.notificationEmail || "");
     }
   }, [preferences]);
+
+  const handleSaveProfile = async () => {
+    setProfileSaving(true);
+    try {
+      await updateProfile.mutateAsync({
+        first_name: firstName,
+        last_name: lastName,
+      });
+
+      if (newPassword.length > 0) {
+        if (newPassword.length < 6) {
+          toast.error("La password deve essere di almeno 6 caratteri");
+          setProfileSaving(false);
+          return;
+        }
+        await updatePassword.mutateAsync(newPassword);
+        setNewPassword("");
+      }
+
+      toast.success("Profilo aggiornato con successo");
+    } catch (error) {
+      toast.error("Errore nell'aggiornamento del profilo");
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const handleSave = async () => {
     try {
@@ -89,39 +134,71 @@ export default function Impostazioni() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="nome" className="text-muted-foreground">Nome</Label>
+              <Label htmlFor="firstName" className="text-muted-foreground">Nome</Label>
               <Input
-                id="nome"
-                defaultValue="Mario Rossi"
+                id="firstName"
+                value={firstName}
+                onChange={(e) => setFirstName(e.target.value)}
+                placeholder="Il tuo nome"
                 className="bg-secondary border-border focus:border-primary"
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-muted-foreground">Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                <Input
-                  id="email"
-                  type="email"
-                  defaultValue="mario.rossi@azienda.it"
-                  className="pl-9 bg-secondary border-border focus:border-primary"
-                />
-              </div>
+              <Label htmlFor="lastName" className="text-muted-foreground">Cognome</Label>
+              <Input
+                id="lastName"
+                value={lastName}
+                onChange={(e) => setLastName(e.target.value)}
+                placeholder="Il tuo cognome"
+                className="bg-secondary border-border focus:border-primary"
+              />
             </div>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password" className="text-muted-foreground">Password</Label>
+            <Label htmlFor="email" className="text-muted-foreground">Email</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="email"
+                type="email"
+                value={user?.email || ""}
+                disabled
+                className="pl-9 bg-secondary border-border text-muted-foreground"
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">L'email non può essere modificata</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="password" className="text-muted-foreground">Nuova Password</Label>
             <div className="relative">
               <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
               <Input
                 id="password"
                 type="password"
-                defaultValue="••••••••••••"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                placeholder="Lascia vuoto per non cambiare"
                 className="pl-9 bg-secondary border-border focus:border-primary"
               />
             </div>
-            <p className="text-xs text-muted-foreground">Ultimo aggiornamento: 15 giorni fa</p>
+            <p className="text-xs text-muted-foreground">Minimo 6 caratteri</p>
+          </div>
+
+          <div className="flex justify-end pt-2">
+            <Button
+              size="sm"
+              onClick={handleSaveProfile}
+              disabled={profileSaving}
+            >
+              {profileSaving ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Save className="h-4 w-4 mr-2" />
+              )}
+              Salva Profilo
+            </Button>
           </div>
         </div>
       </div>
