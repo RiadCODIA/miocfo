@@ -282,7 +282,7 @@ export default function Auth() {
                   <Button 
                     type="button" 
                     variant="outline" 
-                    className="w-full text-xs"
+                    className="w-full text-xs bg-amber-500/10 border-amber-500/30 text-amber-600 hover:bg-amber-500/20"
                     onClick={handleAdminDemoLogin}
                   >
                     <ShieldCheck className="mr-1 h-3 w-3" />
@@ -364,7 +364,7 @@ export default function Auth() {
                       <SelectItem value="admin_aziendale">
                         <div className="flex items-center gap-2">
                           <ShieldCheck className="h-4 w-4" />
-                          <span>Admin Aziendale (gestisce clienti)</span>
+                          <span>Consulente (gestisce clienti)</span>
                         </div>
                       </SelectItem>
                     </SelectContent>
