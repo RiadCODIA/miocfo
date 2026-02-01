@@ -62,6 +62,11 @@ export function useEnableBanking() {
       // Get the current session for auth token
       const { data: { session } } = await supabase.auth.getSession();
 
+      // Block calls if user is not authenticated (e.g., demo mode)
+      if (!session?.access_token) {
+        throw new Error("Autenticazione richiesta. Effettua il login per utilizzare i conti bancari.");
+      }
+
       // Use fetch directly to get better error handling with response body
       const supabaseUrl = "https://ublsnradzhfpqhunfqbn.supabase.co";
       const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVibHNucmFkemhmcHFodW5mcWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwODUyNDQsImV4cCI6MjA4MTY2MTI0NH0.njhpIOLukx6bmrw5p-AHCNShPkCnB-QqrDOvkYSkTOw";
@@ -72,7 +77,7 @@ export function useEnableBanking() {
         headers: {
           "Content-Type": "application/json",
           "apikey": anonKey,
-          "Authorization": `Bearer ${session?.access_token || anonKey}`,
+          "Authorization": `Bearer ${session.access_token}`,
         },
         body: JSON.stringify({ action, ...params }),
       });
