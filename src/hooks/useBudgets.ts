@@ -174,10 +174,14 @@ export function useCreateBudget() {
       predictedIncome: number;
       predictedExpenses: number;
     }) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
       const { error } = await supabase.from("budgets").insert({
         month: format(startOfMonth(month), "yyyy-MM-dd"),
         predicted_income: predictedIncome,
         predicted_expenses: predictedExpenses,
+        user_id: user.id,
       });
 
       if (error) throw error;

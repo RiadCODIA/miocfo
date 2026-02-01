@@ -68,7 +68,13 @@ export function EmployeesManager() {
 
   const createMutation = useMutation({
     mutationFn: async (data: Omit<Employee, "id" | "created_at" | "monthly_cost">) => {
-      const { error } = await supabase.from("employees").insert(data);
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      const { error } = await supabase.from("employees").insert({
+        ...data,
+        user_id: user.id,
+      });
       if (error) throw error;
     },
     onSuccess: () => {
