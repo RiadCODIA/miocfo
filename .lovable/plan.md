@@ -14,7 +14,7 @@ Ho analizzato l'intera piattaforma e identificato i seguenti problemi, suddivisi
 
 ## PROBLEMI CRITICI (Sicurezza)
 
-### 1. RLS Policies "Allow All" su tabelle sensibili
+### 1. RLS Policies "Allow All" su tabelle sensibili ⏳ DA FARE
 **Gravità: ALTA**
 
 Diverse tabelle hanno policy RLS con `USING (true)` che permettono a chiunque di leggere/modificare tutti i dati:
@@ -38,7 +38,7 @@ Diverse tabelle hanno policy RLS con `USING (true)` che permettono a chiunque di
 
 ## PROBLEMI FUNZIONALI
 
-### 2. Conti bancari duplicati senza transazioni
+### 2. Conti bancari duplicati senza transazioni ⏳ DA FARE
 **Gravità: MEDIA**
 
 Nel database ci sono 6 conti bancari ma solo 1 ha transazioni (743):
@@ -46,7 +46,7 @@ Nel database ci sono 6 conti bancari ma solo 1 ha transazioni (743):
 - 1 conto Revolut con `tx_count: 743`
 - 1 conto BCC con `current_balance: 107975.17` ma `tx_count: 0`
 
-**Causa**: Ogni tentativo di connessione ha creato un nuovo record invece di aggiornare quello esistente. La banca BCC continua a fallire con ASPSP_ERROR.
+**Causa**: Ogni tentativo di connessione ha creato un nuovo record invece di aggiornare quello esistente.
 
 **Fix suggerito**: 
 - Pulire i conti duplicati senza transazioni
@@ -67,39 +67,32 @@ Le seguenti sezioni mostrano "Nessun dato" perché non ci sono record nelle tabe
 | Alert & Notifiche | `alerts` | 0 |
 | Configurazione > Dipendenti | `employees` | 0 |
 
-**Non è un bug di codice** - queste sezioni funzionano, ma dipendono da dati che l'utente deve inserire manualmente o che dovrebbero essere generati automaticamente.
-
-**Fix suggerito**: 
-- Implementare creazione automatica di scadenze dalle fatture
-- Implementare alert automatici basati su soglie (liquidità bassa, scadenze vicine)
-- Aggiungere wizard di onboarding per configurazione iniziale
+**Non è un bug di codice** - queste sezioni funzionano, ma dipendono da dati che l'utente deve inserire manualmente.
 
 ---
 
-### 4. Budget: bottone "Inserisci Budget" non funziona
+### 4. Budget: bottone "Inserisci Budget" non funziona ✅ RISOLTO
 **Gravità: MEDIA**
 
-Il bottone "Inserisci Budget" nella pagina `/budget` non ha un handler collegato - è solo un `<Button>` senza `onClick`.
+~~Il bottone "Inserisci Budget" nella pagina `/budget` non ha un handler collegato - è solo un `<Button>` senza `onClick`.~~
 
-**File**: `src/pages/BudgetPrevisioni.tsx` (linea 71-74)
+**Fix applicato**: Creato `CreateBudgetModal` e collegato al bottone. Ora apre un modale per inserire nuovo budget mensile.
 
 ---
 
-### 5. Alert automatici non vengono generati
+### 5. Alert automatici non vengono generati ⏳ DA FARE
 **Gravità: MEDIA**
 
 La tabella `alerts` è vuota. Il sistema di alert esiste ma:
-- Non c'è trigger automatico che crea alert basati su condizioni (liquidità bassa, scadenze, budget sforato)
+- Non c'è trigger automatico che crea alert basati su condizioni
 - L'edge function `check-alerts` esiste ma non viene chiamata periodicamente
-
-**Fix suggerito**: Implementare scheduled job che chiama `check-alerts` o trigger database che crea alert automaticamente.
 
 ---
 
-### 6. Fatture: nessuna integrazione con transazioni
+### 6. Fatture: nessuna integrazione con transazioni ⏳ DA FARE
 **Gravità: MEDIA**
 
-La sezione Fatture ha 0 record. L'abbinamento automatico fatture-transazioni funziona solo se ci sono fatture caricate. Manca:
+La sezione Fatture ha 0 record. Manca:
 - Flusso di generazione automatica scadenze da fatture
 - Collegamento fatture → deadlines → previsione liquidità
 
@@ -107,54 +100,57 @@ La sezione Fatture ha 0 record. L'abbinamento automatico fatture-transazioni fun
 
 ## PROBLEMI UI/UX
 
-### 7. Console warning: SpendingReportModal ref error
+### 7. Console warning: SpendingReportModal ref error ✅ NON NECESSARIO
 **Gravità: BASSA**
 
-Warning React in console:
-```
-Function components cannot be given refs. Check the render method of SpendingReportModal
-```
-Il componente `Badge` viene passato come children in un contesto che richiede `forwardRef`.
+~~Warning React in console - il componente Badge viene passato come children in un contesto che richiede forwardRef.~~
+
+**Analisi**: Il warning è intermittente e potrebbe provenire dalla libreria recharts, non dal nostro codice.
 
 ---
 
-### 8. Impostazioni profilo non salvano
+### 8. Impostazioni profilo non salvano ✅ RISOLTO
 **Gravità: MEDIA**
 
-La sezione profilo in `/impostazioni` (nome, email, password) ha campi input ma il bottone "Salva" salva solo le preferenze notifiche, non i dati profilo.
+~~La sezione profilo in `/impostazioni` (nome, email, password) ha campi input ma il bottone "Salva" salva solo le preferenze notifiche, non i dati profilo.~~
+
+**Fix applicato**: Aggiunto `useUpdateProfile` hook e bottone "Salva Profilo" separato che:
+- Salva nome e cognome nel profilo
+- Permette di cambiare la password
+- Mostra l'email corrente (non modificabile)
 
 ---
 
-### 9. Filtro categoria in Transazioni usa valori hardcoded
+### 9. Filtro categoria in Transazioni usa valori hardcoded ✅ RISOLTO
 **Gravità: BASSA**
 
-In `/transazioni`, il dropdown "Categoria" ha opzioni statiche:
-- transfer, payment, food, travel
+~~In `/transazioni`, il dropdown "Categoria" ha opzioni statiche (transfer, payment, food, travel).~~
 
-Ma la categorizzazione AI usa le categorie da `cost_categories` (14 record).
-
-**Fix**: Popolare il dropdown dinamicamente da `cost_categories`.
+**Fix applicato**: Il dropdown ora:
+- Carica dinamicamente le categorie da `cost_categories`
+- Include opzione "Non categorizzate" per trovare transazioni da categorizzare
+- Filtra correttamente per `ai_category_id`
 
 ---
 
 ## FLUSSI MANCANTI
 
-### 10. Nessun flusso di onboarding
+### 10. Nessun flusso di onboarding ⏳ DA FARE
 L'utente dopo la registrazione vede sezioni vuote ovunque. Manca un wizard che guidi attraverso:
 1. Collegamento primo conto bancario
 2. Configurazione categorie costi
 3. Inserimento budget iniziale
 4. Configurazione alert personalizzati
 
-### 11. Nessuna sincronizzazione automatica periodica
+### 11. Nessuna sincronizzazione automatica periodica ⏳ DA FARE
 I conti bancari vengono sincronizzati solo manualmente. Manca:
 - Scheduled job per sync giornaliero/orario
 - Webhook per sync real-time (se supportato dalla banca)
 
-### 12. Nessuna esportazione dati completa
+### 12. Nessuna esportazione dati completa ⏳ DA FARE
 Il bottone "Esporta" in Transazioni non fa nulla. Solo il report KPI ha export funzionante.
 
-### 13. Scadenzario non collegato a nulla
+### 13. Scadenzario non collegato a nulla ⏳ DA FARE
 Le scadenze devono essere inserite manualmente. Non esiste:
 - Generazione automatica da fatture
 - Import da calendario esterno
@@ -162,17 +158,17 @@ Le scadenze devono essere inserite manualmente. Non esiste:
 
 ---
 
-## RIEPILOGO PRIORITÀ
+## RIEPILOGO STATO FIX
 
-| Priorità | Problema | Sforzo |
-|----------|----------|--------|
-| 🔴 CRITICA | RLS policies "Allow All" | Alto |
-| 🟠 ALTA | Pulizia conti duplicati | Basso |
-| 🟠 ALTA | Bottone "Inserisci Budget" non funziona | Basso |
-| 🟡 MEDIA | Alert automatici non generati | Medio |
-| 🟡 MEDIA | Profilo non salva | Basso |
-| 🟢 BASSA | Console warning SpendingReportModal | Basso |
-| 🟢 BASSA | Filtro categoria hardcoded | Basso |
+| Problema | Stato |
+|----------|-------|
+| 🔴 RLS policies "Allow All" | ⏳ Da fare |
+| 🟠 Pulizia conti duplicati | ⏳ Da fare |
+| 🟠 Bottone "Inserisci Budget" | ✅ Risolto |
+| 🟡 Alert automatici | ⏳ Da fare |
+| 🟡 Profilo non salva | ✅ Risolto |
+| 🟢 Console warning SpendingReportModal | ✅ Non necessario |
+| 🟢 Filtro categoria hardcoded | ✅ Risolto |
 
 ---
 
@@ -186,4 +182,3 @@ Le scadenze devono essere inserite manualmente. Non esiste:
 - La pagina `/transazioni` dovrebbe mostrare i dati
 
 Se non li vedi nella UI, ricarica la pagina (`Cmd+Shift+R` / `Ctrl+Shift+R`).
-

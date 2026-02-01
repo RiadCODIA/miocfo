@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Plus, Save, TrendingUp, TrendingDown } from "lucide-react";
+import { CreateBudgetModal } from "@/components/budget/CreateBudgetModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -23,6 +24,7 @@ export default function BudgetPrevisioni() {
   const updateBudget = useUpdateBudget();
 
   const [editedValues, setEditedValues] = useState<Record<string, { income?: number; expenses?: number }>>({});
+  const [createModalOpen, setCreateModalOpen] = useState(false);
 
   const formatCurrency = (value: number) => `€${value.toLocaleString("it-IT")}`;
 
@@ -68,7 +70,11 @@ export default function BudgetPrevisioni() {
           </p>
         </div>
         <div className="flex gap-2">
-          <Button variant="outline" className="gap-2 bg-card border-border hover:bg-secondary">
+          <Button 
+            variant="outline" 
+            className="gap-2 bg-card border-border hover:bg-secondary"
+            onClick={() => setCreateModalOpen(true)}
+          >
             <Plus className="h-4 w-4" />
             Inserisci Budget
           </Button>
@@ -275,6 +281,12 @@ export default function BudgetPrevisioni() {
           )}
         </div>
       </div>
+
+      {/* Create Budget Modal */}
+      <CreateBudgetModal
+        open={createModalOpen}
+        onOpenChange={setCreateModalOpen}
+      />
     </div>
   );
 }

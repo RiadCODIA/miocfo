@@ -183,15 +183,17 @@ export default function Transazioni() {
         </Select>
 
         <Select value={category} onValueChange={setCategory}>
-          <SelectTrigger className="w-[160px] bg-card border-border">
+          <SelectTrigger className="w-[180px] bg-card border-border">
             <SelectValue placeholder="Categoria" />
           </SelectTrigger>
-          <SelectContent className="bg-card border-border">
-            <SelectItem value="all">Tutte</SelectItem>
-            <SelectItem value="transfer">Trasferimenti</SelectItem>
-            <SelectItem value="payment">Pagamenti</SelectItem>
-            <SelectItem value="food">Alimentari</SelectItem>
-            <SelectItem value="travel">Viaggi</SelectItem>
+          <SelectContent className="bg-card border-border max-h-[300px]">
+            <SelectItem value="all">Tutte le categorie</SelectItem>
+            <SelectItem value="uncategorized">Non categorizzate</SelectItem>
+            {costCategories?.map((cat) => (
+              <SelectItem key={cat.id} value={cat.id}>
+                {cat.name}
+              </SelectItem>
+            ))}
           </SelectContent>
         </Select>
 

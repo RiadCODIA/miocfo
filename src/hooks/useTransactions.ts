@@ -139,9 +139,13 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
 
       // Apply category filter client-side
       if (category && category !== "all") {
-        transactions = transactions.filter(tx =>
-          tx.category?.some((c: string) => c.toLowerCase().includes(category.toLowerCase()))
-        );
+        if (category === "uncategorized") {
+          // Filter for transactions without AI category and not confirmed
+          transactions = transactions.filter(tx => !tx.aiCategoryId && !tx.categoryConfirmed);
+        } else {
+          // Filter by specific category ID
+          transactions = transactions.filter(tx => tx.aiCategoryId === category);
+        }
       }
 
       return transactions;
