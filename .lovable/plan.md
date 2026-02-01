@@ -1,60 +1,101 @@
 
-# Correzione Registrazione: Email Non Ricevuta
+# Correzione Routing Dashboard per Utenti Reali
 
 ## Problema Identificato
 
-La registrazione richiede la conferma via email, ma l'email di Supabase non arriva. Questo può accadere per:
-- Limite di email di Supabase raggiunto
-- Email finita nello spam
-- Servizio email di base non configurato correttamente
+L'account consulente (k.riad@codia.it) ha il ruolo `admin_aziendale` correttamente salvato nel database, ma viene mostrata la dashboard utente invece di quella consulente.
 
-## Soluzioni Proposte
+**Causa**: Il `DashboardRouter` usa solo `demoRole`, che viene impostato solo per login demo. Gli utenti reali non hanno un modo per comunicare il loro ruolo al router.
 
-### Opzione A: Disabilitare Conferma Email (Consigliata per Sviluppo)
+```typescript
+// Codice attuale - PROBLEMA
+function DashboardRouter() {
+  const { demoRole } = useAuth();  // Solo per demo!
+  if (demoRole === 'admin_aziendale') return <DashboardAdmin />;
+  return <Index />;  // Tutti gli utenti reali finiscono qui!
+}
+```
 
-Vai su **Supabase Dashboard > Authentication > Providers > Email** e:
-1. Disabilita "Confirm email"
-2. Gli utenti potranno accedere immediatamente dopo la registrazione
+## Soluzione
 
-Link diretto: https://supabase.com/dashboard/project/ublsnradzhfpqhunfqbn/auth/providers
+### Fase 1: Aggiungere `userRole` all'AuthContext
 
-### Opzione B: Configurare Servizio Email Custom (Consigliato per Produzione)
+Modificare `AuthContext.tsx` per:
+1. Aggiungere uno stato `userRole: AppRole | null`
+2. Aggiornare `fetchUserRole` per salvare il ruolo nello stato
+3. Esporre `userRole` nel context
 
-Se vuoi mantenere la conferma email in produzione, devi configurare un servizio email esterno come **Resend**:
+### Fase 2: Aggiornare DashboardRouter
 
-1. Creare account su https://resend.com
-2. Verificare il tuo dominio email
-3. Creare API key su https://resend.com/api-keys
-4. Configurare la chiave in Supabase
+Modificare il router per usare sia `userRole` (utenti reali) che `demoRole` (demo):
+
+```typescript
+function DashboardRouter() {
+  const { demoRole, userRole } = useAuth();
+  const effectiveRole = demoRole || userRole;
+  
+  if (effectiveRole === 'super_admin') return <DashboardSuperAdmin />;
+  if (effectiveRole === 'admin_aziendale') return <DashboardAdmin />;
+  return <Index />;
+}
+```
+
+## File da Modificare
+
+| File | Modifica |
+|------|----------|
+| `src/contexts/AuthContext.tsx` | Aggiungere stato `userRole`, aggiornare `fetchUserRole`, esporre nel context |
+| `src/App.tsx` | Usare `userRole` nel `DashboardRouter` |
 
 ## Dettagli Tecnici
 
-### Stato Attuale
-- L'app usa `supabase.auth.signUp()` con `emailRedirectTo` configurato correttamente
-- La registrazione viene chiamata ma l'email non arriva
-- Nel database ci sono solo 2 utenti esistenti (nessun nuovo signup recente)
+### AuthContext.tsx
 
-### Verifica Immediata
+```typescript
+// Aggiungere allo stato
+const [userRole, setUserRole] = useState<AppRole | null>(null);
 
-Per verificare se la registrazione ha funzionato ma l'email non è arrivata:
-1. Controlla la cartella Spam della tua email
-2. Vai su Supabase Dashboard > Authentication > Users per vedere se l'utente è stato creato
-3. Se l'utente esiste ma non è confermato, puoi confermarlo manualmente dal dashboard
+// Aggiornare fetchUserRole
+const fetchUserRole = async (userId: string) => {
+  const { data, error } = await supabase
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", userId)
+    .single();
+  
+  if (!error && data) {
+    const role = data.role as AppRole;
+    setUserRole(role);  // <-- AGGIUNGERE QUESTA LINEA
+    
+    // ... resto del codice permessi
+  }
+};
 
-### Configurazione Alternativa: Auto-conferma Email
+// Aggiornare signOut per resettare userRole
+const signOut = async () => {
+  // ...
+  setUserRole(null);
+};
 
-Se preferisci mantenere il flusso email ma sbloccare gli utenti esistenti:
-1. Vai su Authentication > Users
-2. Trova l'utente non confermato
-3. Clicca sui tre puntini e seleziona "Confirm email"
+// Aggiungere userRole al context value
+```
 
-## Azioni Richieste
+### App.tsx
 
-1. **Controllo immediato**: Verifica in Supabase Dashboard se l'utente consulente è stato creato
-2. **Per sviluppo**: Disabilita "Confirm email" nelle impostazioni
-3. **Per produzione**: Configura Resend per email affidabili
+```typescript
+function DashboardRouter() {
+  const { demoRole, userRole } = useAuth();
+  const effectiveRole = demoRole || userRole;
+  
+  if (effectiveRole === 'super_admin') return <DashboardSuperAdmin />;
+  if (effectiveRole === 'admin_aziendale') return <DashboardAdmin />;
+  return <Index />;
+}
+```
 
-## Link Utili
+## Risultato Atteso
 
-- [Impostazioni Auth Supabase](https://supabase.com/dashboard/project/ublsnradzhfpqhunfqbn/auth/providers)
-- [Utenti registrati](https://supabase.com/dashboard/project/ublsnradzhfpqhunfqbn/auth/users)
+Dopo questa correzione:
+- L'account k.riad@codia.it vedrà la dashboard consulente
+- La sidebar mostrerà le sezioni corrette per consulenti
+- Gli utenti standard continueranno a vedere la dashboard normale
