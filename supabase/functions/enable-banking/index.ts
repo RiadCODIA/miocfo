@@ -999,6 +999,32 @@ async function getAccounts(userId: string): Promise<{ accounts: unknown[] }> {
   return { accounts: accounts || [] };
 }
 
+// ============== AUTO CATEGORIZATION TRIGGER ==============
+// Trigger automatic categorization of new transactions in background
+async function triggerAutoCategorization(): Promise<void> {
+  try {
+    const response = await fetch(`${SUPABASE_URL}/functions/v1/categorize-transactions`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": `Bearer ${SUPABASE_SERVICE_ROLE_KEY}`,
+        "apikey": SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({ batch_mode: true }),
+    });
+    
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error("[Enable Banking] Auto-categorization failed:", response.status, errorText);
+    } else {
+      const result = await response.json();
+      console.log(`[Enable Banking] Auto-categorization complete:`, result.message);
+    }
+  } catch (error) {
+    console.error("[Enable Banking] Auto-categorization error:", error);
+  }
+}
+
 // Verify account belongs to user
 // deno-lint-ignore no-explicit-any
 async function verifyAccountOwnership(supabase: any, accountId: string, userId: string): Promise<boolean> {
@@ -1100,6 +1126,13 @@ async function syncAccount(accountId: string, userId: string, psuContext: PsuCon
     }
     
     console.log(`[Enable Banking] Sync complete: ${syncResult.transactions_synced} transactions (${syncResult.period_used} days), status=active`);
+
+    // Trigger automatic categorization in background (non-blocking - fire and forget)
+    if (syncResult.transactions_synced > 0) {
+      console.log(`[Enable Banking] Triggering automatic categorization for new transactions...`);
+      // Fire and forget - don't await so we return immediately
+      triggerAutoCategorization().catch(e => console.error("[Enable Banking] Background categorization error:", e));
+    }
     
     return { account: updatedAccount, transactions_synced: syncResult.transactions_synced };
   } catch (error) {

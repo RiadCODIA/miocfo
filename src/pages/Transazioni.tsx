@@ -202,21 +202,12 @@ export default function Transazioni() {
           Altri filtri
         </Button>
 
-        {/* Auto-categorize All Button */}
+        {/* Auto-categorization status - now runs automatically after bank sync */}
         {uncategorizedCount > 0 && (
-          <Button
-            variant="default"
-            className="gap-2"
-            onClick={handleCategorizeAll}
-            disabled={isCategorizing}
-          >
-            {isCategorizing ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Edit2 className="h-4 w-4" />
-            )}
-            Categorizza tutto ({uncategorizedCount})
-          </Button>
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 text-muted-foreground text-sm">
+            <Loader2 className="h-4 w-4 animate-spin" />
+            <span>Categorizzazione automatica in corso ({uncategorizedCount} rimanenti)...</span>
+          </div>
         )}
 
         {/* AI Spending Analysis Button */}
