@@ -17,11 +17,7 @@ export const useGlobalUsers = () => {
   return useQuery({
     queryKey: ['global-users'],
     queryFn: async () => {
-      // Try to get users with email via RPC (only works for super_admin)
-      const { data: usersWithEmail, error: rpcError } = await supabase
-        .rpc('get_users_with_email');
-
-      // Get profiles
+      // Get profiles first (always works)
       const { data: profiles, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
@@ -36,15 +32,24 @@ export const useGlobalUsers = () => {
 
       if (rolesError) throw rolesError;
 
-      // Create email lookup map from RPC results
-      const emailMap = new Map<string, { email: string; lastSignIn: string | null }>();
-      if (!rpcError && usersWithEmail) {
-        usersWithEmail.forEach((u: { id: string; email: string; last_sign_in_at: string | null }) => {
-          emailMap.set(u.id, { 
-            email: u.email, 
-            lastSignIn: u.last_sign_in_at 
+      // Try to get users with email via RPC (only works for real super_admin, not demo mode)
+      let emailMap = new Map<string, { email: string; lastSignIn: string | null }>();
+      
+      try {
+        const { data: usersWithEmail, error: rpcError } = await supabase
+          .rpc('get_users_with_email');
+
+        if (!rpcError && usersWithEmail) {
+          usersWithEmail.forEach((u: { id: string; email: string; last_sign_in_at: string | null }) => {
+            emailMap.set(u.id, { 
+              email: u.email, 
+              lastSignIn: u.last_sign_in_at 
+            });
           });
-        });
+        }
+      } catch (e) {
+        // RPC failed (expected in demo mode), continue without emails
+        console.log('Email RPC not available (demo mode)');
       }
 
       // Map profiles with roles and emails
@@ -54,7 +59,7 @@ export const useGlobalUsers = () => {
         
         return {
           id: profile.id,
-          email: emailData?.email || '',
+          email: emailData?.email || '(riservato)',
           firstName: profile.first_name,
           lastName: profile.last_name,
           companyName: profile.company_name,
