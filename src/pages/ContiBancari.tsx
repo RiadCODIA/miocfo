@@ -6,16 +6,41 @@ import { ConnectBankModal } from "@/components/conti-bancari/ConnectBankModal";
 import { UploadStatementModal } from "@/components/conti-bancari/UploadStatementModal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { useEnableBanking, BankAccount } from "@/hooks/useEnableBanking";
+import { supabase } from "@/integrations/supabase/client";
 
 export default function ContiBancari() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
+  const [sessionReady, setSessionReady] = useState(false);
   const { accounts, isLoading, fetchAccounts, syncAccount, removeAccount, completeSession } = useEnableBanking();
 
-  // Fetch accounts on mount (callback handling is done by ConnectBankModal)
+  // Wait for session to be ready before fetching accounts
   useEffect(() => {
-    fetchAccounts();
-  }, [fetchAccounts]);
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        setSessionReady(true);
+      }
+    };
+    
+    checkSession();
+    
+    // Also listen for auth state changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        setSessionReady(true);
+      }
+    });
+    
+    return () => subscription.unsubscribe();
+  }, []);
+
+  // Fetch accounts only when session is ready
+  useEffect(() => {
+    if (sessionReady) {
+      fetchAccounts();
+    }
+  }, [sessionReady, fetchAccounts]);
 
   const handleSync = async (id: string) => {
     await syncAccount(id);
