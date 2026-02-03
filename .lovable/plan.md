@@ -1,37 +1,80 @@
 
 
-# Impostare il Logo Finexa come Favicon
+# Fix: Permettere il Caricamento della Lista Banche in Demo Mode
 
 ## Obiettivo
 
-Sostituire la favicon predefinita di Lovable con l'icona del logo Finexa (`finexa-logo-icon.png`).
+Consentire agli utenti in Demo Mode di visualizzare la lista delle banche disponibili (scopo dimostrativo), bloccando però le azioni che richiedono autenticazione reale (collegamento, sincronizzazione).
 
-## Modifiche da Effettuare
+## Problema Identificato
 
-### 1. Copiare l'icona nella cartella public
+Il hook `useEnableBanking.ts` blocca **tutte** le chiamate all'Edge Function se non c'è una sessione valida, incluse le azioni pubbliche (`get_aspsps`, `create_session`) che l'Edge Function permette senza autenticazione.
 
-Copiare il file `src/assets/finexa-logo-icon.png` in `public/favicon.png` per renderlo accessibile come asset statico.
+## Soluzione Proposta
 
-### 2. Aggiornare index.html
+### 1. Modificare `useEnableBanking.ts`
 
-Modificare il riferimento alla favicon nel file `index.html`:
+Aggiornare la funzione `callEnableBankingFunction` per distinguere tra:
+- **Azioni pubbliche** (`get_aspsps`, `create_session`): non richiedono token, permettono l'esperienza demo
+- **Azioni protette** (`get_accounts`, `sync_account`, ecc.): richiedono autenticazione reale
 
-```html
-<!-- Prima -->
-(nessun link favicon esplicito, usa favicon.ico di default)
+```typescript
+const callEnableBankingFunction = useCallback(
+  async (action: string, params: Record<string, unknown> = {}) => {
+    const publicActions = ["get_aspsps", "create_session"];
+    const { data: { session } } = await supabase.auth.getSession();
 
-<!-- Dopo -->
-<link rel="icon" href="/favicon.png" type="image/png">
+    // Solo azioni protette richiedono sessione
+    if (!publicActions.includes(action) && !session?.access_token) {
+      throw new Error("Autenticazione richiesta. Effettua il login per utilizzare i conti bancari.");
+    }
+
+    // Usa token se disponibile, altrimenti anon key per azioni pubbliche
+    const authToken = session?.access_token || anonKey;
+    // ... resto della chiamata
+  },
+  []
+);
+```
+
+### 2. Aggiornare `ConnectBankModal.tsx`
+
+Mostrare un avviso chiaro agli utenti Demo quando tentano di procedere al collegamento:
+
+```tsx
+// Prima di handleProceed, verificare isDemoMode
+const { isDemoMode } = useAuth();
+
+const handleProceed = async () => {
+  if (isDemoMode) {
+    toast({
+      title: "Modalità Demo",
+      description: "Per collegare un conto bancario reale, effettua il login con email e password.",
+      variant: "destructive",
+    });
+    return;
+  }
+  // ... resto della logica
+};
 ```
 
 ## File da Modificare
 
 | File | Modifica |
 |------|----------|
-| `public/favicon.png` | Copiare da `src/assets/finexa-logo-icon.png` |
-| `index.html` | Aggiungere tag `<link rel="icon">` |
+| `src/hooks/useEnableBanking.ts` | Permettere azioni pubbliche senza sessione |
+| `src/components/conti-bancari/ConnectBankModal.tsx` | Aggiungere controllo Demo mode e messaggio |
 
-## Risultato
+## Risultato Atteso
 
-La favicon nel browser mostrerà l'icona del logo Finexa invece della favicon predefinita di Lovable.
+- **Utenti Demo**: Possono esplorare la lista banche ma vedono un messaggio chiaro quando tentano di collegare
+- **Utenti Autenticati**: Flusso completo di collegamento funzionante
+- **UX migliorata**: L'app mostra le funzionalità disponibili anche in modalità demo
+
+## Nota Importante
+
+Il collegamento bancario **richiede un account reale** perché:
+1. Enable Banking associa i conti a un `user_id` specifico
+2. I dati (saldi, transazioni) vengono salvati nel database sotto quel profilo
+3. Il consenso PSD2 è personale e legato all'utente
 
