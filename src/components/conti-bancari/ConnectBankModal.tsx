@@ -19,7 +19,8 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle, Search } from "lucide-react";
 import { useEnableBanking, BankAccount } from "@/hooks/useEnableBanking";
-
+import { useAuth } from "@/contexts/AuthContext";
+import { useToast } from "@/hooks/use-toast";
 interface ASPSP {
   name: string;
   country: string;
@@ -60,6 +61,8 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   const [isLoadingBanks, setIsLoadingBanks] = useState(false);
   
   const { createSession, completeSession, getASPSPs, isLoading } = useEnableBanking();
+  const { isDemoMode } = useAuth();
+  const { toast } = useToast();
 
   // Generate redirect URI for Enable Banking callback
   const getRedirectUri = useCallback(() => {
@@ -146,6 +149,16 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   const handleProceed = async () => {
     if (!selectedBank) return;
+
+    // Block demo users from proceeding to actual bank connection
+    if (isDemoMode) {
+      toast({
+        title: "Modalità Demo",
+        description: "Per collegare un conto bancario reale, effettua il login con email e password.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     setStep("ready");
     try {

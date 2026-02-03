@@ -59,11 +59,14 @@ export function useEnableBanking() {
 
   const callEnableBankingFunction = useCallback(
     async (action: string, params: Record<string, unknown> = {}) => {
+      // Define public actions that don't require authentication (demo mode friendly)
+      const publicActions = ["get_aspsps"];
+      
       // Get the current session for auth token
       const { data: { session } } = await supabase.auth.getSession();
 
-      // Block calls if user is not authenticated (e.g., demo mode)
-      if (!session?.access_token) {
+      // Only block protected actions for unauthenticated users
+      if (!publicActions.includes(action) && !session?.access_token) {
         throw new Error("Autenticazione richiesta. Effettua il login per utilizzare i conti bancari.");
       }
 
@@ -71,13 +74,16 @@ export function useEnableBanking() {
       const supabaseUrl = "https://ublsnradzhfpqhunfqbn.supabase.co";
       const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVibHNucmFkemhmcHFodW5mcWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwODUyNDQsImV4cCI6MjA4MTY2MTI0NH0.njhpIOLukx6bmrw5p-AHCNShPkCnB-QqrDOvkYSkTOw";
       
+      // Use session token if available, otherwise anon key for public actions
+      const authToken = session?.access_token || anonKey;
+      
       // Auth is now handled via Authorization header - no user_id in body needed
       const response = await fetch(`${supabaseUrl}/functions/v1/enable-banking`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "apikey": anonKey,
-          "Authorization": `Bearer ${session.access_token}`,
+          "Authorization": `Bearer ${authToken}`,
         },
         body: JSON.stringify({ action, ...params }),
       });
