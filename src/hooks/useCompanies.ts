@@ -6,15 +6,18 @@ export interface Company {
   id: string;
   name: string;
   vat_number: string | null;
+  fiscal_code: string | null;
+  address: string | null;
+  city: string | null;
+  postal_code: string | null;
+  country: string;
   email: string | null;
   phone: string | null;
-  status: string;
-  alerts_count: number;
-  revenue: number;
-  cashflow: number;
+  website: string | null;
+  notes: string | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
-  owner_id: string | null;
 }
 
 export function useCompanies() {

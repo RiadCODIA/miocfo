@@ -4,42 +4,36 @@ import { supabase } from "@/integrations/supabase/client";
 export interface Alert {
   id: string;
   type: "warning" | "info" | "success" | "error";
-  alertType: string;
   title: string;
-  description: string | null;
-  status: "active" | "resolved" | "dismissed";
-  priority: "high" | "medium" | "low";
+  message: string | null;
+  severity: string;
+  isRead: boolean;
+  actionUrl: string | null;
   createdAt: string;
-  resolvedAt: string | null;
 }
 
 interface UseAlertsOptions {
-  status?: "all" | "active" | "resolved" | "dismissed";
-  priority?: "all" | "high" | "medium" | "low";
-  alertType?: string;
+  isRead?: boolean | null;
+  severity?: string;
 }
 
 export function useAlerts(options: UseAlertsOptions = {}) {
-  const { status = "all", priority = "all", alertType } = options;
+  const { isRead = null, severity } = options;
 
   return useQuery({
-    queryKey: ["alerts", { status, priority, alertType }],
+    queryKey: ["alerts", { isRead, severity }],
     queryFn: async (): Promise<Alert[]> => {
       let query = supabase
         .from("alerts")
         .select("*")
         .order("created_at", { ascending: false });
 
-      if (status !== "all") {
-        query = query.eq("status", status);
+      if (isRead !== null) {
+        query = query.eq("is_read", isRead);
       }
 
-      if (priority !== "all") {
-        query = query.eq("priority", priority);
-      }
-
-      if (alertType && alertType !== "all") {
-        query = query.eq("alert_type", alertType);
+      if (severity) {
+        query = query.eq("severity", severity);
       }
 
       const { data, error } = await query;
@@ -49,13 +43,12 @@ export function useAlerts(options: UseAlertsOptions = {}) {
       return data?.map((alert) => ({
         id: alert.id,
         type: alert.type as Alert["type"],
-        alertType: alert.alert_type,
         title: alert.title,
-        description: alert.description,
-        status: alert.status as Alert["status"],
-        priority: alert.priority as Alert["priority"],
+        message: alert.message,
+        severity: alert.severity,
+        isRead: alert.is_read,
+        actionUrl: alert.action_url,
         createdAt: alert.created_at,
-        resolvedAt: alert.resolved_at,
       })) || [];
     },
   });
@@ -67,12 +60,12 @@ export function useActiveAlertsCount() {
     queryFn: async () => {
       const { data, error, count } = await supabase
         .from("alerts")
-        .select("id, priority", { count: "exact" })
-        .eq("status", "active");
+        .select("id, severity", { count: "exact" })
+        .eq("is_read", false);
 
       if (error) throw error;
 
-      const highPriority = data?.filter(a => a.priority === "high").length || 0;
+      const highPriority = data?.filter(a => a.severity === "error").length || 0;
 
       return {
         total: count || 0,
@@ -82,14 +75,14 @@ export function useActiveAlertsCount() {
   });
 }
 
-export function useResolveAlert() {
+export function useMarkAlertRead() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (alertId: string) => {
       const { error } = await supabase
         .from("alerts")
-        .update({ status: "resolved", resolved_at: new Date().toISOString() })
+        .update({ is_read: true })
         .eq("id", alertId);
 
       if (error) throw error;
@@ -101,14 +94,14 @@ export function useResolveAlert() {
   });
 }
 
-export function useDismissAlert() {
+export function useDeleteAlert() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: async (alertId: string) => {
       const { error } = await supabase
         .from("alerts")
-        .update({ status: "dismissed" })
+        .delete()
         .eq("id", alertId);
 
       if (error) throw error;

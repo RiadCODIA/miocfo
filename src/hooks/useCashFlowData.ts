@@ -104,8 +104,8 @@ export function useCashFlowVsBudget() {
       const { data: budgets, error: budgetError } = await supabase
         .from("budgets")
         .select("*")
-        .gte("month", format(sixMonthsAgo, "yyyy-MM-dd"))
-        .order("month", { ascending: true });
+        .eq("is_active", true)
+        .order("start_date", { ascending: true });
 
       if (budgetError) throw budgetError;
 
@@ -133,21 +133,18 @@ export function useCashFlowVsBudget() {
       // Build comparison data
       const result: { mese: string; consuntivo: number; previsionale: number }[] = [];
       
+      // Calculate total budget amount for comparison
+      const totalBudget = budgets?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
+      
       monthlyMap.forEach((value, key) => {
         const [year, month] = key.split("-");
         const date = new Date(parseInt(year), parseInt(month) - 1, 1);
         const consuntivo = value.incassi - value.pagamenti;
         
-        // Find matching budget
-        const budget = budgets?.find(b => b.month.startsWith(key));
-        const previsionale = budget 
-          ? Number(budget.predicted_income) - Number(budget.predicted_expenses)
-          : 0;
-        
         result.push({
           mese: format(date, "MMM", { locale: it }),
           consuntivo,
-          previsionale,
+          previsionale: totalBudget / 6, // Simplified: distribute budget evenly
         });
       });
 

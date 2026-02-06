@@ -105,20 +105,23 @@ export function CategoryModal({
 
       // If createRule is checked, create a categorization rule
       if (createRule) {
-        const pattern = transaction.merchant_name || transaction.name;
-        const { error: ruleError } = await supabase
-          .from("categorization_rules")
-          .insert({
-            pattern: pattern.toLowerCase(),
-            category_id: selectedCategoryId,
-            match_type: "contains",
-          });
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const pattern = transaction.merchant_name || transaction.name;
+          const { error: ruleError } = await supabase
+            .from("categorization_rules")
+            .insert({
+              pattern: pattern.toLowerCase(),
+              category_id: selectedCategoryId,
+              user_id: user.id,
+            });
 
-        if (ruleError) {
-          console.error("Failed to create rule:", ruleError);
-          toast.error("Categoria confermata, ma regola non creata");
-        } else {
-          toast.success("Categoria confermata e regola creata per transazioni simili");
+          if (ruleError) {
+            console.error("Failed to create rule:", ruleError);
+            toast.error("Categoria confermata, ma regola non creata");
+          } else {
+            toast.success("Categoria confermata e regola creata per transazioni simili");
+          }
         }
       } else {
         toast.success("Categoria confermata");

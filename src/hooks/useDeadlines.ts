@@ -4,7 +4,8 @@ import { format, addDays } from "date-fns";
 
 export interface Deadline {
   id: string;
-  description: string;
+  title: string;
+  description: string | null;
   type: "incasso" | "pagamento";
   amount: number;
   dueDate: string;
@@ -53,7 +54,7 @@ export function useDeadlines(filters?: DeadlineFilters) {
 
       // Apply type filter
       if (filters?.type && filters.type !== "all") {
-        query = query.eq("type", filters.type);
+        query = query.eq("deadline_type", filters.type);
       }
 
       // Apply date range filters
@@ -70,8 +71,9 @@ export function useDeadlines(filters?: DeadlineFilters) {
 
       return data?.map((d) => ({
         id: d.id,
+        title: d.title,
         description: d.description,
-        type: d.type as Deadline["type"],
+        type: (d.deadline_type === "income" ? "incasso" : "pagamento") as Deadline["type"],
         amount: Number(d.amount),
         dueDate: d.due_date,
         status: d.status as Deadline["status"],
@@ -87,15 +89,15 @@ export function useDeadlinesSummary() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("deadlines")
-        .select("type, amount, status")
+        .select("deadline_type, amount, status")
         .in("status", ["pending", "overdue"]);
 
       if (error) throw error;
 
-      const incassiTotali = data?.filter(d => d.type === "incasso").reduce((sum, d) => sum + Number(d.amount), 0) || 0;
-      const pagamentiTotali = data?.filter(d => d.type === "pagamento").reduce((sum, d) => sum + Number(d.amount), 0) || 0;
-      const incassiCount = data?.filter(d => d.type === "incasso").length || 0;
-      const pagamentiCount = data?.filter(d => d.type === "pagamento").length || 0;
+      const incassiTotali = data?.filter(d => d.deadline_type === "income").reduce((sum, d) => sum + Number(d.amount), 0) || 0;
+      const pagamentiTotali = data?.filter(d => d.deadline_type === "payment").reduce((sum, d) => sum + Number(d.amount), 0) || 0;
+      const incassiCount = data?.filter(d => d.deadline_type === "income").length || 0;
+      const pagamentiCount = data?.filter(d => d.deadline_type === "payment").length || 0;
       const overdueCount = data?.filter(d => d.status === "overdue").length || 0;
 
       return {
@@ -114,20 +116,19 @@ export function useLiquidityForecast() {
   return useQuery({
     queryKey: ["liquidity-forecast"],
     queryFn: async () => {
-      // Fetch current balance
+      // Fetch current balance from bank accounts
       const { data: accounts, error: accountsError } = await supabase
         .from("bank_accounts")
-        .select("current_balance")
-        .eq("status", "active");
+        .select("balance");
 
       if (accountsError) throw accountsError;
 
-      const currentBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.current_balance) || 0), 0) || 0;
+      const currentBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0) || 0;
 
       // Fetch upcoming deadlines
       const { data: deadlines, error: deadlinesError } = await supabase
         .from("deadlines")
-        .select("due_date, type, amount")
+        .select("due_date, deadline_type, amount")
         .in("status", ["pending", "overdue"])
         .gte("due_date", format(new Date(), "yyyy-MM-dd"))
         .lte("due_date", format(addDays(new Date(), 30), "yyyy-MM-dd"))
@@ -142,7 +143,7 @@ export function useLiquidityForecast() {
       // Group deadlines by date
       const dateMap = new Map<string, number>();
       deadlines?.forEach(d => {
-        const impact = d.type === "incasso" ? Number(d.amount) : -Number(d.amount);
+        const impact = d.deadline_type === "income" ? Number(d.amount) : -Number(d.amount);
         dateMap.set(d.due_date, (dateMap.get(d.due_date) || 0) + impact);
       });
 
@@ -187,8 +188,9 @@ export function useCreateDeadline() {
       const { data, error } = await supabase
         .from("deadlines")
         .insert({
+          title: input.description,
           description: input.description,
-          type: input.type,
+          deadline_type: input.type === "incasso" ? "income" : "payment",
           amount: input.amount,
           due_date: input.dueDate,
           invoice_id: input.invoiceId || null,
@@ -216,8 +218,11 @@ export function useUpdateDeadline() {
     mutationFn: async (input: UpdateDeadlineInput) => {
       const updateData: Record<string, unknown> = {};
       
-      if (input.description !== undefined) updateData.description = input.description;
-      if (input.type !== undefined) updateData.type = input.type;
+      if (input.description !== undefined) {
+        updateData.title = input.description;
+        updateData.description = input.description;
+      }
+      if (input.type !== undefined) updateData.deadline_type = input.type === "incasso" ? "income" : "payment";
       if (input.amount !== undefined) updateData.amount = input.amount;
       if (input.dueDate !== undefined) updateData.due_date = input.dueDate;
       if (input.status !== undefined) updateData.status = input.status;
@@ -287,12 +292,18 @@ export function useInvoicesForDeadlines() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("invoices")
-        .select("id, invoice_number, supplier_name, amount, invoice_date")
+        .select("id, invoice_number, vendor_name, amount, invoice_date")
         .order("invoice_date", { ascending: false })
         .limit(100);
 
       if (error) throw error;
-      return data || [];
+      return data?.map(inv => ({
+        id: inv.id,
+        invoice_number: inv.invoice_number,
+        vendor_name: inv.vendor_name,
+        amount: inv.amount,
+        invoice_date: inv.invoice_date,
+      })) || [];
     },
   });
 }

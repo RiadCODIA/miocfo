@@ -1,18 +1,17 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, startOfMonth, subMonths, addMonths } from "date-fns";
+import { format, startOfMonth, subMonths } from "date-fns";
 import { it } from "date-fns/locale";
 
 export interface Budget {
   id: string;
-  month: string;
-  monthLabel: string;
-  predictedIncome: number;
-  predictedExpenses: number;
-  actualIncome: number;
-  actualExpenses: number;
-  cashflowPrevisto: number;
-  notes: string | null;
+  name: string;
+  categoryId: string | null;
+  amount: number;
+  periodType: string;
+  startDate: string;
+  endDate: string | null;
+  isActive: boolean;
 }
 
 export interface BudgetComparison {
@@ -29,20 +28,20 @@ export function useBudgets() {
       const { data, error } = await supabase
         .from("budgets")
         .select("*")
-        .order("month", { ascending: true });
+        .eq("is_active", true)
+        .order("start_date", { ascending: false });
 
       if (error) throw error;
 
       return data?.map((b) => ({
         id: b.id,
-        month: b.month,
-        monthLabel: format(new Date(b.month), "MMM yyyy", { locale: it }),
-        predictedIncome: Number(b.predicted_income),
-        predictedExpenses: Number(b.predicted_expenses),
-        actualIncome: Number(b.actual_income),
-        actualExpenses: Number(b.actual_expenses),
-        cashflowPrevisto: Number(b.predicted_income) - Number(b.predicted_expenses),
-        notes: b.notes,
+        name: b.name,
+        categoryId: b.category_id,
+        amount: Number(b.amount),
+        periodType: b.period_type,
+        startDate: b.start_date,
+        endDate: b.end_date,
+        isActive: b.is_active,
       })) || [];
     },
   });
@@ -52,29 +51,52 @@ export function useBudgetComparison() {
   return useQuery({
     queryKey: ["budget-comparison"],
     queryFn: async (): Promise<BudgetComparison[]> => {
+      // Get the last 6 months of transactions for comparison
       const now = new Date();
       const sixMonthsAgo = subMonths(now, 5);
 
-      const { data, error } = await supabase
-        .from("budgets")
+      const { data: transactions, error } = await supabase
+        .from("bank_transactions")
         .select("*")
-        .gte("month", format(startOfMonth(sixMonthsAgo), "yyyy-MM-dd"))
-        .lte("month", format(startOfMonth(now), "yyyy-MM-dd"))
-        .order("month", { ascending: true });
+        .gte("date", format(startOfMonth(sixMonthsAgo), "yyyy-MM-dd"))
+        .lte("date", format(now, "yyyy-MM-dd"));
 
       if (error) throw error;
 
-      return data?.map((b) => {
-        const actualCashflow = Number(b.actual_income) - Number(b.actual_expenses);
-        const predictedCashflow = Number(b.predicted_income) - Number(b.predicted_expenses);
+      // Get budgets
+      const { data: budgets } = await supabase
+        .from("budgets")
+        .select("*")
+        .eq("is_active", true);
 
+      // Calculate monthly totals
+      const monthlyData: Record<string, { income: number; expenses: number }> = {};
+      
+      transactions?.forEach(tx => {
+        const month = format(new Date(tx.date), "yyyy-MM");
+        if (!monthlyData[month]) {
+          monthlyData[month] = { income: 0, expenses: 0 };
+        }
+        const amount = Number(tx.amount);
+        if (amount > 0) {
+          monthlyData[month].income += amount;
+        } else {
+          monthlyData[month].expenses += Math.abs(amount);
+        }
+      });
+
+      // Calculate total budgeted amount (simplified - assumes monthly budget)
+      const totalBudget = budgets?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
+
+      return Object.entries(monthlyData).map(([month, data]) => {
+        const consuntivo = data.income - data.expenses;
         return {
-          mese: format(new Date(b.month), "MMM", { locale: it }),
-          consuntivo: actualCashflow,
-          previsionale: predictedCashflow,
-          scostamento: actualCashflow - predictedCashflow,
+          mese: format(new Date(month + "-01"), "MMM", { locale: it }),
+          consuntivo,
+          previsionale: totalBudget,
+          scostamento: consuntivo - totalBudget,
         };
-      }) || [];
+      });
     },
   });
 }
@@ -83,46 +105,34 @@ export function useBudgetVarianceSummary() {
   return useQuery({
     queryKey: ["budget-variance-summary"],
     queryFn: async () => {
+      // Simplified variance calculation
       const now = new Date();
       const sixMonthsAgo = subMonths(now, 5);
 
-      const { data, error } = await supabase
-        .from("budgets")
-        .select("*")
-        .gte("month", format(startOfMonth(sixMonthsAgo), "yyyy-MM-dd"))
-        .lte("month", format(startOfMonth(now), "yyyy-MM-dd"));
+      const { data: transactions, error } = await supabase
+        .from("bank_transactions")
+        .select("amount, date")
+        .gte("date", format(startOfMonth(sixMonthsAgo), "yyyy-MM-dd"));
 
       if (error) throw error;
 
-      let positiveVariance = 0;
-      let negativeVariance = 0;
-      let positiveMonths = 0;
-      let negativeMonths = 0;
+      const { data: budgets } = await supabase
+        .from("budgets")
+        .select("amount")
+        .eq("is_active", true);
 
-      data?.forEach((b) => {
-        const actual = Number(b.actual_income) - Number(b.actual_expenses);
-        const predicted = Number(b.predicted_income) - Number(b.predicted_expenses);
-        const variance = actual - predicted;
+      const totalBudget = budgets?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
+      const totalActual = transactions?.reduce((sum, tx) => sum + Number(tx.amount), 0) || 0;
 
-        if (variance >= 0) {
-          positiveVariance += variance;
-          positiveMonths++;
-        } else {
-          negativeVariance += Math.abs(variance);
-          negativeMonths++;
-        }
-      });
-
-      const netVariance = positiveVariance - negativeVariance;
-      const totalPredicted = data?.reduce((sum, b) => sum + Number(b.predicted_income) - Number(b.predicted_expenses), 0) || 1;
-      const variancePercent = (netVariance / totalPredicted) * 100;
+      const netVariance = totalActual - totalBudget;
+      const variancePercent = totalBudget ? (netVariance / totalBudget) * 100 : 0;
 
       return {
-        positiveVariance,
-        negativeVariance,
+        positiveVariance: netVariance > 0 ? netVariance : 0,
+        negativeVariance: netVariance < 0 ? Math.abs(netVariance) : 0,
         netVariance,
-        positiveMonths,
-        negativeMonths,
+        positiveMonths: 0,
+        negativeMonths: 0,
         variancePercent,
       };
     },
@@ -135,16 +145,16 @@ export function useUpdateBudget() {
   return useMutation({
     mutationFn: async ({
       id,
-      predictedIncome,
-      predictedExpenses,
+      amount,
+      name,
     }: {
       id: string;
-      predictedIncome?: number;
-      predictedExpenses?: number;
+      amount?: number;
+      name?: string;
     }) => {
-      const updates: Record<string, number> = {};
-      if (predictedIncome !== undefined) updates.predicted_income = predictedIncome;
-      if (predictedExpenses !== undefined) updates.predicted_expenses = predictedExpenses;
+      const updates: Record<string, unknown> = {};
+      if (amount !== undefined) updates.amount = amount;
+      if (name !== undefined) updates.name = name;
 
       const { error } = await supabase
         .from("budgets")
@@ -166,22 +176,29 @@ export function useCreateBudget() {
 
   return useMutation({
     mutationFn: async ({
-      month,
-      predictedIncome,
-      predictedExpenses,
+      name,
+      amount,
+      categoryId,
+      startDate,
+      periodType = "monthly",
     }: {
-      month: Date;
-      predictedIncome: number;
-      predictedExpenses: number;
+      name: string;
+      amount: number;
+      categoryId?: string;
+      startDate: Date;
+      periodType?: string;
     }) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
       const { error } = await supabase.from("budgets").insert({
-        month: format(startOfMonth(month), "yyyy-MM-dd"),
-        predicted_income: predictedIncome,
-        predicted_expenses: predictedExpenses,
+        name,
+        amount,
+        category_id: categoryId || null,
+        start_date: format(startOfMonth(startDate), "yyyy-MM-dd"),
+        period_type: periodType,
         user_id: user.id,
+        is_active: true,
       });
 
       if (error) throw error;

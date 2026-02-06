@@ -30,7 +30,7 @@ const signupSchema = z.object({
 });
 
 export default function Auth() {
-  const { user, loading, signIn, signUp, signInAsDemo, signInAsDemoAdmin, signInAsDemoSuperAdmin, isDemoMode } = useAuth();
+  const { user, loading, signIn, signUp, signInAsDemo, signInAsDemoAdmin, signInAsDemoSuperAdmin } = useAuth();
   const navigate = useNavigate();
   const { toast } = useToast();
   
@@ -51,12 +51,12 @@ export default function Auth() {
   const [companyName, setCompanyName] = useState("");
   const [selectedRole, setSelectedRole] = useState<"user" | "admin_aziendale">("user");
 
-  // Redirect if already authenticated or in demo mode
+  // Redirect if already authenticated
   useEffect(() => {
-    if ((user || isDemoMode) && !loading) {
+    if (user && !loading) {
       navigate("/", { replace: true });
     }
-  }, [user, isDemoMode, loading, navigate]);
+  }, [user, loading, navigate]);
 
   if (loading) {
     return (
@@ -69,23 +69,50 @@ export default function Auth() {
     );
   }
 
-  if (user || isDemoMode) {
+  if (user) {
     return <Navigate to="/" replace />;
   }
 
-  const handleDemoLogin = () => {
-    signInAsDemo();
-    navigate("/", { replace: true });
+  const handleDemoLogin = async () => {
+    setIsSubmitting(true);
+    const { error } = await signInAsDemo();
+    setIsSubmitting(false);
+    
+    if (error) {
+      toast({
+        title: "Errore Demo",
+        description: "Account demo utente non disponibile. Contatta l'amministratore.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleAdminDemoLogin = () => {
-    signInAsDemoAdmin();
-    navigate("/", { replace: true });
+  const handleAdminDemoLogin = async () => {
+    setIsSubmitting(true);
+    const { error } = await signInAsDemoAdmin();
+    setIsSubmitting(false);
+    
+    if (error) {
+      toast({
+        title: "Errore Demo",
+        description: "Account demo consulente non disponibile. Contatta l'amministratore.",
+        variant: "destructive",
+      });
+    }
   };
 
-  const handleSuperAdminDemoLogin = () => {
-    signInAsDemoSuperAdmin();
-    navigate("/", { replace: true });
+  const handleSuperAdminDemoLogin = async () => {
+    setIsSubmitting(true);
+    const { error } = await signInAsDemoSuperAdmin();
+    setIsSubmitting(false);
+    
+    if (error) {
+      toast({
+        title: "Errore Demo",
+        description: "Account demo super admin non disponibile. Contatta l'amministratore.",
+        variant: "destructive",
+      });
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -275,6 +302,7 @@ export default function Auth() {
                     variant="outline" 
                     className="w-full text-xs"
                     onClick={handleDemoLogin}
+                    disabled={isSubmitting}
                   >
                     <FlaskConical className="mr-1 h-3 w-3" />
                     Utente
@@ -284,6 +312,7 @@ export default function Auth() {
                     variant="outline" 
                     className="w-full text-xs bg-amber-500/10 border-amber-500/30 text-amber-600 hover:bg-amber-500/20"
                     onClick={handleAdminDemoLogin}
+                    disabled={isSubmitting}
                   >
                     <ShieldCheck className="mr-1 h-3 w-3" />
                     Admin
@@ -293,6 +322,7 @@ export default function Auth() {
                     variant="outline" 
                     className="w-full text-xs bg-violet-500/10 border-violet-500/30 text-violet-600 hover:bg-violet-500/20"
                     onClick={handleSuperAdminDemoLogin}
+                    disabled={isSubmitting}
                   >
                     <Crown className="mr-1 h-3 w-3" />
                     Super
@@ -433,7 +463,7 @@ export default function Auth() {
                       Registrazione in corso...
                     </div>
                   ) : (
-                    "Crea Account"
+                    "Registrati"
                   )}
                 </Button>
               </form>

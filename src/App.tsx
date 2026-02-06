@@ -40,11 +40,10 @@ const queryClient = new QueryClient();
 
 // Component to handle conditional dashboard rendering
 function DashboardRouter() {
-  const { demoRole, userRole } = useAuth();
-  const effectiveRole = demoRole || userRole;
+  const { userRole } = useAuth();
   
-  if (effectiveRole === 'super_admin') return <DashboardSuperAdmin />;
-  if (effectiveRole === 'admin_aziendale') return <DashboardAdmin />;
+  if (userRole === 'super_admin') return <DashboardSuperAdmin />;
+  if (userRole === 'admin_aziendale') return <DashboardAdmin />;
   return <Index />;
 }
 
