@@ -9,24 +9,10 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { ScrollArea } from "@/components/ui/scroll-area";
-import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle, Search } from "lucide-react";
-import { useEnableBanking, BankAccount } from "@/hooks/useEnableBanking";
+import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle } from "lucide-react";
+import { useBankingIntegration, BankAccount } from "@/hooks/useBankingIntegration";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-interface ASPSP {
-  name: string;
-  country: string;
-  logo?: string;
-  bic?: string;
-}
 
 interface ConnectBankModalProps {
   open: boolean;
@@ -34,101 +20,46 @@ interface ConnectBankModalProps {
   onConnect: (accounts: BankAccount[]) => void;
 }
 
-const COUNTRIES = [
-  { code: "IT", name: "Italia" },
-  { code: "DE", name: "Germania" },
-  { code: "FR", name: "Francia" },
-  { code: "ES", name: "Spagna" },
-  { code: "NL", name: "Paesi Bassi" },
-  { code: "BE", name: "Belgio" },
-  { code: "AT", name: "Austria" },
-  { code: "PT", name: "Portogallo" },
-  { code: "FI", name: "Finlandia" },
-  { code: "IE", name: "Irlanda" },
-];
-
 export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankModalProps) {
-  const [step, setStep] = useState<"select_bank" | "ready" | "connecting" | "success" | "error">("select_bank");
-  const [selectedCountry, setSelectedCountry] = useState<string>("IT");
-  const [banks, setBanks] = useState<ASPSP[]>([]);
-  const [filteredBanks, setFilteredBanks] = useState<ASPSP[]>([]);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedBank, setSelectedBank] = useState<ASPSP | null>(null);
-  const [psuType, setPsuType] = useState<"personal" | "business">("business");
-  const [authorizationUrl, setAuthorizationUrl] = useState<string | null>(null);
+  const [step, setStep] = useState<"enter_fiscal_id" | "ready" | "connecting" | "success" | "error">("enter_fiscal_id");
+  const [fiscalId, setFiscalId] = useState("");
+  const [connectUrl, setConnectUrl] = useState<string | null>(null);
   const [connectedAccounts, setConnectedAccounts] = useState<BankAccount[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
-  const [isLoadingBanks, setIsLoadingBanks] = useState(false);
   
-  const { createSession, completeSession, getASPSPs, isLoading } = useEnableBanking();
+  const { createConnectRequest, completeConnection, isLoading } = useBankingIntegration();
   const { isDemoMode } = useAuth();
   const { toast } = useToast();
 
-  // Generate redirect URI for Enable Banking callback
+  // Generate redirect URI
   const getRedirectUri = useCallback(() => {
-    // Usa l'origin corrente per supportare domini custom, preview e published
     return `${window.location.origin}/conti-bancari`;
   }, []);
 
-  // Load banks when country changes
-  useEffect(() => {
-    if (open && selectedCountry) {
-      setIsLoadingBanks(true);
-      setSelectedBank(null);
-      getASPSPs(selectedCountry)
-        .then((aspsps) => {
-          const bankList = aspsps as ASPSP[];
-          setBanks(bankList);
-          setFilteredBanks(bankList);
-        })
-        .catch((error) => {
-          console.error("Failed to load banks:", error);
-          setBanks([]);
-          setFilteredBanks([]);
-        })
-        .finally(() => {
-          setIsLoadingBanks(false);
-        });
-    }
-  }, [open, selectedCountry, getASPSPs]);
-
-  // Filter banks by search query
-  useEffect(() => {
-    if (searchQuery) {
-      const filtered = banks.filter((bank) =>
-        bank.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredBanks(filtered);
-    } else {
-      setFilteredBanks(banks);
-    }
-  }, [searchQuery, banks]);
-
-  // Handle Enable Banking callback (check for code in URL on mount)
+  // Handle A-Cube callback (check for fiscal_id in URL params after redirect)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const authCode = urlParams.get("code");
+    const callbackFiscalId = urlParams.get("fiscalId") || urlParams.get("fiscal_id");
+    const success = urlParams.get("success");
 
-    if (authCode) {
+    if (callbackFiscalId && success === "true") {
       // Remove params from URL immediately
       window.history.replaceState({}, document.title, window.location.pathname);
 
-      // Complete the session with the authorization code
+      // Complete the connection
       setStep("connecting");
-      onOpenChange(true); // Open modal
+      onOpenChange(true);
 
-      // Funzione per completare con retry (la sessione potrebbe non essere ancora pronta)
       const completeWithRetry = async (retries = 3) => {
         try {
-          const accounts = await completeSession(authCode);
+          const accounts = await completeConnection(callbackFiscalId);
           setConnectedAccounts(accounts);
           setStep("success");
         } catch (error) {
-          console.error("Failed to complete session:", error);
+          console.error("Failed to complete connection:", error);
           
-          // Se l'errore è dovuto alla sessione non pronta, riprova
           if (retries > 0 && error instanceof Error && 
-              (error.message.includes("session") || error.message.includes("auth") || error.message.includes("user"))) {
+              (error.message.includes("session") || error.message.includes("auth"))) {
             console.log(`Retrying in 1 second... (${retries} retries left)`);
             await new Promise(resolve => setTimeout(resolve, 1000));
             return completeWithRetry(retries - 1);
@@ -141,16 +72,27 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
       completeWithRetry();
     }
-  }, [completeSession, onOpenChange]);
+  }, [completeConnection, onOpenChange]);
 
-  const handleSelectBank = (bank: ASPSP) => {
-    setSelectedBank(bank);
+  // Validate Italian fiscal ID (Partita IVA or Codice Fiscale)
+  const isValidFiscalId = (id: string): boolean => {
+    const cleaned = id.replace(/\s/g, "").toUpperCase();
+    // Partita IVA: 11 digits
+    // Codice Fiscale: 16 alphanumeric
+    return /^\d{11}$/.test(cleaned) || /^[A-Z0-9]{16}$/.test(cleaned);
   };
 
   const handleProceed = async () => {
-    if (!selectedBank) return;
+    if (!fiscalId || !isValidFiscalId(fiscalId)) {
+      toast({
+        title: "Partita IVA non valida",
+        description: "Inserisci una Partita IVA o Codice Fiscale valido",
+        variant: "destructive",
+      });
+      return;
+    }
 
-    // Block demo users from proceeding to actual bank connection
+    // Block demo users
     if (isDemoMode) {
       toast({
         title: "Modalità Demo",
@@ -162,18 +104,19 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
     setStep("ready");
     try {
-      const data = await createSession(getRedirectUri(), selectedCountry, selectedBank.name, psuType);
-      setAuthorizationUrl(data.authorization_url);
+      const cleanedFiscalId = fiscalId.replace(/\s/g, "").toUpperCase();
+      const data = await createConnectRequest(getRedirectUri(), cleanedFiscalId);
+      setConnectUrl(data.connect_url);
     } catch (error) {
-      console.error("Failed to create session:", error);
-      setErrorMessage(error instanceof Error ? error.message : "Impossibile inizializzare Enable Banking");
+      console.error("Failed to create connect request:", error);
+      setErrorMessage(error instanceof Error ? error.message : "Impossibile inizializzare A-Cube");
       setStep("error");
     }
   };
 
-  const handleOpenEnableBankingAuth = () => {
-    if (authorizationUrl) {
-      window.location.href = authorizationUrl;
+  const handleOpenAcubePortal = () => {
+    if (connectUrl) {
+      window.location.href = connectUrl;
     }
   };
 
@@ -183,130 +126,80 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   };
 
   const handleClose = () => {
-    setStep("select_bank");
-    setSelectedBank(null);
-    setPsuType("business");
-    setAuthorizationUrl(null);
+    setStep("enter_fiscal_id");
+    setFiscalId("");
+    setConnectUrl(null);
     setConnectedAccounts([]);
     setErrorMessage("");
-    setSearchQuery("");
     onOpenChange(false);
   };
 
   const handleRetry = () => {
     setErrorMessage("");
-    setStep("select_bank");
+    setStep("enter_fiscal_id");
   };
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px]">
+      <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
-            {step === "select_bank" && "Seleziona la tua banca"}
-            {step === "ready" && "Collega un conto bancario"}
+            {step === "enter_fiscal_id" && "Collega il tuo conto bancario"}
+            {step === "ready" && "Collega con A-Cube"}
             {step === "connecting" && "Collegamento in corso..."}
             {step === "success" && "Connessione riuscita!"}
             {step === "error" && "Errore di connessione"}
           </DialogTitle>
           <DialogDescription>
-            {step === "select_bank" && "Scegli il paese e la banca da collegare"}
-            {step === "ready" && `Clicca per collegarti a ${selectedBank?.name}`}
+            {step === "enter_fiscal_id" && "Inserisci la Partita IVA della tua azienda per collegare i conti bancari"}
+            {step === "ready" && "Clicca per completare il collegamento nel portale A-Cube"}
             {step === "connecting" && "Stiamo salvando i tuoi dati..."}
             {step === "success" && `${connectedAccounts.length} conto/i collegati con successo`}
             {step === "error" && "Si è verificato un errore durante il collegamento"}
           </DialogDescription>
         </DialogHeader>
 
-        {/* Bank Selection */}
-        {step === "select_bank" && (
-          <div className="flex flex-col h-[450px]">
-            <div className="flex-1 flex flex-col min-h-0 space-y-4 border rounded-lg p-4 bg-muted/30">
-              <div className="space-y-2 flex-shrink-0">
-                <Label>Paese</Label>
-                <Select value={selectedCountry} onValueChange={setSelectedCountry}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleziona un paese" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COUNTRIES.map((country) => (
-                      <SelectItem key={country.code} value={country.code}>
-                        {country.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2 flex-shrink-0">
-                <Label>Cerca banca</Label>
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    placeholder="Cerca per nome..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="pl-9"
-                  />
-                </div>
-              </div>
-
-              <div className="flex-1 min-h-0 overflow-hidden">
-                {isLoadingBanks ? (
-                  <div className="flex items-center justify-center py-8 h-full">
-                    <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                  </div>
-                ) : (
-                  <ScrollArea className="h-full rounded-md">
-                    <div className="space-y-1">
-                      {filteredBanks.length === 0 ? (
-                        <p className="text-center text-muted-foreground py-4">
-                          Nessuna banca trovata
-                        </p>
-                      ) : (
-                        filteredBanks.map((bank) => (
-                          <button
-                            key={bank.name}
-                            onClick={() => handleSelectBank(bank)}
-                            className={`w-full flex items-center gap-3 p-3 rounded-lg text-left transition-colors ${
-                              selectedBank?.name === bank.name
-                                ? "bg-primary/10 border border-primary"
-                                : "hover:bg-muted/50"
-                            }`}
-                          >
-                            <Building2 className="h-5 w-5 text-primary flex-shrink-0" />
-                            <span className="font-medium text-foreground truncate">
-                              {bank.name}
-                            </span>
-                          </button>
-                        ))
-                      )}
-                    </div>
-                  </ScrollArea>
-                )}
+        {/* Fiscal ID Input */}
+        {step === "enter_fiscal_id" && (
+          <div className="space-y-6 py-4">
+            <div className="flex items-center justify-center">
+              <div className="h-16 w-16 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Building2 className="h-8 w-8 text-primary" />
               </div>
             </div>
 
-            <div className="space-y-2 flex-shrink-0 pt-4">
-              <Label>Tipo di conto</Label>
-              <Select value={psuType} onValueChange={(v) => setPsuType(v as "personal" | "business")}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="personal">Conto Privato</SelectItem>
-                  <SelectItem value="business">Conto Aziendale</SelectItem>
-                </SelectContent>
-              </Select>
+            <div className="space-y-2">
+              <Label htmlFor="fiscal-id">Partita IVA / Codice Fiscale</Label>
+              <Input
+                id="fiscal-id"
+                placeholder="Es. 12345678901"
+                value={fiscalId}
+                onChange={(e) => setFiscalId(e.target.value)}
+                className="text-center text-lg tracking-wider"
+                maxLength={16}
+              />
+              <p className="text-xs text-muted-foreground text-center">
+                Inserisci la Partita IVA (11 cifre) o il Codice Fiscale (16 caratteri) della tua azienda
+              </p>
             </div>
 
-            <div className="flex gap-3 pt-4 flex-shrink-0">
+            <div className="p-4 rounded-lg bg-muted/50 text-sm text-muted-foreground">
+              <p className="font-medium text-foreground mb-2">Come funziona:</p>
+              <ol className="list-decimal list-inside space-y-1">
+                <li>Inserisci la Partita IVA della tua azienda</li>
+                <li>Verrai reindirizzato al portale A-Cube</li>
+                <li>Seleziona la tua banca e autorizza l'accesso</li>
+                <li>I tuoi conti saranno collegati automaticamente</li>
+              </ol>
+            </div>
+
+            <div className="flex gap-3">
               <Button variant="outline" onClick={handleClose} className="flex-1">
                 Annulla
               </Button>
               <Button
                 onClick={handleProceed}
-                disabled={!selectedBank || isLoading}
+                disabled={!fiscalId || isLoading}
                 className="flex-1"
               >
                 {isLoading ? (
@@ -327,18 +220,20 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
               </div>
             </div>
             <div className="text-center space-y-2">
-              <p className="text-foreground font-medium">{selectedBank?.name}</p>
+              <p className="text-foreground font-medium">
+                Partita IVA: {fiscalId.replace(/\s/g, "").toUpperCase()}
+              </p>
               <p className="text-sm text-muted-foreground">
                 Clicca il pulsante qui sotto per autorizzare l'accesso ai tuoi conti.
               </p>
               <p className="text-xs text-muted-foreground">
-                Powered by Enable Banking - i tuoi dati sono criptati e al sicuro
+                Powered by A-Cube - i tuoi dati sono criptati e al sicuro
               </p>
             </div>
             <div className="space-y-3">
               <Button
-                onClick={handleOpenEnableBankingAuth}
-                disabled={!authorizationUrl || isLoading}
+                onClick={handleOpenAcubePortal}
+                disabled={!connectUrl || isLoading}
                 className="w-full"
               >
                 {isLoading ? (
@@ -350,7 +245,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
               </Button>
               <Button
                 variant="outline"
-                onClick={() => setStep("select_bank")}
+                onClick={() => setStep("enter_fiscal_id")}
                 className="w-full"
               >
                 Indietro
@@ -397,7 +292,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
                     <div className="flex-1">
                       <p className="font-medium text-foreground">{account.bank_name}</p>
                       <p className="text-sm text-muted-foreground">
-                        {account.account_name || account.account_type} {account.iban ? `IBAN: ...${account.iban.slice(-4)}` : account.mask ? `•••• ${account.mask}` : ""}
+                        {account.name || account.account_type} {account.iban ? `IBAN: ...${account.iban.slice(-4)}` : ""}
                       </p>
                     </div>
                   </div>
