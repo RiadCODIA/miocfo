@@ -204,15 +204,24 @@ async function createConnectRequest(
   // First ensure the business registry exists
   await createBusinessRegistry(fiscalId);
 
-  // Create the connect request
+  // Determine environment - use XF (fake country) for sandbox, IT for production
+  const isSandbox = ACUBE_ENV !== "production";
+  const countryCode = isSandbox ? "XF" : "IT"; // XF = fake test banks, IT = Italian banks
+  
+  console.log(`[A-Cube] Using country code: ${countryCode} (sandbox: ${isSandbox})`);
+
+  // Create the connect request with required parameters
   const result = await acubeRequest(`/business-registry/${fiscalId}/connect`, "POST", {
     redirectUri: redirectUri,
+    returnUrl: redirectUri, // Some versions use returnUrl instead
+    country: countryCode,   // Required to show banks - XF for sandbox test banks
+    locale: "it",           // Italian locale for UI
+    days: 90,               // Number of days for transaction history
   });
 
   console.log("[A-Cube] Connect response:", JSON.stringify(result));
   
   // A-Cube returns various field names for the redirect URL
-  // Check all possible field names from their API
   const resultObj = result as Record<string, unknown>;
   const connectUrl = resultObj.url || 
                      resultObj.redirectUrl || 
