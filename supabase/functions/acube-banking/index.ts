@@ -152,18 +152,29 @@ async function createBusinessRegistry(fiscalId: string): Promise<{ fiscalId: str
   console.log(`[A-Cube] Creating/getting business registry for: ${fiscalId}`);
   
   try {
-    // Try to create the business registry (endpoint is /business-registry, not /business-registries)
+    // Try to create the business registry
+    // IMPORTANT: enabled must be true to allow connections
     const result = await acubeRequest("/business-registry", "POST", {
       fiscalId: fiscalId,
-      email: "demo@example.com", // Required field
-      businessName: "Demo Business", // Required field
+      email: "demo@example.com",
+      businessName: "Demo Business",
+      enabled: true, // Must be true to allow connect requests
     });
     console.log("[A-Cube] Business registry created:", result);
     return { fiscalId, status: "created" };
   } catch (error) {
-    // If it already exists (409), that's fine
+    // If it already exists (409), that's fine - but we may need to enable it
     if (error instanceof Error && error.message.includes("409")) {
-      console.log("[A-Cube] Business registry already exists");
+      console.log("[A-Cube] Business registry already exists, trying to enable it");
+      // Try to enable it via PATCH
+      try {
+        await acubeRequest(`/business-registry/${fiscalId}`, "PATCH", {
+          enabled: true,
+        });
+        console.log("[A-Cube] Business registry enabled");
+      } catch (patchError) {
+        console.log("[A-Cube] Could not patch business registry:", patchError);
+      }
       return { fiscalId, status: "exists" };
     }
     throw error;
