@@ -1,36 +1,33 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import type { Json } from "@/integrations/supabase/types";
 
 export interface ApplicationLog {
   id: string;
   level: string;
-  service: string;
+  source: string | null;
   message: string;
-  request_id: string | null;
-  company_id: string | null;
-  metadata: Record<string, unknown>;
-  created_at: string;
+  userId: string | null;
+  metadata: Json;
+  createdAt: string;
 }
 
 export interface AuditTrailEntry {
   id: string;
-  actor_id: string | null;
-  actor_email: string | null;
-  actor_role: string | null;
+  userId: string | null;
   action: string;
-  target_type: string | null;
-  target_id: string | null;
-  target_name: string | null;
-  result: string;
-  metadata: Record<string, unknown>;
-  created_at: string;
+  tableName: string | null;
+  recordId: string | null;
+  oldValues: Json;
+  newValues: Json;
+  ipAddress: string | null;
+  userAgent: string | null;
+  createdAt: string;
 }
 
 interface LogFilters {
   level?: string;
-  service?: string;
-  company_id?: string;
-  request_id?: string;
+  source?: string;
 }
 
 export function useApplicationLogs(filters: LogFilters = {}, limit = 100) {
@@ -46,20 +43,23 @@ export function useApplicationLogs(filters: LogFilters = {}, limit = 100) {
       if (filters.level) {
         query = query.eq("level", filters.level);
       }
-      if (filters.service) {
-        query = query.eq("service", filters.service);
-      }
-      if (filters.company_id) {
-        query = query.eq("company_id", filters.company_id);
-      }
-      if (filters.request_id) {
-        query = query.eq("request_id", filters.request_id);
+      if (filters.source) {
+        query = query.eq("source", filters.source);
       }
 
       const { data, error } = await query;
 
       if (error) throw error;
-      return data as ApplicationLog[];
+      
+      return (data || []).map(log => ({
+        id: log.id,
+        level: log.level,
+        source: log.source,
+        message: log.message,
+        userId: log.user_id,
+        metadata: log.metadata,
+        createdAt: log.created_at,
+      })) as ApplicationLog[];
     },
   });
 }
@@ -75,7 +75,19 @@ export function useAuditTrail(limit = 50) {
         .limit(limit);
 
       if (error) throw error;
-      return data as AuditTrailEntry[];
+      
+      return (data || []).map(entry => ({
+        id: entry.id,
+        userId: entry.user_id,
+        action: entry.action,
+        tableName: entry.table_name,
+        recordId: entry.record_id,
+        oldValues: entry.old_values,
+        newValues: entry.new_values,
+        ipAddress: entry.ip_address ? String(entry.ip_address) : null,
+        userAgent: entry.user_agent,
+        createdAt: entry.created_at,
+      })) as AuditTrailEntry[];
     },
   });
 }

@@ -5,29 +5,30 @@ import type { Json } from "@/integrations/supabase/types";
 
 export interface GdprRequest {
   id: string;
-  company_id: string | null;
-  company_name: string | null;
-  request_type: string;
+  userId: string | null;
+  requestType: string;
   status: string;
-  due_date: string;
-  completed_at: string | null;
-  created_at: string;
+  notes: string | null;
+  requestedAt: string;
+  processedAt: string | null;
 }
 
 export interface IpAllowlistEntry {
   id: string;
-  ip_address: string;
+  ipAddress: string;
   description: string | null;
-  created_at: string;
-  created_by: string | null;
+  isActive: boolean;
+  createdAt: string;
 }
 
 export interface SecurityPolicy {
   id: string;
-  policy_type: string;
-  settings: Json;
-  updated_at: string;
-  updated_by: string | null;
+  name: string;
+  policyType: string;
+  config: Json;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export function useGdprRequests() {
@@ -37,10 +38,19 @@ export function useGdprRequests() {
       const { data, error } = await supabase
         .from("gdpr_requests")
         .select("*")
-        .order("due_date", { ascending: true });
+        .order("requested_at", { ascending: false });
 
       if (error) throw error;
-      return data as GdprRequest[];
+      
+      return (data || []).map(req => ({
+        id: req.id,
+        userId: req.user_id,
+        requestType: req.request_type,
+        status: req.status ?? 'pending',
+        notes: req.notes,
+        requestedAt: req.requested_at,
+        processedAt: req.processed_at,
+      })) as GdprRequest[];
     },
   });
 }
@@ -55,7 +65,14 @@ export function useIpAllowlist() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data as IpAllowlistEntry[];
+      
+      return (data || []).map(entry => ({
+        id: entry.id,
+        ipAddress: String(entry.ip_address),
+        description: entry.description,
+        isActive: entry.is_active ?? true,
+        createdAt: entry.created_at,
+      })) as IpAllowlistEntry[];
     },
   });
 }
@@ -69,7 +86,16 @@ export function useSecurityPolicies() {
         .select("*");
 
       if (error) throw error;
-      return data as SecurityPolicy[];
+      
+      return (data || []).map(policy => ({
+        id: policy.id,
+        name: policy.name,
+        policyType: policy.policy_type,
+        config: policy.config,
+        isActive: policy.is_active ?? true,
+        createdAt: policy.created_at,
+        updatedAt: policy.updated_at,
+      })) as SecurityPolicy[];
     },
   });
 }
@@ -81,7 +107,7 @@ export function useAddIpToAllowlist() {
     mutationFn: async ({ ip_address, description }: { ip_address: string; description?: string }) => {
       const { data, error } = await supabase
         .from("ip_allowlist")
-        .insert({ ip_address, description })
+        .insert({ ip_address: ip_address as unknown as string, description })
         .select()
         .single();
 
@@ -124,10 +150,10 @@ export function useUpdateSecurityPolicy() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, settings }: { id: string; settings: Json }) => {
+    mutationFn: async ({ id, config }: { id: string; config: Json }) => {
       const { data, error } = await supabase
         .from("security_policies")
-        .update({ settings })
+        .update({ config })
         .eq("id", id)
         .select()
         .single();
@@ -149,10 +175,10 @@ export function useUpdateGdprRequest() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, status, completed_at }: { id: string; status: string; completed_at?: string }) => {
+    mutationFn: async ({ id, status, processed_at }: { id: string; status: string; processed_at?: string }) => {
       const { data, error } = await supabase
         .from("gdpr_requests")
-        .update({ status, completed_at })
+        .update({ status, processed_at })
         .eq("id", id)
         .select()
         .single();

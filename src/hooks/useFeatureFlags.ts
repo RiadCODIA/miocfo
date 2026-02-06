@@ -1,14 +1,15 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import type { Json } from '@/integrations/supabase/types';
 
 export interface FeatureFlag {
   id: string;
-  key: string;
-  description: string;
-  enabled: boolean;
+  name: string;
+  description: string | null;
+  isEnabled: boolean;
   rolloutPercentage: number;
-  targetCompanies: string[];
+  conditions: Json;
   createdAt: string;
   updatedAt: string;
 }
@@ -20,19 +21,19 @@ export const useFeatureFlags = () => {
       const { data, error } = await supabase
         .from('feature_flags')
         .select('*')
-        .order('key', { ascending: true });
+        .order('name', { ascending: true });
 
       if (error) throw error;
 
       return (data || []).map(flag => ({
         id: flag.id,
-        key: flag.key,
+        name: flag.name,
         description: flag.description,
-        enabled: flag.enabled ?? false,
+        isEnabled: flag.is_enabled ?? false,
         rolloutPercentage: flag.rollout_percentage ?? 100,
-        targetCompanies: flag.target_companies || [],
-        createdAt: flag.created_at ?? '',
-        updatedAt: flag.updated_at ?? '',
+        conditions: flag.conditions,
+        createdAt: flag.created_at,
+        updatedAt: flag.updated_at,
       })) as FeatureFlag[];
     },
   });
@@ -46,11 +47,11 @@ export const useCreateFeatureFlag = () => {
       const { error } = await supabase
         .from('feature_flags')
         .insert({
-          key: flag.key,
+          name: flag.name,
           description: flag.description,
-          enabled: flag.enabled,
+          is_enabled: flag.isEnabled,
           rollout_percentage: flag.rolloutPercentage,
-          target_companies: flag.targetCompanies,
+          conditions: flag.conditions,
         });
 
       if (error) throw error;
@@ -73,11 +74,11 @@ export const useUpdateFeatureFlag = () => {
   return useMutation({
     mutationFn: async ({ id, ...flag }: Partial<FeatureFlag> & { id: string }) => {
       const updateData: Record<string, unknown> = {};
-      if (flag.key !== undefined) updateData.key = flag.key;
+      if (flag.name !== undefined) updateData.name = flag.name;
       if (flag.description !== undefined) updateData.description = flag.description;
-      if (flag.enabled !== undefined) updateData.enabled = flag.enabled;
+      if (flag.isEnabled !== undefined) updateData.is_enabled = flag.isEnabled;
       if (flag.rolloutPercentage !== undefined) updateData.rollout_percentage = flag.rolloutPercentage;
-      if (flag.targetCompanies !== undefined) updateData.target_companies = flag.targetCompanies;
+      if (flag.conditions !== undefined) updateData.conditions = flag.conditions;
 
       const { error } = await supabase
         .from('feature_flags')

@@ -21,17 +21,22 @@ import { supabase } from "@/integrations/supabase/client";
 
 interface DbInvoice {
   id: string;
-  invoice_number: string;
-  invoice_date: string;
-  supplier_name: string;
+  invoice_number: string | null;
+  invoice_date: string | null;
+  vendor_name: string | null;
+  client_name: string | null;
   amount: number;
-  currency: string;
-  match_status: string;
+  vat_amount: number | null;
+  total_amount: number;
+  invoice_type: string;
+  payment_status: string | null;
   matched_transaction_id: string | null;
-  file_name: string;
-  file_path: string;
-  file_type: string | null;
-  raw_data: Record<string, unknown> | null;
+  file_name: string | null;
+  file_path: string | null;
+  due_date: string | null;
+  category_id: string | null;
+  extracted_data: Record<string, unknown> | null;
+  notes: string | null;
   created_at: string;
   updated_at: string;
   user_id: string;
@@ -39,17 +44,21 @@ interface DbInvoice {
 
 // Transform database invoice to frontend format
 function transformInvoice(dbInvoice: DbInvoice): Invoice {
+  const matchStatus = dbInvoice.matched_transaction_id ? "matched" 
+    : dbInvoice.payment_status === "discrepancy" ? "discrepancy" 
+    : "pending";
+    
   return {
     id: dbInvoice.id,
-    invoiceNumber: dbInvoice.invoice_number,
-    date: new Date(dbInvoice.invoice_date),
-    supplier: dbInvoice.supplier_name,
-    amount: Number(dbInvoice.amount),
-    matchStatus: dbInvoice.match_status as "matched" | "pending" | "discrepancy",
+    invoiceNumber: dbInvoice.invoice_number || "",
+    date: dbInvoice.invoice_date ? new Date(dbInvoice.invoice_date) : new Date(),
+    supplier: dbInvoice.vendor_name || dbInvoice.client_name || "N/A",
+    amount: Number(dbInvoice.total_amount || dbInvoice.amount),
+    matchStatus: matchStatus as "matched" | "pending" | "discrepancy",
     matchedTransactionId: dbInvoice.matched_transaction_id || undefined,
-    fileName: dbInvoice.file_name,
-    filePath: dbInvoice.file_path,
-    fileType: dbInvoice.file_type,
+    fileName: dbInvoice.file_name || "",
+    filePath: dbInvoice.file_path || "",
+    fileType: null,
   };
 }
 

@@ -205,7 +205,7 @@ export default function Fatturazione() {
                 <SelectItem value="all">Tutte le banche</SelectItem>
                 {bankAccounts?.map((bank) => (
                   <SelectItem key={bank.id} value={bank.id}>
-                    {bank.bank_name} {bank.account_name ? `- ${bank.account_name}` : ""}
+                    {bank.bank_name} {bank.name ? `- ${bank.name}` : ""}
                   </SelectItem>
                 ))}
               </SelectContent>

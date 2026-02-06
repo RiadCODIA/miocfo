@@ -43,11 +43,11 @@ export default function FlussiClienti() {
   const monthlyDataMap = new Map<string, { month: string; entrate: number; uscite: number; saldo: number }>();
   
   (rawData || []).forEach(item => {
-    const monthKey = new Date(item.month).toLocaleDateString("it-IT", { month: "short" });
+    const monthKey = `${item.year}-${item.month || 1}`;
     const existing = monthlyDataMap.get(monthKey) || { month: monthKey, entrate: 0, uscite: 0, saldo: 0 };
-    existing.entrate += Number(item.income) || 0;
+    existing.entrate += Number(item.revenue) || 0;
     existing.uscite += Number(item.expenses) || 0;
-    existing.saldo += Number(item.cashflow) || 0;
+    existing.saldo += Number(item.cash_flow) || 0;
     monthlyDataMap.set(monthKey, existing);
   });
 
