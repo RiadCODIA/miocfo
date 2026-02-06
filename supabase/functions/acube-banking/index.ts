@@ -40,6 +40,12 @@ async function getAcubeToken(): Promise<string> {
   }
 
   console.log("[A-Cube] Logging in to get JWT token...");
+  console.log("[A-Cube] Environment check:", {
+    hasEmail: !!ACUBE_EMAIL,
+    hasPassword: !!ACUBE_PASSWORD,
+    emailLength: ACUBE_EMAIL?.length || 0,
+    env: ACUBE_ENV,
+  });
   
   const response = await fetch(`${ACUBE_COMMON_URL}/login`, {
     method: "POST",
@@ -55,6 +61,7 @@ async function getAcubeToken(): Promise<string> {
   if (!response.ok) {
     const errorText = await response.text();
     console.error("[A-Cube] Login failed:", response.status, errorText);
+    console.error("[A-Cube] Check your A-Cube account at https://developer.acubeapi.com/");
     throw new Error(`A-Cube login failed: ${response.status}`);
   }
 
