@@ -38,9 +38,9 @@ interface SuperAdminPermissions {
 
 // Demo account credentials - used for demo login buttons
 export const DEMO_ACCOUNTS = {
-  user: { email: 'demo.user@finexa.it', password: 'DemoUser2024!' },
-  admin: { email: 'demo.admin@finexa.it', password: 'DemoAdmin2024!' },
-  superAdmin: { email: 'demo.superadmin@finexa.it', password: 'DemoSuper2024!' },
+  user: { email: 'demo.user@finexa.it', password: 'Demo2024!' },
+  admin: { email: 'demo.admin@finexa.it', password: 'Demo2024!' },
+  superAdmin: { email: 'demo.superadmin@finexa.it', password: 'Demo2024!' },
 } as const;
 
 interface AuthContextType {
