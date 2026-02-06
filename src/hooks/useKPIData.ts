@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { startOfMonth, endOfMonth, subMonths, format, differenceInDays } from "date-fns";
+import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
 
 interface KPIData {
   id: string;
@@ -42,8 +42,8 @@ export function useKPIData() {
       // Get bank accounts for balance
       const { data: accounts } = await supabase
         .from("bank_accounts")
-        .select("current_balance")
-        .eq("status", "active");
+        .select("balance")
+        .eq("is_connected", true);
 
       // Get invoices for DSO calculation
       const { data: invoices } = await supabase
@@ -55,10 +55,10 @@ export function useKPIData() {
       const { data: deadlines } = await supabase
         .from("deadlines")
         .select("*")
-        .eq("type", "incasso")
+        .eq("deadline_type", "incasso")
         .eq("status", "pending");
 
-      const currentBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.current_balance) || 0), 0) || 0;
+      const currentBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0) || 0;
 
       // Current month calculations
       const currentMonthTx = transactions?.filter(tx => {

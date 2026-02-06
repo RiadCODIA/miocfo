@@ -16,18 +16,16 @@ export default function DashboardAdmin() {
 
   // Calculate stats
   const totalClients = companies?.length || 0;
-  const activeAlerts = alerts?.filter(a => a.status === 'active').length || 0;
-  const highPriorityAlerts = alerts?.filter(a => a.priority === 'high' && a.status === 'active').length || 0;
-  const totalRevenue = companies?.reduce((sum, c) => sum + Number(c.revenue || 0), 0) || 0;
-  const avgCashflow = companies?.length 
-    ? companies.reduce((sum, c) => sum + Number(c.cashflow || 0), 0) / companies.length 
-    : 0;
+  const activeAlerts = alerts?.filter(a => !a.isRead).length || 0;
+  const highPriorityAlerts = alerts?.filter(a => a.severity === 'error' && !a.isRead).length || 0;
+  const totalRevenue = 0; // Companies table doesn't have revenue field
+  const avgCashflow = 0; // Companies table doesn't have cashflow field
 
   // Get recent companies (last 4)
   const recentClients = companies?.slice(0, 4) || [];
   
   // Get recent active alerts
-  const recentAlerts = alerts?.filter(a => a.status === 'active').slice(0, 3) || [];
+  const recentAlerts = alerts?.filter(a => !a.isRead).slice(0, 3) || [];
 
   if (isLoading) {
     return (
@@ -176,17 +174,8 @@ export default function DashboardAdmin() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      {client.alerts_count > 0 && (
-                        <Badge variant="destructive" className="gap-1">
-                          <AlertTriangle className="h-3 w-3" />
-                          {client.alerts_count}
-                        </Badge>
-                      )}
-                      <Badge
-                        variant={client.status === "warning" ? "secondary" : "outline"}
-                        className={client.status === "warning" ? "bg-amber-500/10 text-amber-600 border-amber-500/30" : ""}
-                      >
-                        {client.status === "active" ? "Attivo" : client.status === "warning" ? "Attenzione" : client.status}
+                      <Badge variant={client.is_active ? "outline" : "secondary"}>
+                        {client.is_active ? "Attivo" : "Inattivo"}
                       </Badge>
                     </div>
                   </div>
@@ -221,19 +210,19 @@ export default function DashboardAdmin() {
                   <div 
                     key={alert.id}
                     className={`p-4 rounded-lg border ${
-                      alert.priority === 'high' 
+                      alert.severity === 'error' 
                         ? 'border-destructive/30 bg-destructive/5' 
                         : 'border-amber-500/30 bg-amber-500/5'
                     }`}
                   >
                     <div className="flex items-start gap-3">
                       <AlertTriangle className={`h-5 w-5 mt-0.5 ${
-                        alert.priority === 'high' ? 'text-destructive' : 'text-amber-500'
+                        alert.severity === 'error' ? 'text-destructive' : 'text-amber-500'
                       }`} />
                       <div className="flex-1">
                         <p className="font-medium text-foreground">{alert.title}</p>
                         <p className="text-sm text-muted-foreground">
-                          {alert.description || 'Nessuna descrizione'}
+                          {alert.message || 'Nessuna descrizione'}
                         </p>
                         <p className="text-xs text-muted-foreground mt-1">
                           {new Date(alert.createdAt || '').toLocaleString("it-IT")}

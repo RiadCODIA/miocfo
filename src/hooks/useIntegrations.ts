@@ -6,29 +6,25 @@ import type { Json } from "@/integrations/supabase/types";
 export interface IntegrationProvider {
   id: string;
   name: string;
-  provider_type: string;
-  status: string;
-  uptime: number;
-  error_rate: number;
-  rate_limit_hits: number;
-  last_sync_at: string | null;
+  type: string;
+  description: string | null;
+  isActive: boolean;
   config: Json;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface SyncJob {
   id: string;
-  company_id: string | null;
-  provider_id: string | null;
+  userId: string | null;
+  jobType: string;
+  provider: string;
   status: string;
-  records_processed: number;
-  duration_ms: number | null;
-  started_at: string | null;
-  completed_at: string | null;
-  error_message: string | null;
-  stack_trace: string | null;
-  created_at: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  errorMessage: string | null;
+  metadata: Json;
+  createdAt: string;
 }
 
 export function useIntegrationProviders() {
@@ -41,7 +37,17 @@ export function useIntegrationProviders() {
         .order("name", { ascending: true });
 
       if (error) throw error;
-      return data as IntegrationProvider[];
+      
+      return (data || []).map(provider => ({
+        id: provider.id,
+        name: provider.name,
+        type: provider.type,
+        description: provider.description,
+        isActive: provider.is_active ?? true,
+        config: provider.config,
+        createdAt: provider.created_at,
+        updatedAt: provider.updated_at,
+      })) as IntegrationProvider[];
     },
   });
 }
@@ -57,24 +63,38 @@ export function useSyncJobs(limit = 20) {
         .limit(limit);
 
       if (error) throw error;
-      return data as SyncJob[];
+      
+      return (data || []).map(job => ({
+        id: job.id,
+        userId: job.user_id,
+        jobType: job.job_type,
+        provider: job.provider,
+        status: job.status ?? 'pending',
+        startedAt: job.started_at,
+        completedAt: job.completed_at,
+        errorMessage: job.error_message,
+        metadata: job.metadata,
+        createdAt: job.created_at,
+      })) as SyncJob[];
     },
   });
 }
-
-type ProviderUpdate = Partial<Omit<IntegrationProvider, "config">> & { 
-  id: string; 
-  config?: Json;
-};
 
 export function useUpdateProvider() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, ...updates }: ProviderUpdate) => {
+    mutationFn: async ({ id, ...updates }: Partial<IntegrationProvider> & { id: string }) => {
+      const updateData: Record<string, unknown> = {};
+      if (updates.name !== undefined) updateData.name = updates.name;
+      if (updates.type !== undefined) updateData.type = updates.type;
+      if (updates.description !== undefined) updateData.description = updates.description;
+      if (updates.isActive !== undefined) updateData.is_active = updates.isActive;
+      if (updates.config !== undefined) updateData.config = updates.config;
+
       const { data, error } = await supabase
         .from("integration_providers")
-        .update(updates)
+        .update(updateData)
         .eq("id", id)
         .select()
         .single();
@@ -96,10 +116,16 @@ export function useCreateSyncJob() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (job: Omit<SyncJob, "id" | "created_at">) => {
+    mutationFn: async (job: { jobType: string; provider: string; userId?: string; metadata?: Json }) => {
       const { data, error } = await supabase
         .from("sync_jobs")
-        .insert(job)
+        .insert({
+          job_type: job.jobType,
+          provider: job.provider,
+          user_id: job.userId,
+          metadata: job.metadata,
+          status: 'pending',
+        })
         .select()
         .single();
 

@@ -45,8 +45,7 @@ export default function BudgetPrevisioni() {
         if (values.income !== undefined || values.expenses !== undefined) {
           await updateBudget.mutateAsync({
             id,
-            predictedIncome: values.income,
-            predictedExpenses: values.expenses,
+            amount: values.income || values.expenses,
           });
         }
       }
@@ -125,11 +124,8 @@ export default function BudgetPrevisioni() {
               </TableRow>
             ) : (
               budgets?.map((row, index) => {
-                const editedIncome = editedValues[row.id]?.income;
-                const editedExpenses = editedValues[row.id]?.expenses;
-                const displayIncome = editedIncome ?? row.predictedIncome;
-                const displayExpenses = editedExpenses ?? row.predictedExpenses;
-                const cashflow = displayIncome - displayExpenses;
+                const editedAmount = editedValues[row.id]?.income || editedValues[row.id]?.expenses;
+                const displayAmount = editedAmount ?? row.amount;
 
                 return (
                   <TableRow
@@ -137,28 +133,21 @@ export default function BudgetPrevisioni() {
                     className="border-border hover:bg-secondary/50 opacity-0 animate-fade-in"
                     style={{ animationDelay: `${200 + index * 50}ms` }}
                   >
-                    <TableCell className="font-medium capitalize">{row.monthLabel}</TableCell>
+                    <TableCell className="font-medium">{row.name}</TableCell>
                     <TableCell className="text-right">
                       <Input
                         type="text"
-                        defaultValue={formatCurrency(row.predictedIncome)}
+                        defaultValue={formatCurrency(row.amount)}
                         onChange={(e) => handleInputChange(row.id, "income", e.target.value)}
                         className="w-[120px] ml-auto text-right bg-transparent border-transparent hover:border-border focus:border-primary h-8"
                       />
                     </TableCell>
-                    <TableCell className="text-right">
-                      <Input
-                        type="text"
-                        defaultValue={formatCurrency(row.predictedExpenses)}
-                        onChange={(e) => handleInputChange(row.id, "expenses", e.target.value)}
-                        className="w-[120px] ml-auto text-right bg-transparent border-transparent hover:border-border focus:border-primary h-8"
-                      />
-                    </TableCell>
+                    <TableCell className="text-right">-</TableCell>
                     <TableCell className={cn(
                       "text-right font-semibold",
-                      cashflow >= 0 ? "text-success" : "text-destructive"
+                      displayAmount >= 0 ? "text-success" : "text-destructive"
                     )}>
-                      {cashflow >= 0 ? "+" : ""}{formatCurrency(cashflow)}
+                      {displayAmount >= 0 ? "+" : ""}{formatCurrency(displayAmount)}
                     </TableCell>
                   </TableRow>
                 );

@@ -51,12 +51,12 @@ export function useDashboardKPIs() {
       // Fetch total balance from bank accounts
       const { data: accounts, error: accountsError } = await supabase
         .from("bank_accounts")
-        .select("current_balance")
-        .eq("status", "active");
+        .select("balance")
+        .eq("is_connected", true);
 
       if (accountsError) throw accountsError;
 
-      const totalBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.current_balance) || 0), 0) || 0;
+      const totalBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0) || 0;
 
       // Fetch current period transactions
       const { data: currentTx, error: currentTxError } = await supabase
@@ -130,12 +130,12 @@ export function useLiquidityChart() {
       // Fetch current balance
       const { data: accounts, error: accountsError } = await supabase
         .from("bank_accounts")
-        .select("current_balance")
-        .eq("status", "active");
+        .select("balance")
+        .eq("is_connected", true);
 
       if (accountsError) throw accountsError;
 
-      const currentBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.current_balance) || 0), 0) || 0;
+      const currentBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0) || 0;
 
       // Calculate running balance backwards from current
       const days = eachDayOfInterval({ start: thirtyDaysAgo, end: latestDate });

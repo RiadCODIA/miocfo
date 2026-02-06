@@ -1,20 +1,22 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import type { Json } from "@/integrations/supabase/types";
 
 export interface SubscriptionPlan {
   id: string;
   name: string;
-  price: number;
-  billing_cycle: string;
-  status: string;
-  max_users: number;
-  max_bank_accounts: number;
-  max_transactions_month: number;
-  ai_features_enabled: boolean;
-  features: string[];
-  created_at: string;
-  updated_at: string;
+  description: string | null;
+  priceMonthly: number;
+  priceYearly: number | null;
+  features: Json;
+  maxUsers: number | null;
+  maxBankAccounts: number | null;
+  maxInvoicesMonthly: number | null;
+  isActive: boolean;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export function useSubscriptionPlans() {
@@ -24,10 +26,25 @@ export function useSubscriptionPlans() {
       const { data, error } = await supabase
         .from("subscription_plans")
         .select("*")
-        .order("price", { ascending: true });
+        .order("sort_order", { ascending: true });
 
       if (error) throw error;
-      return data as SubscriptionPlan[];
+      
+      return (data || []).map(plan => ({
+        id: plan.id,
+        name: plan.name,
+        description: plan.description,
+        priceMonthly: plan.price_monthly,
+        priceYearly: plan.price_yearly,
+        features: plan.features,
+        maxUsers: plan.max_users,
+        maxBankAccounts: plan.max_bank_accounts,
+        maxInvoicesMonthly: plan.max_invoices_monthly,
+        isActive: plan.is_active ?? true,
+        sortOrder: plan.sort_order ?? 0,
+        createdAt: plan.created_at,
+        updatedAt: plan.updated_at,
+      })) as SubscriptionPlan[];
     },
   });
 }
@@ -36,7 +53,18 @@ export function useCreatePlan() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (plan: Omit<SubscriptionPlan, "id" | "created_at" | "updated_at">) => {
+    mutationFn: async (plan: { 
+      name: string; 
+      description?: string;
+      price_monthly: number; 
+      price_yearly?: number;
+      features?: Json;
+      max_users?: number;
+      max_bank_accounts?: number;
+      max_invoices_monthly?: number;
+      is_active?: boolean;
+      sort_order?: number;
+    }) => {
       const { data, error } = await supabase
         .from("subscription_plans")
         .insert(plan)
@@ -60,7 +88,18 @@ export function useUpdatePlan() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, ...updates }: Partial<SubscriptionPlan> & { id: string }) => {
+    mutationFn: async ({ id, ...updates }: { id: string } & Partial<{
+      name: string;
+      description: string;
+      price_monthly: number;
+      price_yearly: number;
+      features: Json;
+      max_users: number;
+      max_bank_accounts: number;
+      max_invoices_monthly: number;
+      is_active: boolean;
+      sort_order: number;
+    }>) => {
       const { data, error } = await supabase
         .from("subscription_plans")
         .update(updates)

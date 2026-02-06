@@ -5,29 +5,21 @@ import { useAuth } from "@/contexts/AuthContext";
 export interface NotificationPreferences {
   id: string;
   userId: string;
-  emailNotifications: boolean;
-  pushNotifications: boolean;
-  criticalAlerts: boolean;
-  weeklyReports: boolean;
-  notifyLiquidity: boolean;
-  notifyDeadlines: boolean;
-  notifyBudget: boolean;
-  notifyCashflow: boolean;
-  notificationEmail: string | null;
+  emailAlerts: boolean;
+  pushAlerts: boolean;
+  budgetAlerts: boolean;
+  deadlineReminders: boolean;
+  weeklySummary: boolean;
   createdAt: string;
   updatedAt: string;
 }
 
 const defaultPreferences = {
-  emailNotifications: true,
-  pushNotifications: true,
-  criticalAlerts: true,
-  weeklyReports: false,
-  notifyLiquidity: true,
-  notifyDeadlines: true,
-  notifyBudget: true,
-  notifyCashflow: true,
-  notificationEmail: null,
+  emailAlerts: true,
+  pushAlerts: true,
+  budgetAlerts: true,
+  deadlineReminders: true,
+  weeklySummary: false,
 };
 
 export function useNotificationPreferences() {
@@ -60,15 +52,11 @@ export function useNotificationPreferences() {
       return {
         id: data.id,
         userId: data.user_id,
-        emailNotifications: data.email_notifications,
-        pushNotifications: data.push_notifications,
-        criticalAlerts: data.critical_alerts,
-        weeklyReports: data.weekly_reports,
-        notifyLiquidity: data.notify_liquidity,
-        notifyDeadlines: data.notify_deadlines,
-        notifyBudget: data.notify_budget,
-        notifyCashflow: data.notify_cashflow,
-        notificationEmail: data.notification_email,
+        emailAlerts: data.email_alerts ?? true,
+        pushAlerts: data.push_alerts ?? true,
+        budgetAlerts: data.budget_alerts ?? true,
+        deadlineReminders: data.deadline_reminders ?? true,
+        weeklySummary: data.weekly_summary ?? false,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       };
@@ -85,24 +73,17 @@ export function useUpdateNotificationPreferences() {
     mutationFn: async (preferences: Partial<Omit<NotificationPreferences, "id" | "userId" | "createdAt" | "updatedAt">>) => {
       if (!user?.id) throw new Error("User not authenticated");
 
-      const updateData = {
-        user_id: user.id,
-        email_notifications: preferences.emailNotifications,
-        push_notifications: preferences.pushNotifications,
-        critical_alerts: preferences.criticalAlerts,
-        weekly_reports: preferences.weeklyReports,
-        notify_liquidity: preferences.notifyLiquidity,
-        notify_deadlines: preferences.notifyDeadlines,
-        notify_budget: preferences.notifyBudget,
-        notify_cashflow: preferences.notifyCashflow,
-        notification_email: preferences.notificationEmail,
-        updated_at: new Date().toISOString(),
-      };
-
-      // Upsert - insert if not exists, update if exists
       const { data, error } = await supabase
         .from("notification_preferences")
-        .upsert(updateData, { onConflict: "user_id" })
+        .upsert({
+          user_id: user.id,
+          email_alerts: preferences.emailAlerts,
+          push_alerts: preferences.pushAlerts,
+          budget_alerts: preferences.budgetAlerts,
+          deadline_reminders: preferences.deadlineReminders,
+          weekly_summary: preferences.weeklySummary,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: "user_id" })
         .select()
         .single();
 

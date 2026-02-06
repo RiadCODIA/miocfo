@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 
 export interface Alert {
   id: string;
-  type: "warning" | "info" | "success" | "error";
+  type: string;
   title: string;
   message: string | null;
   severity: string;
@@ -40,16 +40,16 @@ export function useAlerts(options: UseAlertsOptions = {}) {
 
       if (error) throw error;
 
-      return data?.map((alert) => ({
+      return (data || []).map((alert) => ({
         id: alert.id,
-        type: alert.type as Alert["type"],
+        type: alert.type,
         title: alert.title,
         message: alert.message,
-        severity: alert.severity,
-        isRead: alert.is_read,
+        severity: alert.severity ?? 'info',
+        isRead: alert.is_read ?? false,
         actionUrl: alert.action_url,
         createdAt: alert.created_at,
-      })) || [];
+      }));
     },
   });
 }

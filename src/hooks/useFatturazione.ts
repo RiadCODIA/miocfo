@@ -51,7 +51,7 @@ export function useAllTransactions(filters: TransactionFilters = {}) {
         .select(`
           id,
           date,
-          name,
+          description,
           amount,
           category,
           bank_account_id,
@@ -75,7 +75,7 @@ export function useAllTransactions(filters: TransactionFilters = {}) {
 
       // Apply search filter
       if (search) {
-        query = query.ilike("name", `%${search}%`);
+        query = query.ilike("description", `%${search}%`);
       }
 
       // Apply pagination
@@ -91,9 +91,9 @@ export function useAllTransactions(filters: TransactionFilters = {}) {
       const transactions: TransactionWithBank[] = (data || []).map((t: any) => ({
         id: t.id,
         date: t.date,
-        name: t.name,
+        name: t.description || "",
         amount: t.amount,
-        category: t.category,
+        category: t.category ? [t.category] : null,
         bank_account_id: t.bank_account_id,
         bank_name: t.bank_accounts?.bank_name || "N/A",
       }));
@@ -147,7 +147,7 @@ export function useBankAccountsList() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("bank_accounts")
-        .select("id, bank_name, account_name")
+        .select("id, bank_name, name")
         .order("bank_name");
 
       if (error) throw error;

@@ -309,7 +309,7 @@ export function usePlanDistribution() {
       const { data: plans } = await supabase
         .from("subscription_plans")
         .select("id, name")
-        .eq("status", "active");
+        .eq("is_active", true);
 
       if (!plans || plans.length === 0) {
         return [];

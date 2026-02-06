@@ -52,15 +52,15 @@ export default function Impostazioni() {
   // Load preferences when data is available
   useEffect(() => {
     if (preferences) {
-      setEmailNotifiche(preferences.emailNotifications);
-      setPushNotifiche(preferences.pushNotifications);
-      setAlertCritici(preferences.criticalAlerts);
-      setReportSettimanali(preferences.weeklyReports);
-      setNotifyLiquidity(preferences.notifyLiquidity);
-      setNotifyDeadlines(preferences.notifyDeadlines);
-      setNotifyBudget(preferences.notifyBudget);
-      setNotifyCashflow(preferences.notifyCashflow);
-      setNotificationEmail(preferences.notificationEmail || "");
+      setEmailNotifiche(preferences.emailAlerts);
+      setPushNotifiche(preferences.pushAlerts);
+      setAlertCritici(preferences.budgetAlerts);
+      setReportSettimanali(preferences.weeklySummary);
+      setNotifyLiquidity(preferences.budgetAlerts);
+      setNotifyDeadlines(preferences.deadlineReminders);
+      setNotifyBudget(preferences.budgetAlerts);
+      setNotifyCashflow(preferences.budgetAlerts);
+      setNotificationEmail("");
     }
   }, [preferences]);
 
@@ -93,15 +93,11 @@ export default function Impostazioni() {
   const handleSave = async () => {
     try {
       await updatePreferences.mutateAsync({
-        emailNotifications: emailNotifiche,
-        pushNotifications: pushNotifiche,
-        criticalAlerts: alertCritici,
-        weeklyReports: reportSettimanali,
-        notifyLiquidity,
-        notifyDeadlines,
-        notifyBudget,
-        notifyCashflow,
-        notificationEmail: notificationEmail || null,
+        emailAlerts: emailNotifiche,
+        pushAlerts: pushNotifiche,
+        budgetAlerts: notifyBudget,
+        deadlineReminders: notifyDeadlines,
+        weeklySummary: reportSettimanali,
       });
       toast.success("Preferenze salvate con successo");
     } catch (error) {
