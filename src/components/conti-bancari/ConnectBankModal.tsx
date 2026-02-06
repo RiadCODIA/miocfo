@@ -92,14 +92,12 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       return;
     }
 
-    // Block demo users
+    // Show warning for demo users but allow sandbox testing
     if (isDemoMode) {
       toast({
-        title: "Modalità Demo",
-        description: "Per collegare un conto bancario reale, effettua il login con email e password.",
-        variant: "destructive",
+        title: "Modalità Demo - Ambiente Sandbox",
+        description: "Stai testando con l'ambiente sandbox A-Cube. Nessun dato bancario reale verrà utilizzato.",
       });
-      return;
     }
 
     setStep("ready");
@@ -162,6 +160,13 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
         {/* Fiscal ID Input */}
         {step === "enter_fiscal_id" && (
           <div className="space-y-6 py-4">
+            {isDemoMode && (
+              <div className="flex items-center justify-center">
+                <span className="px-3 py-1 text-xs font-medium bg-warning/20 text-warning-foreground border border-warning rounded-full">
+                  🧪 SANDBOX / TEST
+                </span>
+              </div>
+            )}
             <div className="flex items-center justify-center">
               <div className="h-16 w-16 rounded-xl bg-primary/10 flex items-center justify-center">
                 <Building2 className="h-8 w-8 text-primary" />
