@@ -5,14 +5,14 @@ export default function Privacy() {
     <LegalPageLayout title="Privacy Policy" lastUpdated="Gennaio 2026">
       <LegalSection title="1. Titolare del Trattamento">
         <p>
-          Il Titolare del trattamento dei dati personali è Finexa S.r.l., con sede legale in Italia. 
+          Il Titolare del trattamento dei dati personali è mioCFO S.r.l., con sede legale in Italia. 
           Per qualsiasi richiesta relativa al trattamento dei dati personali, è possibile contattarci 
-          all'indirizzo email: <a href="mailto:privacy@finexa.it" className="text-primary hover:underline">privacy@finexa.it</a>
+          all'indirizzo email: <a href="mailto:privacy@miocfo.it" className="text-primary hover:underline">privacy@miocfo.it</a>
         </p>
       </LegalSection>
 
       <LegalSection title="2. Tipologie di Dati Raccolti">
-        <p>Finexa raccoglie le seguenti categorie di dati personali:</p>
+        <p>mioCFO raccoglie le seguenti categorie di dati personali:</p>
         <ul className="list-disc pl-6 space-y-2 mt-3">
           <li><strong>Dati di registrazione:</strong> nome, cognome, indirizzo email, password (criptata)</li>
           <li><strong>Dati aziendali:</strong> ragione sociale, partita IVA, settore di attività</li>
@@ -79,7 +79,7 @@ export default function Privacy() {
         </ul>
         <p className="mt-3">
           Per esercitare questi diritti, contattaci all'indirizzo{" "}
-          <a href="mailto:privacy@finexa.it" className="text-primary hover:underline">privacy@finexa.it</a>.
+          <a href="mailto:privacy@miocfo.it" className="text-primary hover:underline">privacy@miocfo.it</a>.
         </p>
       </LegalSection>
 
@@ -123,8 +123,8 @@ export default function Privacy() {
           puoi contattarci:
         </p>
         <ul className="list-disc pl-6 space-y-2 mt-3">
-          <li>Email: <a href="mailto:privacy@finexa.it" className="text-primary hover:underline">privacy@finexa.it</a></li>
-          <li>Email generale: <a href="mailto:info@finexa.it" className="text-primary hover:underline">info@finexa.it</a></li>
+          <li>Email: <a href="mailto:privacy@miocfo.it" className="text-primary hover:underline">privacy@miocfo.it</a></li>
+          <li>Email generale: <a href="mailto:info@miocfo.it" className="text-primary hover:underline">info@miocfo.it</a></li>
         </ul>
         <p className="mt-3">
           Hai inoltre il diritto di presentare un reclamo all'Autorità Garante per la Protezione dei 

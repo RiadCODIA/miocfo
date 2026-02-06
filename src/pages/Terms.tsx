@@ -5,7 +5,7 @@ export default function Terms() {
     <LegalPageLayout title="Termini di Servizio" lastUpdated="Gennaio 2026">
       <LegalSection title="1. Accettazione dei Termini">
         <p>
-          Utilizzando la piattaforma Finexa, accetti di essere vincolato dai presenti Termini di Servizio. 
+          Utilizzando la piattaforma mioCFO, accetti di essere vincolato dai presenti Termini di Servizio. 
           Se non accetti questi termini, ti preghiamo di non utilizzare i nostri servizi.
         </p>
         <p>
@@ -17,7 +17,7 @@ export default function Terms() {
 
       <LegalSection title="2. Descrizione del Servizio">
         <p>
-          Finexa è una piattaforma di gestione finanziaria per piccole e medie imprese che offre:
+          mioCFO è una piattaforma di gestione finanziaria per piccole e medie imprese che offre:
         </p>
         <ul className="list-disc pl-6 space-y-2 mt-3">
           <li>Dashboard con indicatori finanziari in tempo reale (KPI)</li>
@@ -32,7 +32,7 @@ export default function Terms() {
 
       <LegalSection title="3. Registrazione e Account">
         <p>
-          Per utilizzare Finexa, devi creare un account fornendo informazioni accurate e complete. 
+          Per utilizzare mioCFO, devi creare un account fornendo informazioni accurate e complete. 
           Sei responsabile di:
         </p>
         <ul className="list-disc pl-6 space-y-2 mt-3">
@@ -48,7 +48,7 @@ export default function Terms() {
       </LegalSection>
 
       <LegalSection title="4. Obblighi dell'Utente">
-        <p>Utilizzando Finexa, ti impegni a:</p>
+        <p>Utilizzando mioCFO, ti impegni a:</p>
         <ul className="list-disc pl-6 space-y-2 mt-3">
           <li>Utilizzare il servizio solo per finalità lecite e conformi alla legge</li>
           <li>Non tentare di accedere a sistemi o dati non autorizzati</li>
@@ -61,13 +61,13 @@ export default function Terms() {
 
       <LegalSection title="5. Collegamento Conti Bancari (Enable Banking)">
         <p>
-          Finexa utilizza i servizi di <strong>Enable Banking</strong>, un fornitore di servizi di 
+          mioCFO utilizza i servizi di <strong>Enable Banking</strong>, un fornitore di servizi di 
           Open Banking regolamentato ai sensi della direttiva PSD2, per permetterti di collegare 
           i tuoi conti bancari alla piattaforma.
         </p>
         <p className="mt-3">
           Collegando un conto bancario, autorizzi Enable Banking ad accedere alle informazioni del 
-          tuo conto (saldi, transazioni) e a condividerle con Finexa per le finalità del servizio.
+          tuo conto (saldi, transazioni) e a condividerle con mioCFO per le finalità del servizio.
         </p>
         <ul className="list-disc pl-6 space-y-2 mt-3">
           <li>Il consenso può essere revocato in qualsiasi momento disconnettendo il conto</li>
@@ -79,7 +79,7 @@ export default function Terms() {
 
       <LegalSection title="6. Proprietà Intellettuale">
         <p>
-          Tutti i contenuti presenti sulla piattaforma Finexa, inclusi ma non limitati a:
+          Tutti i contenuti presenti sulla piattaforma mioCFO, inclusi ma non limitati a:
         </p>
         <ul className="list-disc pl-6 space-y-2 mt-3">
           <li>Software, codice sorgente e algoritmi</li>
@@ -88,7 +88,7 @@ export default function Terms() {
           <li>Marchi, loghi e nomi commerciali</li>
         </ul>
         <p className="mt-3">
-          sono di proprietà esclusiva di Finexa S.r.l. o dei rispettivi licenziatari e sono 
+          sono di proprietà esclusiva di mioCFO S.r.l. o dei rispettivi licenziatari e sono 
           protetti dalle leggi sulla proprietà intellettuale.
         </p>
         <p className="mt-3">
@@ -105,7 +105,7 @@ export default function Terms() {
         </p>
         <p className="mt-3">
           <strong>Limitazione di responsabilità:</strong> Nella misura massima consentita dalla legge, 
-          Finexa non sarà responsabile per:
+          mioCFO non sarà responsabile per:
         </p>
         <ul className="list-disc pl-6 space-y-2 mt-3">
           <li>Danni indiretti, incidentali, speciali o consequenziali</li>
@@ -115,7 +115,7 @@ export default function Terms() {
           <li>Azioni di terze parti, inclusi i fornitori di servizi bancari</li>
         </ul>
         <p className="mt-3">
-          <strong>Avvertenza:</strong> Le informazioni fornite da Finexa hanno scopo informativo 
+          <strong>Avvertenza:</strong> Le informazioni fornite da mioCFO hanno scopo informativo 
           e non costituiscono consulenza finanziaria, fiscale o legale professionale.
         </p>
       </LegalSection>
@@ -161,7 +161,7 @@ export default function Terms() {
       <LegalSection title="11. Legge Applicabile e Foro Competente">
         <p>
           Questi Termini di Servizio sono regolati dalla legge italiana. Per qualsiasi controversia 
-          derivante dall'utilizzo dei servizi Finexa, sarà competente in via esclusiva il Foro del 
+          derivante dall'utilizzo dei servizi mioCFO, sarà competente in via esclusiva il Foro del 
           luogo di residenza o domicilio del consumatore, se applicabile, o in alternativa il 
           Foro di Milano.
         </p>
@@ -172,8 +172,8 @@ export default function Terms() {
           Per qualsiasi domanda relativa a questi Termini di Servizio, puoi contattarci:
         </p>
         <ul className="list-disc pl-6 space-y-2 mt-3">
-          <li>Email: <a href="mailto:legal@finexa.it" className="text-primary hover:underline">legal@finexa.it</a></li>
-          <li>Email generale: <a href="mailto:info@finexa.it" className="text-primary hover:underline">info@finexa.it</a></li>
+          <li>Email: <a href="mailto:legal@miocfo.it" className="text-primary hover:underline">legal@miocfo.it</a></li>
+          <li>Email generale: <a href="mailto:info@miocfo.it" className="text-primary hover:underline">info@miocfo.it</a></li>
         </ul>
       </LegalSection>
     </LegalPageLayout>

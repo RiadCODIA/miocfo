@@ -9,7 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { z } from "zod";
-import finexaLogo from "@/assets/finexa-logo.png";
+import miocfoLogo from "@/assets/miocfo-logo.png";
 import { Eye, EyeOff, Mail, Lock, User, Building2, FlaskConical, ShieldCheck, Crown } from "lucide-react";
 
 const loginSchema = z.object({
@@ -217,10 +217,10 @@ export default function Auth() {
       <Card className="w-full max-w-md relative backdrop-blur-sm bg-card/95 border-border/50 shadow-2xl">
         <CardHeader className="text-center pb-2">
           <div className="flex justify-center mb-4">
-            <img src={finexaLogo} alt="Finexa" className="h-10 w-auto" />
+            <img src={miocfoLogo} alt="mioCFO" className="h-10 w-auto" />
           </div>
           <CardTitle className="text-2xl font-bold bg-gradient-to-r from-primary to-primary/70 bg-clip-text text-transparent">
-            Benvenuto in Finexa
+            Benvenuto in mioCFO
           </CardTitle>
           <CardDescription className="text-muted-foreground">
             La tua piattaforma di gestione finanziaria

@@ -11,7 +11,7 @@ export default function Cookies() {
           di riconoscerti e ricordare le tue preferenze durante la navigazione.
         </p>
         <p className="mt-3">
-          Finexa utilizza i cookie per garantire il corretto funzionamento della piattaforma, 
+          mioCFO utilizza i cookie per garantire il corretto funzionamento della piattaforma, 
           migliorare l'esperienza utente e analizzare l'utilizzo del servizio.
         </p>
       </LegalSection>
@@ -61,7 +61,7 @@ export default function Cookies() {
 
       <LegalSection title="3. Cookie di Terze Parti">
         <p>
-          La piattaforma Finexa può utilizzare servizi di terze parti che installano propri cookie:
+          La piattaforma mioCFO può utilizzare servizi di terze parti che installano propri cookie:
         </p>
         <ul className="list-disc pl-6 space-y-2 mt-3">
           <li>
@@ -134,7 +134,7 @@ export default function Cookies() {
         <h4 className="font-semibold text-foreground mt-4 mb-2">Conseguenze della Disattivazione</h4>
         <p>
           Tieni presente che disattivare i cookie tecnici potrebbe compromettere il funzionamento 
-          della piattaforma Finexa. In particolare:
+          della piattaforma mioCFO. In particolare:
         </p>
         <ul className="list-disc pl-6 space-y-1 mt-2">
           <li>Potresti non riuscire ad effettuare il login</li>
@@ -153,11 +153,11 @@ export default function Cookies() {
 
       <LegalSection title="7. Contatti">
         <p>
-          Per qualsiasi domanda relativa all'utilizzo dei cookie su Finexa, puoi contattarci:
+          Per qualsiasi domanda relativa all'utilizzo dei cookie su mioCFO, puoi contattarci:
         </p>
         <ul className="list-disc pl-6 space-y-2 mt-3">
-          <li>Email: <a href="mailto:privacy@finexa.it" className="text-primary hover:underline">privacy@finexa.it</a></li>
-          <li>Email generale: <a href="mailto:info@finexa.it" className="text-primary hover:underline">info@finexa.it</a></li>
+          <li>Email: <a href="mailto:privacy@miocfo.it" className="text-primary hover:underline">privacy@miocfo.it</a></li>
+          <li>Email generale: <a href="mailto:info@miocfo.it" className="text-primary hover:underline">info@miocfo.it</a></li>
         </ul>
       </LegalSection>
     </LegalPageLayout>

@@ -13,7 +13,7 @@ export function CTASection() {
             </h2>
 
             <p className="text-base text-primary-foreground/80 mb-8 max-w-lg mx-auto font-normal">
-              Unisciti a centinaia di PMI che hanno già scelto Finexa per 
+              Unisciti a centinaia di PMI che hanno già scelto mioCFO per 
               semplificare e ottimizzare le proprie finanze.
             </p>
 
