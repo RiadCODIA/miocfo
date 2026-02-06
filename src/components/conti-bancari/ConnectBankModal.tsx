@@ -31,9 +31,10 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   const { isDemoMode } = useAuth();
   const { toast } = useToast();
 
-  // Generate redirect URI
-  const getRedirectUri = useCallback(() => {
-    return `${window.location.origin}/conti-bancari`;
+  // Generate redirect URI with fiscalId so we can complete the connection after redirect
+  const getRedirectUri = useCallback((fiscalIdParam: string) => {
+    // Include fiscalId and success flag so we can detect the callback
+    return `${window.location.origin}/conti-bancari?fiscalId=${encodeURIComponent(fiscalIdParam)}&success=true`;
   }, []);
 
   // Handle A-Cube callback (check for fiscal_id in URL params after redirect)
@@ -103,7 +104,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     setStep("ready");
     try {
       const cleanedFiscalId = fiscalId.replace(/\s/g, "").toUpperCase();
-      const data = await createConnectRequest(getRedirectUri(), cleanedFiscalId);
+      const data = await createConnectRequest(getRedirectUri(cleanedFiscalId), cleanedFiscalId);
       setConnectUrl(data.connect_url);
     } catch (error) {
       console.error("Failed to create connect request:", error);
