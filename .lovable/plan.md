@@ -1,31 +1,35 @@
 
-# Replace Logo with New mioCFO Design
+# Update Demo Account Emails in Supabase
 
 ## Summary
-Replace the current placeholder logo file with the new mioCFO logo image provided by the user.
 
-## Changes Required
+The code has already been updated to use `@miocfo.it` email addresses, but the actual demo user accounts in Supabase Auth still have the old `@finexa.it` emails. These need to be updated in the Supabase dashboard.
 
-### 1. Copy New Logo to Project Assets
-Copy the uploaded image to replace the existing logo file:
-- Source: `user-uploads://image-2.png`
-- Destination: `src/assets/miocfo-logo.png`
+## Current State
 
-### 2. Icon Version for Collapsed Sidebar
-The codebase also uses `miocfo-logo-icon.png` for the collapsed sidebar state. I'll use the same logo for now - you can provide a separate icon-only version (just the "CO" symbol) later if desired.
+- **Code**: Already updated to `@miocfo.it` in `AuthContext.tsx`
+- **Supabase Auth**: Still using `@finexa.it` emails
 
-## Files Affected
+## Required Action
 
-| File | Change |
-|------|--------|
-| src/assets/miocfo-logo.png | Replace with new logo |
-| src/assets/miocfo-logo-icon.png | Replace with new logo (same file for now) |
+You need to update the demo account emails directly in the Supabase Auth dashboard:
 
-## No Code Changes Required
-The import statements already reference these filenames, so only the image files need to be replaced.
+| Current Email | New Email |
+|--------------|-----------|
+| demo.user@finexa.it | demo.user@miocfo.it |
+| demo.admin@finexa.it | demo.admin@miocfo.it |
+| demo.superadmin@finexa.it | demo.superadmin@miocfo.it |
 
-## Where the Logo Appears
-- Landing page header (LandingHeader.tsx)
-- Landing page footer (LandingFooter.tsx)
-- Auth page (Auth.tsx)
-- App sidebar (Sidebar.tsx)
+## How to Update
+
+1. Go to the [Supabase Users Dashboard](https://supabase.com/dashboard/project/yzhonmuhywdiqaxxbnsj/auth/users)
+2. For each demo account:
+   - Click on the user row
+   - Click "Edit user" 
+   - Update the email address to the new `@miocfo.it` domain
+   - Save changes
+3. The demo login buttons will then work with the new email addresses
+
+## Note
+
+The migration file `20260206142007_e3dfdb9c-efd2-4c28-aa60-2ab60676f7b5.sql` contains comments with the old email addresses, but these are just documentation and don't affect functionality - no code change is needed there.
