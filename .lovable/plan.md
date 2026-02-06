@@ -1,155 +1,76 @@
 
 
-# Migrate from Enable Banking to A-Cube Open Banking API
+## Obiettivo
+Permettere agli utenti demo di testare il flusso di connessione bancaria A-Cube in modalita sandbox, mantenendo il blocco per le connessioni reali.
 
-## Summary
-Replace the Enable Banking integration with A-Cube's Open Banking API for PSD2-compliant bank account aggregation. A-Cube is an Italian fintech provider offering a simpler REST API with email/password authentication (JWT-based) compared to Enable Banking's RSA key-pair authentication.
+## Problema Attuale
+Il codice blocca completamente gli utenti demo dal collegare conti bancari. Questo e corretto per l'ambiente di produzione, ma impedisce il testing del flusso A-Cube in sandbox.
 
-## Key Differences Between Providers
+## Soluzione Proposta
+Modificare la logica per permettere agli utenti demo di utilizzare l'ambiente sandbox di A-Cube, mostrando un avviso che si tratta di dati di test.
 
-| Aspect | Enable Banking | A-Cube |
-|--------|---------------|--------|
-| Base URL | `api.enablebanking.com` | `ob.api.acubeapi.com` (production) / `ob-sandbox.api.acubeapi.com` (sandbox) |
-| Auth | RSA key-pair JWT signing | Email/password login for JWT token |
-| Connection Flow | Direct redirect to bank | Business Registry + Connect Request flow |
-| Account Model | User-centric | Business Registry (fiscalId) centric |
-| Webhook Support | No | Yes (connect, reconnect, payment events) |
+### Modifiche da Apportare
 
-## Architecture Changes
+#### 1. ConnectBankModal.tsx
+Modificare la logica di blocco demo per mostrare un avviso invece di bloccare completamente:
 
-### Current Enable Banking Flow
 ```text
-User -> Select Bank -> createSession() -> Bank Redirect -> OAuth Callback -> completeSession() -> Save Accounts
-```
-
-### New A-Cube Flow
-```text
-1. Login to A-Cube API (email/password) -> Get JWT Token
-2. Create/Get Business Registry (fiscalId = user's VAT/Tax ID)
-3. POST /business-registry/{fiscalId}/connect -> Get redirect URL
-4. User completes bank consent in mini-portal
-5. Webhook receives "connect" event OR poll for accounts
-6. GET /business-registry/{fiscalId}/accounts -> List accounts
-7. GET /business-registry/{fiscalId}/transactions -> Get transactions
-```
-
-## Implementation Plan
-
-### Phase 1: Configuration and Secrets
-
-#### Required Secrets (to be added via Supabase dashboard)
-| Secret Name | Description | Where to Get |
-|-------------|-------------|--------------|
-| `ACUBE_EMAIL` | A-Cube platform login email | A-Cube account registration |
-| `ACUBE_PASSWORD` | A-Cube platform login password | A-Cube account registration |
-| `ACUBE_ENV` | Environment: `sandbox` or `production` | Based on deployment stage |
-
-#### Optional Secrets (for webhook verification)
-| Secret Name | Description |
-|-------------|-------------|
-| `ACUBE_WEBHOOK_SECRET` | Webhook signature verification key |
-
-### Phase 2: Database Schema Changes
-
-Update the `bank_accounts` table to support A-Cube's data model:
-
-```sql
--- Add A-Cube specific columns
-ALTER TABLE bank_accounts
-ADD COLUMN IF NOT EXISTS fiscal_id TEXT,
-ADD COLUMN IF NOT EXISTS acube_account_id TEXT;
-
--- Update source constraint to include 'acube'
-ALTER TABLE bank_accounts DROP CONSTRAINT IF EXISTS bank_accounts_source_check;
-ALTER TABLE bank_accounts ADD CONSTRAINT bank_accounts_source_check 
-  CHECK (provider = ANY (ARRAY['plaid', 'manual', 'enable_banking', 'acube']));
-```
-
-### Phase 3: Create A-Cube Edge Function
-
-Create new edge function `supabase/functions/acube-banking/index.ts`:
-
-**Key Actions to implement:**
-- `login` - Get JWT token from A-Cube
-- `create_business_registry` - Register user's company (fiscalId)
-- `connect_request` - Start bank connection flow
-- `get_accounts` - List connected accounts
-- `get_transactions` - Fetch transactions for an account
-- `get_balances` - Fetch account balances
-- `remove_connection` - Disconnect account
-- `webhook_handler` - Process A-Cube webhooks
-
-**API Endpoints to call:**
-
-| Action | Method | A-Cube Endpoint |
-|--------|--------|-----------------|
-| Login | POST | `common.api.acubeapi.com/login` |
-| Create Business Registry | POST | `/business-registries` |
-| Connect Request | POST | `/business-registry/{fiscalId}/connect` |
-| List Accounts | GET | `/business-registry/{fiscalId}/accounts` |
-| Get Transactions | GET | `/business-registry/{fiscalId}/transactions` |
-| Account Balances | GET | `/business-registry/{fiscalId}/accounts/{accountId}/balances` |
-
-### Phase 4: Update Frontend Hook
-
-Modify `src/hooks/useEnableBanking.ts` -> rename to `src/hooks/useBankingIntegration.ts`:
-
-- Update function URL to call new `acube-banking` edge function
-- Modify `createSession` to return A-Cube's connect URL
-- Update `completeSession` to handle webhook-based connection completion
-- Add `fiscalId` (Partita IVA) input to connection flow
-
-### Phase 5: Update UI Components
-
-#### ConnectBankModal.tsx
-- Remove Enable Banking bank selector (A-Cube uses its own mini-portal)
-- Add Partita IVA (fiscalId) input field for Italian businesses
-- Simplify flow: just enter company info -> redirect to A-Cube portal
-
-#### ContiBancari.tsx
-- Update provider references from "Enable Banking" to "A-Cube"
-- Update help text and descriptions
-
-### Phase 6: Optional - Webhook Handler
-
-Create webhook endpoint to receive A-Cube events:
-
-```typescript
-// Handle "connect" event when user completes bank linking
-POST /functions/v1/acube-banking-webhook
-{
-  "fiscalId": "IT12345678901",
-  "success": true,
-  "updatedAccounts": ["account-id-1", "account-id-2"]
+// Invece di bloccare, mostrare un avviso e procedere con sandbox
+if (isDemoMode) {
+  toast({
+    title: "Modalita Demo - Sandbox",
+    description: "Stai utilizzando l'ambiente di test A-Cube. I dati non sono reali.",
+    variant: "default",
+  });
 }
 ```
 
-## Files to Create/Modify
+#### 2. Aggiungere indicatore visivo
+Mostrare un badge "SANDBOX" nel modal quando si e in modalita demo.
 
-| File | Action |
-|------|--------|
-| `supabase/functions/acube-banking/index.ts` | Create (new edge function) |
-| `src/hooks/useBankingIntegration.ts` | Create (replaces useEnableBanking.ts) |
-| `src/hooks/useEnableBanking.ts` | Delete (replaced by useBankingIntegration.ts) |
-| `src/components/conti-bancari/ConnectBankModal.tsx` | Modify (update connection flow) |
-| `src/pages/ContiBancari.tsx` | Modify (update references) |
-| `src/pages/Privacy.tsx` | Modify (update provider name) |
-| `src/pages/Cookies.tsx` | Modify (update provider name) |
-| Database migration | Create (add acube columns) |
+### Vantaggi
+- Permette di testare l'intero flusso di connessione
+- Mantiene la sicurezza bloccando le connessioni reali per utenti demo
+- Fornisce feedback chiaro che si tratta di dati di test
 
-## Secrets Cleanup
+---
 
-After migration, these Enable Banking secrets can be removed:
-- `ENABLE_BANKING_APP_ID`
-- `ENABLE_BANKING_PRIVATE_KEY`
+## Dettagli Tecnici
 
-## Testing Checklist
-1. Register for A-Cube sandbox account at https://docs.acubeapi.com
-2. Test JWT login flow
-3. Test Business Registry creation with test fiscal ID
-4. Test Connect Request flow in sandbox (use country code `XF` for fake banks)
-5. Verify accounts are retrieved after connection
-6. Test transaction sync
-7. Test balance retrieval
-8. Test account disconnection
+### File da Modificare
+1. `src/components/conti-bancari/ConnectBankModal.tsx`
+   - Rimuovere il `return` che blocca gli utenti demo
+   - Aggiungere toast informativo per la modalita sandbox
+   - Aggiungere badge visivo "SANDBOX / TEST"
+
+### Codice Specifico
+
+**Linee 95-103** - Sostituire il blocco con avviso:
+```typescript
+// Show warning for demo users but allow sandbox testing
+if (isDemoMode) {
+  toast({
+    title: "Modalita Demo - Ambiente Sandbox",
+    description: "Stai testando con l'ambiente sandbox A-Cube. Nessun dato bancario reale verra utilizzato.",
+  });
+  // Continue with sandbox connection instead of returning
+}
+```
+
+**Linee 162-211** - Aggiungere badge sandbox nel form:
+```typescript
+{isDemoMode && (
+  <div className="flex items-center justify-center">
+    <span className="px-3 py-1 text-xs font-medium bg-amber-100 text-amber-800 rounded-full">
+      SANDBOX / TEST
+    </span>
+  </div>
+)}
+```
+
+### Comportamento Risultante
+1. Utente demo clicca "Continua"
+2. Viene mostrato un toast informativo
+3. Il flusso procede normalmente verso A-Cube sandbox
+4. I conti collegati saranno dati di test
 
