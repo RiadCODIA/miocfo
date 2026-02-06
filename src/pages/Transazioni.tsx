@@ -235,7 +235,7 @@ export default function Transazioni() {
             <SelectItem value="all">Tutti i conti</SelectItem>
             {accounts?.map((account) => (
               <SelectItem key={account.id} value={account.id}>
-                {account.account_name || account.bank_name}
+                {account.name || account.bank_name}
               </SelectItem>
             ))}
           </SelectContent>

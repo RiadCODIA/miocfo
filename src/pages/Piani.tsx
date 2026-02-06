@@ -28,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { useSubscriptionPlans, useCreatePlan, useUpdatePlan } from "@/hooks/useSubscriptionPlans";
+import { useSubscriptionPlans, useCreatePlan, useUpdatePlan, SubscriptionPlan } from "@/hooks/useSubscriptionPlans";
 import { Skeleton } from "@/components/ui/skeleton";
 
 // All available features
@@ -71,22 +71,23 @@ export default function Piani() {
   const [formUnlimitedAccounts, setFormUnlimitedAccounts] = useState(false);
   const [formUnlimitedTransactions, setFormUnlimitedTransactions] = useState(false);
 
-  const handleEditPlan = (plan: typeof plans extends (infer T)[] ? T : never) => {
+  const handleEditPlan = (plan: SubscriptionPlan) => {
     if (!plan) return;
     setEditingPlanId(plan.id);
     setIsCreating(false);
     setFormName(plan.name);
-    setFormPrice(plan.price);
-    setFormBillingCycle(plan.billing_cycle);
-    setFormStatus(plan.status);
-    setFormMaxUsers(plan.max_users === -1 ? 100 : plan.max_users);
-    setFormMaxBankAccounts(plan.max_bank_accounts === -1 ? 50 : plan.max_bank_accounts);
-    setFormMaxTransactions(plan.max_transactions_month === -1 ? 100000 : plan.max_transactions_month);
-    setFormAiEnabled(plan.ai_features_enabled);
-    setFormFeatures(plan.features || []);
-    setFormUnlimitedUsers(plan.max_users === -1);
-    setFormUnlimitedAccounts(plan.max_bank_accounts === -1);
-    setFormUnlimitedTransactions(plan.max_transactions_month === -1);
+    setFormPrice(plan.priceMonthly);
+    setFormBillingCycle(plan.priceYearly ? "yearly" : "monthly");
+    setFormStatus(plan.isActive ? "active" : "draft");
+    setFormMaxUsers(plan.maxUsers === -1 ? 100 : (plan.maxUsers ?? 5));
+    setFormMaxBankAccounts(plan.maxBankAccounts === -1 ? 50 : (plan.maxBankAccounts ?? 2));
+    setFormMaxTransactions(plan.maxInvoicesMonthly === -1 ? 100000 : (plan.maxInvoicesMonthly ?? 1000));
+    setFormAiEnabled(false); // Not in schema, default false
+    const featuresArray = Array.isArray(plan.features) ? plan.features as string[] : [];
+    setFormFeatures(featuresArray);
+    setFormUnlimitedUsers(plan.maxUsers === -1);
+    setFormUnlimitedAccounts(plan.maxBankAccounts === -1);
+    setFormUnlimitedTransactions(plan.maxInvoicesMonthly === -1);
     setEditSheetOpen(true);
   };
 
@@ -108,22 +109,23 @@ export default function Piani() {
     setEditSheetOpen(true);
   };
 
-  const handleCopyPlan = (plan: typeof plans extends (infer T)[] ? T : never) => {
+  const handleCopyPlan = (plan: SubscriptionPlan) => {
     if (!plan) return;
     setEditingPlanId(null);
     setIsCreating(true);
     setFormName(`${plan.name} (Copia)`);
-    setFormPrice(plan.price);
-    setFormBillingCycle(plan.billing_cycle);
+    setFormPrice(plan.priceMonthly);
+    setFormBillingCycle(plan.priceYearly ? "yearly" : "monthly");
     setFormStatus("draft");
-    setFormMaxUsers(plan.max_users === -1 ? 100 : plan.max_users);
-    setFormMaxBankAccounts(plan.max_bank_accounts === -1 ? 50 : plan.max_bank_accounts);
-    setFormMaxTransactions(plan.max_transactions_month === -1 ? 100000 : plan.max_transactions_month);
-    setFormAiEnabled(plan.ai_features_enabled);
-    setFormFeatures([...(plan.features || [])]);
-    setFormUnlimitedUsers(plan.max_users === -1);
-    setFormUnlimitedAccounts(plan.max_bank_accounts === -1);
-    setFormUnlimitedTransactions(plan.max_transactions_month === -1);
+    setFormMaxUsers(plan.maxUsers === -1 ? 100 : (plan.maxUsers ?? 5));
+    setFormMaxBankAccounts(plan.maxBankAccounts === -1 ? 50 : (plan.maxBankAccounts ?? 2));
+    setFormMaxTransactions(plan.maxInvoicesMonthly === -1 ? 100000 : (plan.maxInvoicesMonthly ?? 1000));
+    setFormAiEnabled(false);
+    const featuresArray = Array.isArray(plan.features) ? plan.features as string[] : [];
+    setFormFeatures([...featuresArray]);
+    setFormUnlimitedUsers(plan.maxUsers === -1);
+    setFormUnlimitedAccounts(plan.maxBankAccounts === -1);
+    setFormUnlimitedTransactions(plan.maxInvoicesMonthly === -1);
     setEditSheetOpen(true);
   };
 
@@ -134,13 +136,12 @@ export default function Piani() {
 
     const planData = {
       name: formName,
-      price: formPrice,
-      billing_cycle: formBillingCycle,
-      status: formStatus,
+      price_monthly: formPrice,
+      price_yearly: formBillingCycle === "yearly" ? formPrice : undefined,
+      is_active: formStatus === "active",
       max_users: formUnlimitedUsers ? -1 : formMaxUsers,
       max_bank_accounts: formUnlimitedAccounts ? -1 : formMaxBankAccounts,
-      max_transactions_month: formUnlimitedTransactions ? -1 : formMaxTransactions,
-      ai_features_enabled: formAiEnabled,
+      max_invoices_monthly: formUnlimitedTransactions ? -1 : formMaxTransactions,
       features: formFeatures,
     };
 
@@ -213,20 +214,22 @@ export default function Piani() {
       {/* Plans Grid */}
       {plans && plans.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {plans.map((plan) => (
+          {plans.map((plan) => {
+            const featuresArray = Array.isArray(plan.features) ? plan.features as string[] : [];
+            return (
             <Card key={plan.id} className="relative">
               <CardHeader>
                 <div className="flex items-center justify-between">
                   <CardTitle className="text-xl">{plan.name}</CardTitle>
-                  <Badge className={plan.status === "active" 
+                  <Badge className={plan.isActive 
                     ? "bg-emerald-500/20 text-emerald-600 border-emerald-500/30"
                     : "bg-amber-500/20 text-amber-600 border-amber-500/30"
                   }>
-                    {plan.status === "active" ? "Attivo" : "Bozza"}
+                    {plan.isActive ? "Attivo" : "Bozza"}
                   </Badge>
                 </div>
                 <CardDescription className="text-2xl font-bold text-foreground">
-                  €{plan.price}/{plan.billing_cycle === "monthly" ? "mese" : "anno"}
+                  €{plan.priceMonthly}/{plan.priceYearly ? "anno" : "mese"}
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -236,46 +239,41 @@ export default function Piani() {
                   <div className="grid grid-cols-3 gap-2 text-center">
                     <div className="p-2 rounded-lg bg-muted/50">
                       <p className="text-lg font-bold text-foreground">
-                        {plan.max_users === -1 ? "∞" : plan.max_users}
+                        {plan.maxUsers === -1 ? "∞" : (plan.maxUsers ?? "∞")}
                       </p>
                       <p className="text-xs text-muted-foreground">Utenti</p>
                     </div>
                     <div className="p-2 rounded-lg bg-muted/50">
                       <p className="text-lg font-bold text-foreground">
-                        {plan.max_bank_accounts === -1 ? "∞" : plan.max_bank_accounts}
+                        {plan.maxBankAccounts === -1 ? "∞" : (plan.maxBankAccounts ?? "∞")}
                       </p>
                       <p className="text-xs text-muted-foreground">Conti</p>
                     </div>
                     <div className="p-2 rounded-lg bg-muted/50">
                       <p className="text-lg font-bold text-foreground">
-                        {plan.max_transactions_month === -1 ? "∞" : `${plan.max_transactions_month / 1000}k`}
+                        {plan.maxInvoicesMonthly === -1 ? "∞" : plan.maxInvoicesMonthly ? `${plan.maxInvoicesMonthly / 1000}k` : "∞"}
                       </p>
-                      <p className="text-xs text-muted-foreground">Trans./mese</p>
+                      <p className="text-xs text-muted-foreground">Fatture/mese</p>
                     </div>
                   </div>
-                  {plan.ai_features_enabled && (
-                    <Badge className="bg-violet-500/20 text-violet-600 border-violet-500/30 mt-2">
-                      AI Features Attive
-                    </Badge>
-                  )}
                 </div>
 
                 {/* Features */}
                 <div className="space-y-2">
                   <p className="text-sm font-medium text-foreground">Feature incluse</p>
                   <ul className="space-y-1">
-                    {(plan.features || []).slice(0, 5).map((featureId) => {
+                    {featuresArray.slice(0, 5).map((featureId) => {
                       const feature = allFeatures.find(f => f.id === featureId);
                       return feature ? (
-                        <li key={featureId} className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <li key={String(featureId)} className="flex items-center gap-2 text-sm text-muted-foreground">
                           <Check className="h-4 w-4 text-emerald-500" />
                           {feature.label}
                         </li>
                       ) : null;
                     })}
-                    {(plan.features || []).length > 5 && (
+                    {featuresArray.length > 5 && (
                       <li className="text-sm text-muted-foreground pl-6">
-                        +{plan.features.length - 5} altre...
+                        +{featuresArray.length - 5} altre...
                       </li>
                     )}
                   </ul>
@@ -294,7 +292,8 @@ export default function Piani() {
                 </div>
               </CardContent>
             </Card>
-          ))}
+            );
+          })}
         </div>
       )}
 

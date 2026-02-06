@@ -200,8 +200,7 @@ export function useBankAccounts() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("bank_accounts")
-        .select("id, bank_name, account_name")
-        .eq("status", "active");
+        .select("id, bank_name, name");
 
       if (error) throw error;
       return data || [];
