@@ -152,14 +152,16 @@ async function createBusinessRegistry(fiscalId: string): Promise<{ fiscalId: str
   console.log(`[A-Cube] Creating/getting business registry for: ${fiscalId}`);
   
   try {
-    // Try to create the business registry
-    const result = await acubeRequest("/business-registries", "POST", {
+    // Try to create the business registry (endpoint is /business-registry, not /business-registries)
+    const result = await acubeRequest("/business-registry", "POST", {
       fiscalId: fiscalId,
+      email: "demo@example.com", // Required field
+      businessName: "Demo Business", // Required field
     });
     console.log("[A-Cube] Business registry created:", result);
     return { fiscalId, status: "created" };
   } catch (error) {
-    // If it already exists, that's fine
+    // If it already exists (409), that's fine
     if (error instanceof Error && error.message.includes("409")) {
       console.log("[A-Cube] Business registry already exists");
       return { fiscalId, status: "exists" };
