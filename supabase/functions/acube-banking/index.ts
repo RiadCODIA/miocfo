@@ -14,8 +14,10 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
-// A-Cube API URLs
-const ACUBE_COMMON_URL = "https://common.api.acubeapi.com";
+// A-Cube API URLs - use sandbox URLs when in sandbox mode
+const ACUBE_COMMON_URL = ACUBE_ENV === "production" 
+  ? "https://common.api.acubeapi.com" 
+  : "https://common-sandbox.api.acubeapi.com";
 const ACUBE_OB_URL = ACUBE_ENV === "production" 
   ? "https://ob.api.acubeapi.com" 
   : "https://ob-sandbox.api.acubeapi.com";
