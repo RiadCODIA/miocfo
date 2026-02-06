@@ -207,14 +207,26 @@ async function createConnectRequest(
   // Create the connect request
   const result = await acubeRequest(`/business-registry/${fiscalId}/connect`, "POST", {
     redirectUri: redirectUri,
-  }) as { url?: string; redirectUrl?: string };
+  });
 
-  const connectUrl = result.url || result.redirectUrl;
-  if (!connectUrl) {
-    throw new Error("No redirect URL in A-Cube connect response");
+  console.log("[A-Cube] Connect response:", JSON.stringify(result));
+  
+  // A-Cube returns various field names for the redirect URL
+  // Check all possible field names from their API
+  const resultObj = result as Record<string, unknown>;
+  const connectUrl = resultObj.url || 
+                     resultObj.redirectUrl || 
+                     resultObj.redirect_url ||
+                     resultObj.connectUrl ||
+                     resultObj.connect_url ||
+                     resultObj.link;
+  
+  if (!connectUrl || typeof connectUrl !== "string") {
+    console.error("[A-Cube] No redirect URL found in response. Full response:", JSON.stringify(result));
+    throw new Error(`No redirect URL in A-Cube connect response. Response: ${JSON.stringify(result)}`);
   }
 
-  console.log("[A-Cube] Connect URL generated");
+  console.log("[A-Cube] Connect URL generated:", connectUrl);
   return { connect_url: connectUrl };
 }
 
