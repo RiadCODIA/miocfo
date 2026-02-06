@@ -58,7 +58,7 @@ export function HeroSection() {
               </h1>
 
               <p className="max-w-2xl text-balance text-base text-muted-foreground md:text-lg">
-                Dì addio ai fogli Excel complicati. Finexa ti offre una piattaforma 
+                Dì addio ai fogli Excel complicati. mioCFO ti offre una piattaforma 
                 professionale per monitorare, analizzare e ottimizzare le finanze 
                 della tua PMI in tempo reale.
               </p>
@@ -129,7 +129,7 @@ export function HeroSection() {
                     <div className="h-3 w-3 rounded-full bg-yellow-400/80" />
                     <div className="h-3 w-3 rounded-full bg-green-400/80" />
                   </div>
-                  <span className="text-xs text-muted-foreground">Dashboard Finexa</span>
+                  <span className="text-xs text-muted-foreground">Dashboard mioCFO</span>
                 </div>
 
                 {/* Mock KPI Cards */}

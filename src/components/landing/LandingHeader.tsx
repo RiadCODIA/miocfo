@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Menu, X } from "lucide-react";
-import finexaLogo from "@/assets/finexa-logo.png";
+import miocfoLogo from "@/assets/miocfo-logo.png";
 
 export function LandingHeader() {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -35,7 +35,7 @@ export function LandingHeader() {
       <div className="container mx-auto px-4 flex items-center justify-between">
         {/* Logo */}
         <Link to="/landing" className="flex items-center">
-          <img src={finexaLogo} alt="Finexa" className="h-8 md:h-9" />
+          <img src={miocfoLogo} alt="mioCFO" className="h-8 md:h-9" />
         </Link>
 
         {/* Desktop Navigation */}

@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Linkedin, Twitter, Mail } from "lucide-react";
-import finexaLogo from "@/assets/finexa-logo.png";
+import miocfoLogo from "@/assets/miocfo-logo.png";
 
 export function LandingFooter() {
   return (
@@ -9,7 +9,7 @@ export function LandingFooter() {
         <div className="grid md:grid-cols-4 gap-8 mb-10">
           {/* Brand */}
           <div className="md:col-span-2">
-            <img src={finexaLogo} alt="Finexa" className="h-7 mb-4" />
+            <img src={miocfoLogo} alt="mioCFO" className="h-7 mb-4" />
             <p className="text-sm text-muted-foreground max-w-sm mb-4 leading-relaxed">
               La piattaforma di gestione finanziaria intelligente per le PMI. 
               Monitora, analizza e ottimizza le finanze della tua azienda in tempo reale.
@@ -28,7 +28,7 @@ export function LandingFooter() {
                 <Twitter className="h-4 w-4 text-muted-foreground" />
               </a>
               <a 
-                href="mailto:info@finexa.it" 
+                href="mailto:info@miocfo.it" 
                 className="w-9 h-9 rounded-full bg-muted flex items-center justify-center hover:bg-muted/80 transition-colors"
               >
                 <Mail className="h-4 w-4 text-muted-foreground" />
@@ -84,7 +84,7 @@ export function LandingFooter() {
         {/* Bottom */}
         <div className="pt-6 border-t border-border text-center">
           <p className="text-xs text-muted-foreground">
-            © {new Date().getFullYear()} Finexa. Tutti i diritti riservati.
+            © {new Date().getFullYear()} mioCFO. Tutti i diritti riservati.
           </p>
         </div>
       </div>

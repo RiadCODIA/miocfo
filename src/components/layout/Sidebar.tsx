@@ -20,8 +20,8 @@ import {
   LineChart,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import finexaLogo from "@/assets/finexa-logo.png";
-import finexaLogoIcon from "@/assets/finexa-logo-icon.png";
+import miocfoLogo from "@/assets/miocfo-logo.png";
+import miocfoLogoIcon from "@/assets/miocfo-logo-icon.png";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import {
@@ -133,8 +133,8 @@ export function Sidebar() {
         <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border">
           <div className="flex items-center gap-2 overflow-hidden">
             <img 
-              src={collapsed ? finexaLogoIcon : finexaLogo} 
-              alt="Finexa" 
+              src={collapsed ? miocfoLogoIcon : miocfoLogo} 
+              alt="mioCFO" 
               className={cn(
                 "object-contain transition-all duration-300",
                 collapsed ? "h-14 w-14" : "h-8 w-auto max-w-[140px]"
