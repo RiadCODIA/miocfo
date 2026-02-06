@@ -20,20 +20,22 @@ export interface BankAccount {
   currency: string;
   status: "active" | "pending" | "error" | "disconnected";
   lastSync: Date;
-  source?: "enable_banking" | "powens" | "manual";
+  source?: "enable_banking" | "powens" | "manual" | "acube";
 }
 
-interface DebugResult {
-  account_id: string;
-  enable_banking_uid: string;
-  psu_context: { ip: string | null; userAgent: string | null };
-  test_results: Array<{
+export interface DebugResult {
+  account_id?: string;
+  enable_banking_uid?: string;
+  acube_account_id?: string;
+  psu_context?: { ip: string | null; userAgent: string | null };
+  test_results?: Array<{
     variant: string;
     params: Record<string, string>;
     status: number | string;
     body: unknown;
     success: boolean;
   }>;
+  account?: unknown;
 }
 
 interface BankAccountCardProps {
@@ -103,7 +105,7 @@ export function BankAccountCard({ account, onSync, onTest, onRemove, onDebug }: 
   const status = statusConfig[account.status];
 
   const isManual = account.source === "manual";
-
+  const providerLabel = account.source === "acube" ? "A-Cube" : account.source === "enable_banking" ? "Enable Banking" : account.source === "powens" ? "Powens" : "Manuale";
   return (
     <>
       <Card className="hover:shadow-lg transition-shadow">
@@ -123,7 +125,7 @@ export function BankAccountCard({ account, onSync, onTest, onRemove, onDebug }: 
                 variant="outline" 
                 className={isManual ? "bg-muted text-muted-foreground" : "bg-primary/10 text-primary"}
               >
-                {isManual ? "Manuale" : "Enable Banking"}
+                {providerLabel}
               </Badge>
               <Badge className={status.className}>{status.label}</Badge>
             </div>
@@ -224,39 +226,55 @@ export function BankAccountCard({ account, onSync, onTest, onRemove, onDebug }: 
             {debugResult && (
               <div className="space-y-4 p-4">
                 <div className="text-sm space-y-1">
-                  <p><strong>Account ID:</strong> {debugResult.account_id}</p>
-                  <p><strong>Enable Banking UID:</strong> {debugResult.enable_banking_uid}</p>
-                  <p><strong>PSU IP:</strong> {debugResult.psu_context.ip || "non rilevato"}</p>
-                  <p><strong>User Agent:</strong> {debugResult.psu_context.userAgent || "non rilevato"}</p>
+                  <p><strong>Account ID:</strong> {debugResult.account_id || "N/A"}</p>
+                  {debugResult.enable_banking_uid && (
+                    <p><strong>Enable Banking UID:</strong> {debugResult.enable_banking_uid}</p>
+                  )}
+                  {debugResult.acube_account_id && (
+                    <p><strong>A-Cube Account ID:</strong> {debugResult.acube_account_id}</p>
+                  )}
+                  {debugResult.psu_context && (
+                    <>
+                      <p><strong>PSU IP:</strong> {debugResult.psu_context.ip || "non rilevato"}</p>
+                      <p><strong>User Agent:</strong> {debugResult.psu_context.userAgent || "non rilevato"}</p>
+                    </>
+                  )}
+                  {debugResult.account && (
+                    <pre className="text-xs bg-muted p-2 rounded overflow-x-auto max-h-40 mt-2">
+                      {JSON.stringify(debugResult.account, null, 2)}
+                    </pre>
+                  )}
                 </div>
 
-                <div className="border-t pt-4">
-                  <h4 className="font-semibold mb-3">Risultati Test:</h4>
-                  <div className="space-y-3">
-                    {debugResult.test_results.map((result, idx) => (
-                      <div 
-                        key={idx} 
-                        className={cn(
-                          "p-3 rounded-lg border",
-                          result.success ? "bg-success/10 border-success" : "bg-destructive/10 border-destructive"
-                        )}
-                      >
-                        <div className="flex items-center justify-between mb-2">
-                          <span className="font-medium">{result.variant}</span>
-                          <Badge variant={result.success ? "default" : "destructive"}>
-                            {result.status}
-                          </Badge>
+                {debugResult.test_results && debugResult.test_results.length > 0 && (
+                  <div className="border-t pt-4">
+                    <h4 className="font-semibold mb-3">Risultati Test:</h4>
+                    <div className="space-y-3">
+                      {debugResult.test_results.map((result, idx) => (
+                        <div 
+                          key={idx} 
+                          className={cn(
+                            "p-3 rounded-lg border",
+                            result.success ? "bg-success/10 border-success" : "bg-destructive/10 border-destructive"
+                          )}
+                        >
+                          <div className="flex items-center justify-between mb-2">
+                            <span className="font-medium">{result.variant}</span>
+                            <Badge variant={result.success ? "default" : "destructive"}>
+                              {result.status}
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground mb-2">
+                            Params: {JSON.stringify(result.params)}
+                          </div>
+                          <pre className="text-xs bg-muted p-2 rounded overflow-x-auto max-h-40">
+                            {JSON.stringify(result.body, null, 2)}
+                          </pre>
                         </div>
-                        <div className="text-xs text-muted-foreground mb-2">
-                          Params: {JSON.stringify(result.params)}
-                        </div>
-                        <pre className="text-xs bg-muted p-2 rounded overflow-x-auto max-h-40">
-                          {JSON.stringify(result.body, null, 2)}
-                        </pre>
-                      </div>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
               </div>
             )}
           </ScrollArea>

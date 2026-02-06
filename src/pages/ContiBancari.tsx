@@ -5,14 +5,14 @@ import { BankAccountCard } from "@/components/conti-bancari/BankAccountCard";
 import { ConnectBankModal } from "@/components/conti-bancari/ConnectBankModal";
 import { UploadStatementModal } from "@/components/conti-bancari/UploadStatementModal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useEnableBanking, BankAccount } from "@/hooks/useEnableBanking";
+import { useBankingIntegration, BankAccount } from "@/hooks/useBankingIntegration";
 import { supabase } from "@/integrations/supabase/client";
 
 export default function ContiBancari() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [sessionReady, setSessionReady] = useState(false);
-  const { accounts, isLoading, fetchAccounts, syncAccount, removeAccount, completeSession } = useEnableBanking();
+  const { accounts, isLoading, fetchAccounts, syncAccount, removeAccount } = useBankingIntegration();
 
   // Wait for session to be ready before fetching accounts
   useEffect(() => {
@@ -56,29 +56,10 @@ export default function ContiBancari() {
   };
 
   const handleDebug = async (id: string) => {
-    // Auth is now handled via Authorization header - no user_id needed
-    const { supabase } = await import("@/integrations/supabase/client");
-    const { data: { session } } = await supabase.auth.getSession();
-    
-    const supabaseUrl = "https://ublsnradzhfpqhunfqbn.supabase.co";
-    const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVibHNucmFkemhmcHFodW5mcWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwODUyNDQsImV4cCI6MjA4MTY2MTI0NH0.njhpIOLukx6bmrw5p-AHCNShPkCnB-QqrDOvkYSkTOw";
-    
-    const response = await fetch(`${supabaseUrl}/functions/v1/enable-banking`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": anonKey,
-        "Authorization": `Bearer ${session?.access_token || anonKey}`,
-      },
-      body: JSON.stringify({ action: "debug_transactions", account_id: id }),
-    });
-    
-    if (!response.ok) {
-      const data = await response.json().catch(() => ({}));
-      throw new Error(data?.error || "Debug failed");
-    }
-    
-    return response.json();
+    // Debug functionality - log account details
+    const account = accounts.find(a => a.id === id);
+    console.log("[Debug] Account:", account);
+    return { account };
   };
 
   const handleConnect = (newAccounts: BankAccount[]) => {
@@ -90,21 +71,23 @@ export default function ContiBancari() {
     fetchAccounts();
   };
 
-  // Use available_balance when present (matches what users see in their bank app)
-  const totalBalance = accounts.reduce((sum, acc) => sum + (acc.available_balance || acc.current_balance || 0), 0);
+  // Use balance field (available_balance and current_balance are computed for compatibility)
+  const totalBalance = accounts.reduce((sum, acc) => sum + (acc.available_balance || acc.current_balance || acc.balance || 0), 0);
 
   // Map the account format to the card format
-  const mapAccountToCard = (account: BankAccount) => ({
-    id: account.id,
-    bankName: account.bank_name,
-    iban: account.iban || `•••• ${account.mask || "****"}`,
-    // Prioritize available_balance (ITAV) which matches what users see in their bank app
-    balance: account.available_balance || account.current_balance || 0,
-    currency: account.currency || "EUR",
-    status: account.status as "active" | "pending" | "error" | "disconnected",
-    lastSync: account.last_sync_at ? new Date(account.last_sync_at) : new Date(),
-    source: (account as BankAccount & { source?: string }).source || "enable_banking",
-  });
+  const mapAccountToCard = (account: BankAccount) => {
+    const source = account.provider as "enable_banking" | "powens" | "manual" | "acube" | undefined;
+    return {
+      id: account.id,
+      bankName: account.bank_name,
+      iban: account.iban || `•••• ${account.mask || "****"}`,
+      balance: account.available_balance || account.current_balance || account.balance || 0,
+      currency: account.currency || "EUR",
+      status: account.status as "active" | "pending" | "error" | "disconnected",
+      lastSync: account.last_sync_at ? new Date(account.last_sync_at) : new Date(),
+      source: source || "acube",
+    };
+  };
 
   return (
     <div className="space-y-6">
@@ -113,7 +96,7 @@ export default function ContiBancari() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Conti Bancari</h1>
           <p className="text-muted-foreground mt-1">
-            Gestisci i tuoi conti collegati tramite Enable Banking o caricando estratti conto
+            Gestisci i tuoi conti collegati tramite A-Cube o caricando estratti conto
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -137,7 +120,7 @@ export default function ContiBancari() {
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Importa i tuoi conti</AlertTitle>
         <AlertDescription>
-          Collega i tuoi conti bancari tramite Enable Banking per sincronizzazione automatica, 
+          Collega i tuoi conti bancari tramite A-Cube per sincronizzazione automatica, 
           oppure carica estratti conto in formato PDF o CSV per importare le transazioni manualmente.
         </AlertDescription>
       </Alert>

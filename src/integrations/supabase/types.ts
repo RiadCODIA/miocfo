@@ -163,11 +163,13 @@ export type Database = {
       bank_accounts: {
         Row: {
           account_type: string | null
+          acube_account_id: string | null
           balance: number | null
           bank_name: string
           created_at: string
           currency: string | null
           external_id: string | null
+          fiscal_id: string | null
           iban: string | null
           id: string
           is_connected: boolean | null
@@ -179,11 +181,13 @@ export type Database = {
         }
         Insert: {
           account_type?: string | null
+          acube_account_id?: string | null
           balance?: number | null
           bank_name: string
           created_at?: string
           currency?: string | null
           external_id?: string | null
+          fiscal_id?: string | null
           iban?: string | null
           id?: string
           is_connected?: boolean | null
@@ -195,11 +199,13 @@ export type Database = {
         }
         Update: {
           account_type?: string | null
+          acube_account_id?: string | null
           balance?: number | null
           bank_name?: string
           created_at?: string
           currency?: string | null
           external_id?: string | null
+          fiscal_id?: string | null
           iban?: string | null
           id?: string
           is_connected?: boolean | null
