@@ -36,22 +36,28 @@ interface SuperAdminPermissions {
   can_access_financial_data_operatively: boolean;
 }
 
+// Demo account credentials - used for demo login buttons
+export const DEMO_ACCOUNTS = {
+  user: { email: 'demo.user@finexa.it', password: 'DemoUser2024!' },
+  admin: { email: 'demo.admin@finexa.it', password: 'DemoAdmin2024!' },
+  superAdmin: { email: 'demo.superadmin@finexa.it', password: 'DemoSuper2024!' },
+} as const;
+
 interface AuthContextType {
   user: User | null;
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
   isDemoMode: boolean;
-  demoRole: AppRole | null;
   userRole: AppRole | null;
   permissions: AdminPermissions | null;
   superAdminPermissions: SuperAdminPermissions | null;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signUp: (email: string, password: string, metadata?: { first_name?: string; last_name?: string; company_name?: string; role?: string }) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
-  signInAsDemo: () => void;
-  signInAsDemoAdmin: () => void;
-  signInAsDemoSuperAdmin: () => void;
+  signInAsDemo: () => Promise<{ error: Error | null }>;
+  signInAsDemoAdmin: () => Promise<{ error: Error | null }>;
+  signInAsDemoSuperAdmin: () => Promise<{ error: Error | null }>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -91,23 +97,32 @@ const SUPER_ADMIN_PERMISSIONS: SuperAdminPermissions = {
   can_access_financial_data_operatively: false,
 };
 
+// Check if the user is a demo account based on email
+const isDemoEmail = (email: string | undefined): boolean => {
+  if (!email) return false;
+  return email === DEMO_ACCOUNTS.user.email || 
+         email === DEMO_ACCOUNTS.admin.email || 
+         email === DEMO_ACCOUNTS.superAdmin.email;
+};
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [isDemoMode, setIsDemoMode] = useState(false);
-  const [demoRole, setDemoRole] = useState<AppRole | null>(null);
   const [userRole, setUserRole] = useState<AppRole | null>(null);
   const [permissions, setPermissions] = useState<AdminPermissions | null>(null);
   const [superAdminPermissions, setSuperAdminPermissions] = useState<SuperAdminPermissions | null>(null);
+
+  // Derive isDemoMode from the user's email
+  const isDemoMode = isDemoEmail(user?.email);
 
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
       .from("profiles")
       .select("*")
       .eq("id", userId)
-      .single();
+      .maybeSingle();
     
     if (!error && data) {
       setProfile(data);
@@ -119,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
-      .single();
+      .maybeSingle();
     
     if (!error && data) {
       const role = data.role as AppRole;
@@ -135,6 +150,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setPermissions(USER_PERMISSIONS);
         setSuperAdminPermissions(null);
       }
+    } else {
+      // Default to user role if no role found
+      setUserRole('user');
+      setPermissions(USER_PERMISSIONS);
+      setSuperAdminPermissions(null);
     }
   };
 
@@ -205,15 +225,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signOut = async () => {
-    if (isDemoMode) {
-      setIsDemoMode(false);
-      setDemoRole(null);
-      setProfile(null);
-      setUserRole(null);
-      setPermissions(null);
-      setSuperAdminPermissions(null);
-      return;
-    }
     await supabase.auth.signOut();
     setProfile(null);
     setUserRole(null);
@@ -221,48 +232,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSuperAdminPermissions(null);
   };
 
-  const signInAsDemo = () => {
-    const demoProfile: Profile = {
-      id: 'demo-user-id',
-      first_name: 'Utente',
-      last_name: 'Demo',
-      company_name: 'Azienda Demo S.r.l.',
-      avatar_url: null,
-    };
-    setProfile(demoProfile);
-    setDemoRole('user');
-    setPermissions(USER_PERMISSIONS);
-    setIsDemoMode(true);
+  // Demo login functions - now use real Supabase auth
+  const signInAsDemo = async () => {
+    return signIn(DEMO_ACCOUNTS.user.email, DEMO_ACCOUNTS.user.password);
   };
 
-  const signInAsDemoAdmin = () => {
-    const adminDemoProfile: Profile = {
-      id: 'demo-admin-id',
-      first_name: 'Demo',
-      last_name: 'Consulente',
-      company_name: 'Studio Consulenza',
-      avatar_url: null,
-    };
-    setProfile(adminDemoProfile);
-    setDemoRole('admin_aziendale');
-    setPermissions(ADMIN_PERMISSIONS);
-    setSuperAdminPermissions(null);
-    setIsDemoMode(true);
+  const signInAsDemoAdmin = async () => {
+    return signIn(DEMO_ACCOUNTS.admin.email, DEMO_ACCOUNTS.admin.password);
   };
 
-  const signInAsDemoSuperAdmin = () => {
-    const superAdminDemoProfile: Profile = {
-      id: 'demo-super-admin-id',
-      first_name: 'Super',
-      last_name: 'Admin',
-      company_name: 'Finexa Platform',
-      avatar_url: null,
-    };
-    setProfile(superAdminDemoProfile);
-    setDemoRole('super_admin');
-    setPermissions(null);
-    setSuperAdminPermissions(SUPER_ADMIN_PERMISSIONS);
-    setIsDemoMode(true);
+  const signInAsDemoSuperAdmin = async () => {
+    return signIn(DEMO_ACCOUNTS.superAdmin.email, DEMO_ACCOUNTS.superAdmin.password);
   };
 
   return (
@@ -273,7 +253,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         loading,
         isDemoMode,
-        demoRole,
         userRole,
         permissions,
         superAdminPermissions,

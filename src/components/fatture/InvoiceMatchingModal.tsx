@@ -124,7 +124,7 @@ export function InvoiceMatchingModal({
           else if (daysDiff <= 60) score += 5;
 
           // Name/description matching (0-10 points) - improved fuzzy matching
-          const txDesc = (tx.name || '').toLowerCase() + ' ' + (tx.merchant_name || '').toLowerCase();
+          const txDesc = (tx.description || '').toLowerCase() + ' ' + (tx.merchant_name || '').toLowerCase();
           const supplierWords = invoice.supplier.toLowerCase().split(/\s+/).filter(w => w.length > 2);
           const matchedWords = supplierWords.filter(word => txDesc.includes(word));
           if (matchedWords.length >= 2) score += 10;
@@ -133,7 +133,7 @@ export function InvoiceMatchingModal({
           return {
             id: tx.id,
             date: new Date(tx.date),
-            description: tx.merchant_name || tx.name || 'Transazione',
+            description: tx.merchant_name || tx.description || 'Transazione',
             amount: txAmount,
             matchScore: Math.min(score, 100),
           };

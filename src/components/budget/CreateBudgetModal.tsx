@@ -40,29 +40,34 @@ export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps
   });
 
   const [selectedMonth, setSelectedMonth] = useState(monthOptions[0].value);
-  const [predictedIncome, setPredictedIncome] = useState("");
-  const [predictedExpenses, setPredictedExpenses] = useState("");
+  const [budgetName, setBudgetName] = useState("");
+  const [budgetAmount, setBudgetAmount] = useState("");
 
   const handleSubmit = async () => {
-    const income = parseFloat(predictedIncome.replace(/[€.,\s]/g, "")) || 0;
-    const expenses = parseFloat(predictedExpenses.replace(/[€.,\s]/g, "")) || 0;
+    const amount = parseFloat(budgetAmount.replace(/[€.,\s]/g, "")) || 0;
 
-    if (income <= 0 && expenses <= 0) {
-      toast.error("Inserisci almeno un valore per incassi o pagamenti");
+    if (!budgetName.trim()) {
+      toast.error("Inserisci un nome per il budget");
+      return;
+    }
+
+    if (amount <= 0) {
+      toast.error("Inserisci un importo valido");
       return;
     }
 
     try {
       await createBudget.mutateAsync({
-        month: new Date(selectedMonth),
-        predictedIncome: income,
-        predictedExpenses: expenses,
+        name: budgetName.trim(),
+        amount,
+        startDate: new Date(selectedMonth),
+        periodType: "monthly",
       });
       toast.success("Budget creato con successo");
       onOpenChange(false);
       // Reset form
-      setPredictedIncome("");
-      setPredictedExpenses("");
+      setBudgetName("");
+      setBudgetAmount("");
       setSelectedMonth(monthOptions[0].value);
     } catch (error) {
       toast.error("Errore durante la creazione del budget");
@@ -75,24 +80,30 @@ export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps
     return `€${num.toLocaleString("it-IT")}`;
   };
 
-  const cashflowPrevisto = (
-    (parseFloat(predictedIncome.replace(/[€.,\s]/g, "")) || 0) -
-    (parseFloat(predictedExpenses.replace(/[€.,\s]/g, "")) || 0)
-  );
-
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-[425px]">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <CalendarDays className="h-5 w-5 text-primary" />
-            Nuovo Budget Mensile
+            Nuovo Budget
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
           <div className="space-y-2">
-            <Label htmlFor="month">Mese</Label>
+            <Label htmlFor="name">Nome Budget</Label>
+            <Input
+              id="name"
+              placeholder="Es. Marketing Q1"
+              value={budgetName}
+              onChange={(e) => setBudgetName(e.target.value)}
+              className="bg-secondary border-border"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="month">Mese di inizio</Label>
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="bg-secondary border-border">
                 <SelectValue />
@@ -108,47 +119,20 @@ export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="income" className="flex items-center gap-2">
+            <Label htmlFor="amount" className="flex items-center gap-2">
               <TrendingUp className="h-4 w-4 text-success" />
-              Incassi Previsti
+              Importo Budget
             </Label>
             <Input
-              id="income"
+              id="amount"
               type="text"
               placeholder="€0"
-              value={predictedIncome}
-              onChange={(e) => setPredictedIncome(e.target.value)}
-              onBlur={(e) => setPredictedIncome(formatInputCurrency(e.target.value))}
+              value={budgetAmount}
+              onChange={(e) => setBudgetAmount(e.target.value)}
+              onBlur={(e) => setBudgetAmount(formatInputCurrency(e.target.value))}
               className="bg-secondary border-border"
             />
           </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="expenses" className="flex items-center gap-2">
-              <TrendingDown className="h-4 w-4 text-destructive" />
-              Pagamenti Previsti
-            </Label>
-            <Input
-              id="expenses"
-              type="text"
-              placeholder="€0"
-              value={predictedExpenses}
-              onChange={(e) => setPredictedExpenses(e.target.value)}
-              onBlur={(e) => setPredictedExpenses(formatInputCurrency(e.target.value))}
-              className="bg-secondary border-border"
-            />
-          </div>
-
-          {(predictedIncome || predictedExpenses) && (
-            <div className="p-3 rounded-lg bg-secondary/50 border border-border">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground">Cashflow Previsto</span>
-                <span className={`font-semibold ${cashflowPrevisto >= 0 ? "text-success" : "text-destructive"}`}>
-                  {cashflowPrevisto >= 0 ? "+" : ""}€{cashflowPrevisto.toLocaleString("it-IT")}
-                </span>
-              </div>
-            </div>
-          )}
         </div>
 
         <DialogFooter>

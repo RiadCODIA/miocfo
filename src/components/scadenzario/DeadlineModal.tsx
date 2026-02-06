@@ -184,7 +184,7 @@ export function DeadlineModal({ open, onOpenChange, deadline }: DeadlineModalPro
                 <SelectItem value="none">Nessuna fattura</SelectItem>
                 {invoices?.map((inv) => (
                   <SelectItem key={inv.id} value={inv.id}>
-                    {inv.invoice_number} - {inv.supplier_name} (€{Number(inv.amount).toLocaleString("it-IT")})
+                    {inv.invoice_number} - {inv.vendor_name} (€{Number(inv.amount).toLocaleString("it-IT")})
                   </SelectItem>
                 ))}
               </SelectContent>

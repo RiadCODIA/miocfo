@@ -3,24 +3,21 @@ import { cn } from "@/lib/utils";
 import { useAlerts, useActiveAlertsCount } from "@/hooks/useAlerts";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const getAlertIcon = (alertType: string) => {
-  switch (alertType.toLowerCase()) {
-    case "liquidity":
-    case "liquidità":
+const getAlertIcon = (type: string) => {
+  switch (type.toLowerCase()) {
+    case "warning":
       return TrendingDown;
-    case "deadline":
-    case "scadenza":
-      return Clock;
-    case "cashflow":
     case "success":
       return CheckCircle;
+    case "info":
+      return Clock;
     default:
       return AlertTriangle;
   }
 };
 
 export function AlertsSummary() {
-  const { data: alerts, isLoading } = useAlerts({ status: "active" });
+  const { data: alerts, isLoading } = useAlerts({ isRead: false });
   const { data: counts } = useActiveAlertsCount();
 
   const displayAlerts = alerts?.slice(0, 3) || [];
@@ -53,7 +50,7 @@ export function AlertsSummary() {
           </div>
         ) : (
           displayAlerts.map((alert, index) => {
-            const Icon = getAlertIcon(alert.alertType);
+            const Icon = getAlertIcon(alert.type);
             return (
               <div
                 key={alert.id}
@@ -77,7 +74,7 @@ export function AlertsSummary() {
                 />
                 <div>
                   <p className="text-sm font-medium text-foreground">{alert.title}</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">{alert.description}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{alert.message}</p>
                 </div>
               </div>
             );

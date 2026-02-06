@@ -78,12 +78,11 @@ const superAdminSidebarSections: SidebarSection[] = [
 export function Sidebar() {
   const { collapsed, setCollapsed } = useSidebarState();
   const location = useLocation();
-  const { user, profile, signOut, demoRole, userRole, isDemoMode } = useAuth();
+  const { user, profile, signOut, userRole, isDemoMode } = useAuth();
   const { data: alertsCount } = useActiveAlertsCount();
 
-  const effectiveRole = demoRole || userRole;
-  const isAdmin = effectiveRole === 'admin_aziendale';
-  const isSuperAdmin = effectiveRole === 'super_admin';
+  const isAdmin = userRole === 'admin_aziendale';
+  const isSuperAdmin = userRole === 'super_admin';
 
   // Completely different sidebar based on role
   const sidebarSections: SidebarSection[] = isSuperAdmin
@@ -110,9 +109,9 @@ export function Sidebar() {
   };
 
   const getDisplayEmail = () => {
-    if (isDemoMode && demoRole) {
-      if (demoRole === 'super_admin') return 'Super Amministratore';
-      if (demoRole === 'admin_aziendale') return 'Consulente';
+    if (isDemoMode && userRole) {
+      if (userRole === 'super_admin') return 'Super Amministratore';
+      if (userRole === 'admin_aziendale') return 'Consulente';
       return 'Utente Standard';
     }
     return user?.email || "";
