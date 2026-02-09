@@ -168,13 +168,20 @@ export function useBankingIntegration() {
   const fetchAccounts = useCallback(async (): Promise<BankAccount[]> => {
     setIsLoading(true);
     try {
-      const data = await callEnableBankingFunction("get_accounts");
-      const fetchedAccounts = (data.accounts as (BankAccount & { is_connected?: boolean })[]).map(acc => ({
+      const { data, error } = await supabase
+        .from("bank_accounts")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      // deno-lint-ignore no-explicit-any
+      const fetchedAccounts = ((data || []) as any[]).map(acc => ({
         ...acc,
         current_balance: acc.balance,
         available_balance: acc.balance,
         status: (acc.is_connected !== false ? "active" : "disconnected") as "active" | "pending" | "error" | "disconnected",
-      }));
+      })) as BankAccount[];
       setAccounts(fetchedAccounts);
       return fetchedAccounts;
     } catch (error) {
@@ -187,7 +194,7 @@ export function useBankingIntegration() {
     } finally {
       setIsLoading(false);
     }
-  }, [callEnableBankingFunction, toast]);
+  }, [toast]);
 
   const syncAccount = useCallback(
     async (
