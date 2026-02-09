@@ -96,7 +96,7 @@ export default function ContiBancari() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Conti Bancari</h1>
           <p className="text-muted-foreground mt-1">
-            Gestisci i tuoi conti collegati tramite A-Cube o caricando estratti conto
+            Gestisci i tuoi conti collegati tramite Enable Banking o caricando estratti conto
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -120,7 +120,7 @@ export default function ContiBancari() {
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Importa i tuoi conti</AlertTitle>
         <AlertDescription>
-          Collega i tuoi conti bancari tramite A-Cube per sincronizzazione automatica, 
+          Collega i tuoi conti bancari tramite Enable Banking per sincronizzazione automatica, 
           oppure carica estratti conto in formato PDF o CSV per importare le transazioni manualmente.
         </AlertDescription>
       </Alert>
