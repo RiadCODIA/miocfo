@@ -212,8 +212,8 @@ async function startAuth(
   const body: Record<string, unknown> = {
     access: {
       valid_until: validUntil,
-      balances: {},
-      transactions: {},
+      balances: true,
+      transactions: true,
     },
     aspsp: {
       name: aspspName,
