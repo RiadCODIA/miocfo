@@ -96,7 +96,7 @@ export default function ContiBancari() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Conti Bancari</h1>
           <p className="text-muted-foreground mt-1">
-            Gestisci i tuoi conti collegati tramite Enable Banking o caricando estratti conto
+            Gestisci i tuoi conti collegati tramite Enable Banking, A-Cube o caricando estratti conto
           </p>
         </div>
         <div className="flex flex-wrap gap-2">

@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle, Search } from "lucide-react";
+import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle, Search, ArrowLeft } from "lucide-react";
 import { useBankingIntegration, BankAccount, ASPSP } from "@/hooks/useBankingIntegration";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -21,6 +21,7 @@ interface ConnectBankModalProps {
 }
 
 export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankModalProps) {
+  const [provider, setProvider] = useState<"choose" | "enable_banking" | "acube">("choose");
   const [step, setStep] = useState<"select_bank" | "redirecting" | "connecting" | "success" | "error">("select_bank");
   const [aspsps, setAspsps] = useState<ASPSP[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
@@ -129,6 +130,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   };
 
   const handleClose = () => {
+    setProvider("choose");
     setStep("select_bank");
     setSearchQuery("");
     setSelectedBank(null);
@@ -139,6 +141,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   const handleRetry = () => {
     setErrorMessage("");
+    setProvider("choose");
     setStep("select_bank");
   };
 
@@ -147,14 +150,16 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle>
-            {step === "select_bank" && "Seleziona la tua banca"}
+            {provider === "choose" && "Scegli il metodo di collegamento"}
+            {provider !== "choose" && step === "select_bank" && "Seleziona la tua banca"}
             {step === "redirecting" && "Reindirizzamento..."}
             {step === "connecting" && "Collegamento in corso..."}
             {step === "success" && "Connessione riuscita!"}
             {step === "error" && "Errore di connessione"}
           </DialogTitle>
           <DialogDescription>
-            {step === "select_bank" && "Cerca e seleziona la tua banca per collegare i conti"}
+            {provider === "choose" && "Seleziona come vuoi collegare il tuo conto bancario"}
+            {provider !== "choose" && step === "select_bank" && "Cerca e seleziona la tua banca per collegare i conti"}
             {step === "redirecting" && `Stai per essere reindirizzato a ${selectedBank?.name || "la tua banca"}...`}
             {step === "connecting" && "Stiamo salvando i tuoi dati..."}
             {step === "success" && `${connectedAccounts.length} conto/i collegati con successo`}
@@ -162,8 +167,46 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
           </DialogDescription>
         </DialogHeader>
 
+        {/* Provider Choice */}
+        {provider === "choose" && step === "select_bank" && (
+          <div className="space-y-4 py-2">
+            <button
+              onClick={() => setProvider("enable_banking")}
+              className="w-full flex items-center gap-4 p-4 rounded-lg border border-border hover:border-primary hover:bg-muted/50 transition-colors text-left"
+            >
+              <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <Building2 className="h-6 w-6 text-primary" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-foreground">Enable Banking</p>
+                <p className="text-sm text-muted-foreground">
+                  Collegamento diretto PSD2 — sincronizzazione automatica conti e transazioni
+                </p>
+              </div>
+            </button>
+            <button
+              onClick={() => setProvider("acube")}
+              className="w-full flex items-center gap-4 p-4 rounded-lg border border-border hover:border-primary hover:bg-muted/50 transition-colors text-left"
+            >
+              <div className="h-12 w-12 rounded-lg bg-accent/10 flex items-center justify-center flex-shrink-0">
+                <Building2 className="h-6 w-6 text-accent-foreground" />
+              </div>
+              <div className="flex-1">
+                <p className="font-semibold text-foreground">A-Cube</p>
+                <p className="text-sm text-muted-foreground">
+                  Collegamento tramite A-Cube API — accesso ai conti via AISP
+                </p>
+              </div>
+            </button>
+            <Button variant="outline" onClick={handleClose} className="w-full">
+              Annulla
+            </Button>
+          </div>
+        )}
+
         {/* Bank Selection */}
-        {step === "select_bank" && (
+        {/* Enable Banking - Bank Selection */}
+        {provider === "enable_banking" && step === "select_bank" && (
           <div className="space-y-4 py-2">
             {isDemoMode && (
               <div className="flex items-center justify-center">
@@ -241,9 +284,44 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
               </p>
             </div>
 
-            <Button variant="outline" onClick={handleClose} className="w-full">
-              Annulla
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setProvider("choose")} className="flex-1">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Indietro
+              </Button>
+              <Button variant="outline" onClick={handleClose} className="flex-1">
+                Annulla
+              </Button>
+            </div>
+          </div>
+        )}
+
+        {/* A-Cube - Bank Selection */}
+        {provider === "acube" && step === "select_bank" && (
+          <div className="space-y-4 py-2">
+            <div className="flex flex-col items-center justify-center py-8 space-y-3">
+              <Building2 className="h-12 w-12 text-muted-foreground" />
+              <p className="text-foreground font-medium">Collegamento tramite A-Cube</p>
+              <p className="text-sm text-muted-foreground text-center">
+                Inserisci il tuo codice fiscale o P.IVA per avviare il collegamento AISP tramite A-Cube.
+              </p>
+            </div>
+            <Input placeholder="Codice Fiscale o Partita IVA" />
+            <Button className="w-full" disabled>
+              Avvia collegamento A-Cube
             </Button>
+            <p className="text-xs text-muted-foreground text-center">
+              Funzionalità in fase di attivazione — disponibile a breve
+            </p>
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => setProvider("choose")} className="flex-1">
+                <ArrowLeft className="h-4 w-4 mr-2" />
+                Indietro
+              </Button>
+              <Button variant="outline" onClick={handleClose} className="flex-1">
+                Annulla
+              </Button>
+            </div>
           </div>
         )}
 
