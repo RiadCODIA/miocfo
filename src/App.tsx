@@ -43,7 +43,6 @@ function DashboardRouter() {
   const { userRole } = useAuth();
   
   if (userRole === 'super_admin') return <DashboardSuperAdmin />;
-  if (userRole === 'admin_aziendale') return <DashboardAdmin />;
   return <Index />;
 }
 
