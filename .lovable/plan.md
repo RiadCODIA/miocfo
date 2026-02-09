@@ -1,29 +1,25 @@
 
-## Rename "A-Cube" to "Enable Banking" in the UI
+
+## Update All Remaining "A-Cube" References to "Enable Banking"
 
 ### Overview
-Replace all user-facing references of "A-Cube" with "Enable Banking" across the frontend components. The backend Edge Function and internal variable names will keep their current naming (since they reference A-Cube API infrastructure), but all text shown to users will say "Enable Banking".
+Several user-facing error messages and code comments still reference "A-Cube" instead of "Enable Banking". This plan fixes all remaining instances in frontend code.
 
 ### Changes
 
-**1. `src/components/conti-bancari/ConnectBankModal.tsx`**
-- Line 100: `"sandbox A-Cube"` -> `"sandbox Enable Banking"`
-- Line 111: `"Impossibile inizializzare A-Cube"` -> `"Impossibile inizializzare Enable Banking"`
-- Line 147: `"Collega con A-Cube"` -> `"Collega con Enable Banking"`
-- Line 154: `"portale A-Cube"` -> `"portale Enable Banking"`
-- Line 196: `"portale A-Cube"` -> `"portale Enable Banking"`
-- Line 236: `"Powered by A-Cube"` -> `"Powered by Enable Banking"`
+**1. `src/hooks/useBankingIntegration.ts`**
+- Line 70: Change error message from `"Errore nella chiamata A-Cube"` to `"Errore nella chiamata Enable Banking"`
 
-**2. `src/components/conti-bancari/BankAccountCard.tsx`**
-- Line 108: Provider label `"A-Cube"` -> `"Enable Banking"` for `acube` source
-- Line 234: Debug label `"A-Cube Account ID"` -> `"Enable Banking Account ID"`
+**2. `src/components/conti-bancari/ConnectBankModal.tsx`**
+- Line 40: Update comment from `"Handle A-Cube callback"` to `"Handle Enable Banking callback"`
+- Line 116: Rename function from `handleOpenAcubePortal` to `handleOpenBankingPortal`
+- Line 241: Update `onClick={handleOpenAcubePortal}` to `onClick={handleOpenBankingPortal}`
 
-**3. `src/pages/ContiBancari.tsx`**
-- Line 99: `"tramite A-Cube"` -> `"tramite Enable Banking"`
-- Line 123: `"tramite A-Cube"` -> `"tramite Enable Banking"`
+These are the only remaining user-facing or near-user-facing "A-Cube" references in the frontend. Internal variable names like `callAcubeFunction`, database fields like `acube_account_id`, and the Edge Function code remain unchanged as they are backend/infrastructure concerns.
 
 ### What stays unchanged
-- Edge Function code (`supabase/functions/acube-banking/index.ts`) -- internal/backend, not user-facing
-- Hook variable names (`callAcubeFunction`, etc.) -- code internals
-- Database column names (`acube_account_id`) -- schema
-- Environment variable names (`ACUBE_*`) -- infrastructure
+- Edge Function (`supabase/functions/acube-banking/index.ts`) -- backend only
+- `callAcubeFunction` variable name in hooks -- internal code, not shown to users
+- `acube_account_id` fields -- database schema
+- Provider value `"acube"` in source mappings -- internal identifier (already maps to "Enable Banking" label)
+
