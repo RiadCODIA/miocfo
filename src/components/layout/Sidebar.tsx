@@ -79,23 +79,6 @@ const userNavGroups: NavGroup[] = [
   },
 ];
 
-const adminNavGroups: NavGroup[] = [
-  {
-    label: "NAVIGAZIONE",
-    items: [
-      { id: "dashboard_admin", label: "Dashboard", icon: LayoutDashboard, path: "/" },
-      { id: "clienti", label: "I Miei Clienti", icon: Users, path: "/clienti" },
-    ],
-  },
-  {
-    label: "ANALYTICS",
-    items: [
-      { id: "kpi_clienti", label: "KPI per Cliente", icon: BarChart3, path: "/kpi-clienti" },
-      { id: "flussi_clienti", label: "Flussi di Cassa", icon: TrendingUp, path: "/flussi-clienti" },
-      { id: "alert_notifiche", label: "Notifiche", icon: Bell, path: "/alert" },
-    ],
-  },
-];
 
 const superAdminNavGroups: NavGroup[] = [
   {
@@ -117,14 +100,11 @@ export function Sidebar() {
   const { data: alertsCount } = useActiveAlertsCount();
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
-  const isAdmin = userRole === 'admin_aziendale';
   const isSuperAdmin = userRole === 'super_admin';
 
   const navGroups = isSuperAdmin
     ? superAdminNavGroups
-    : isAdmin
-      ? adminNavGroups
-      : userNavGroups;
+    : userNavGroups;
 
   const toggleGroup = (label: string) => {
     setCollapsedGroups(prev => ({ ...prev, [label]: !prev[label] }));

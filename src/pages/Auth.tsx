@@ -49,7 +49,7 @@ export default function Auth() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [companyName, setCompanyName] = useState("");
-  const [selectedRole, setSelectedRole] = useState<"user" | "admin_aziendale">("user");
+  
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -82,20 +82,6 @@ export default function Auth() {
       toast({
         title: "Errore Demo",
         description: "Account demo utente non disponibile. Contatta l'amministratore.",
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleAdminDemoLogin = async () => {
-    setIsSubmitting(true);
-    const { error } = await signInAsDemoAdmin();
-    setIsSubmitting(false);
-    
-    if (error) {
-      toast({
-        title: "Errore Demo",
-        description: "Account demo consulente non disponibile. Contatta l'amministratore.",
         variant: "destructive",
       });
     }
@@ -179,7 +165,7 @@ export default function Auth() {
       first_name: firstName,
       last_name: lastName,
       company_name: companyName || undefined,
-      role: selectedRole,
+      role: 'user',
     });
     setIsSubmitting(false);
 
@@ -296,7 +282,7 @@ export default function Auth() {
                   </div>
                 </div>
                 
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2">
                   <Button 
                     type="button" 
                     variant="outline" 
@@ -310,22 +296,12 @@ export default function Auth() {
                   <Button 
                     type="button" 
                     variant="outline" 
-                    className="w-full text-xs bg-amber-500/10 border-amber-500/30 text-amber-600 hover:bg-amber-500/20"
-                    onClick={handleAdminDemoLogin}
-                    disabled={isSubmitting}
-                  >
-                    <ShieldCheck className="mr-1 h-3 w-3" />
-                    Admin
-                  </Button>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
                     className="w-full text-xs bg-violet-500/10 border-violet-500/30 text-violet-600 hover:bg-violet-500/20"
                     onClick={handleSuperAdminDemoLogin}
                     disabled={isSubmitting}
                   >
                     <Crown className="mr-1 h-3 w-3" />
-                    Super
+                    Super Admin
                   </Button>
                 </div>
               </form>
@@ -378,28 +354,6 @@ export default function Auth() {
                   </div>
                 </div>
                 
-                <div className="space-y-2">
-                  <Label htmlFor="accountType">Tipo di Account</Label>
-                  <Select value={selectedRole} onValueChange={(v) => setSelectedRole(v as "user" | "admin_aziendale")}>
-                    <SelectTrigger id="accountType">
-                      <SelectValue placeholder="Seleziona tipo account" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="user">
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4" />
-                          <span>Utente Standard</span>
-                        </div>
-                      </SelectItem>
-                      <SelectItem value="admin_aziendale">
-                        <div className="flex items-center gap-2">
-                          <ShieldCheck className="h-4 w-4" />
-                          <span>Consulente (gestisce clienti)</span>
-                        </div>
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
                 
                 <div className="space-y-2">
                   <Label htmlFor="signup-email">Email</Label>
