@@ -6,10 +6,10 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
+    --background: 220 20% 96%;
     --foreground: 222 47% 20%;
 
-    --card: 220 14% 96%;
+    --card: 0 0% 100%;
     --card-foreground: 222 47% 20%;
 
     --popover: 0 0% 100%;
@@ -36,20 +36,21 @@
     --warning: 38 92% 50%;
     --warning-foreground: 222 47% 11%;
 
-    --border: 220 13% 88%;
+    --border: 220 13% 90%;
     --input: 220 13% 88%;
     --ring: 217 61% 32%;
 
     --radius: 0.75rem;
 
-    --sidebar-background: 0 0% 100%;
-    --sidebar-foreground: 222 47% 20%;
-    --sidebar-primary: 217 61% 32%;
+    --sidebar-background: 230 30% 16%;
+    --sidebar-foreground: 220 20% 95%;
+    --sidebar-primary: 217 80% 60%;
     --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 220 14% 96%;
-    --sidebar-accent-foreground: 222 47% 20%;
-    --sidebar-border: 220 13% 90%;
-    --sidebar-ring: 217 61% 32%;
+    --sidebar-accent: 230 25% 22%;
+    --sidebar-accent-foreground: 220 20% 95%;
+    --sidebar-border: 230 25% 22%;
+    --sidebar-ring: 217 80% 60%;
+    --sidebar-muted: 230 20% 40%;
 
     --chart-income: 142 76% 36%;
     --chart-expense: 0 72% 51%;
@@ -58,10 +59,10 @@
 
     --gradient-primary: linear-gradient(135deg, hsl(217 61% 32%), hsl(280 67% 50%));
     --gradient-card: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 96%));
-    --gradient-sidebar: linear-gradient(180deg, hsl(0 0% 100%), hsl(220 14% 98%));
+    --gradient-sidebar: linear-gradient(180deg, hsl(230 30% 16%), hsl(230 30% 12%));
 
     --shadow-glow: 0 0 40px hsl(280 67% 50% / 0.15);
-    --shadow-card: 0 4px 24px hsl(222 47% 20% / 0.08);
+    --shadow-card: 0 1px 3px hsl(222 47% 20% / 0.06), 0 1px 2px hsl(222 47% 20% / 0.04);
   }
 
   .dark {

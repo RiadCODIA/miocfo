@@ -18,6 +18,10 @@ import {
   CreditCard,
   Receipt,
   LineChart,
+  Link2,
+  Bot,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import miocfoLogo from "@/assets/miocfo-logo.png";
@@ -32,47 +36,78 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useSidebarState } from "./MainLayout";
 import { useActiveAlertsCount } from "@/hooks/useAlerts";
+import { useState } from "react";
 
-interface SidebarSection {
+interface NavItem {
   id: string;
   label: string;
   icon: React.ComponentType<{ className?: string }>;
   path: string;
-  adminOnly?: boolean;
 }
 
-// Sidebar sections for regular users (clients)
-const userSidebarSections: SidebarSection[] = [
-  { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/" },
-  { id: "transazioni", label: "Transazioni", icon: ArrowLeftRight, path: "/transazioni" },
-  { id: "conti_bancari", label: "Conti Bancari", icon: Landmark, path: "/conti-bancari" },
-  { id: "fatture", label: "Fatture", icon: FileText, path: "/fatture" },
-  { id: "flussi_cassa", label: "Flussi di Cassa", icon: TrendingUp, path: "/flussi-cassa" },
-  { id: "budget_previsioni", label: "Budget & Previsioni", icon: CalendarRange, path: "/budget" },
-  { id: "scadenzario", label: "Scadenzario", icon: Calendar, path: "/scadenzario" },
-  { id: "kpi_report", label: "KPI & Report", icon: BarChart3, path: "/kpi-report" },
-  { id: "alert_notifiche", label: "Alert & Notifiche", icon: Bell, path: "/alert" },
-  { id: "configurazione", label: "Configurazione", icon: Cog, path: "/configurazione" },
-  { id: "impostazioni_personali", label: "Impostazioni", icon: Settings, path: "/impostazioni" },
+interface NavGroup {
+  label: string;
+  collapsible?: boolean;
+  items: NavItem[];
+}
+
+const userNavGroups: NavGroup[] = [
+  {
+    label: "NAVIGAZIONE",
+    items: [
+      { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/" },
+      { id: "conti_bancari", label: "Conti & Transazioni", icon: Landmark, path: "/conti-bancari" },
+      { id: "transazioni", label: "Movimenti", icon: ArrowLeftRight, path: "/transazioni" },
+    ],
+  },
+  {
+    label: "GESTIONE BUSINESS",
+    collapsible: true,
+    items: [
+      { id: "fatture", label: "Fatture", icon: FileText, path: "/fatture" },
+      { id: "flussi_cassa", label: "Flussi di Cassa", icon: TrendingUp, path: "/flussi-cassa" },
+      { id: "budget_previsioni", label: "Budget & Previsioni", icon: CalendarRange, path: "/budget" },
+      { id: "scadenzario", label: "Scadenzario", icon: Calendar, path: "/scadenzario" },
+    ],
+  },
+  {
+    label: "ANALYTICS & AI",
+    items: [
+      { id: "kpi_report", label: "KPI & Report", icon: BarChart3, path: "/kpi-report" },
+      { id: "alert_notifiche", label: "Notifiche", icon: Bell, path: "/alert" },
+    ],
+  },
 ];
 
-// Sidebar sections for admin_aziendale (completely different)
-const adminSidebarSections: SidebarSection[] = [
-  { id: "dashboard_admin", label: "Dashboard", icon: LayoutDashboard, path: "/" },
-  { id: "clienti", label: "I Miei Clienti", icon: Users, path: "/clienti" },
-  { id: "kpi_clienti", label: "KPI per Cliente", icon: BarChart3, path: "/kpi-clienti" },
-  { id: "flussi_clienti", label: "Flussi di Cassa", icon: TrendingUp, path: "/flussi-clienti" },
-  { id: "alert_notifiche", label: "Alert & Notifiche", icon: Bell, path: "/alert" },
+const adminNavGroups: NavGroup[] = [
+  {
+    label: "NAVIGAZIONE",
+    items: [
+      { id: "dashboard_admin", label: "Dashboard", icon: LayoutDashboard, path: "/" },
+      { id: "clienti", label: "I Miei Clienti", icon: Users, path: "/clienti" },
+    ],
+  },
+  {
+    label: "ANALYTICS",
+    items: [
+      { id: "kpi_clienti", label: "KPI per Cliente", icon: BarChart3, path: "/kpi-clienti" },
+      { id: "flussi_clienti", label: "Flussi di Cassa", icon: TrendingUp, path: "/flussi-clienti" },
+      { id: "alert_notifiche", label: "Notifiche", icon: Bell, path: "/alert" },
+    ],
+  },
 ];
 
-// Sidebar sections for super_admin (platform administration)
-const superAdminSidebarSections: SidebarSection[] = [
-  { id: "system_dashboard", label: "Dashboard di Sistema", icon: LayoutDashboard, path: "/" },
-  { id: "global_users", label: "Utenti", icon: Users, path: "/utenti-globali" },
-  { id: "plans_limits", label: "Piani", icon: CreditCard, path: "/piani" },
-  { id: "fatturazione", label: "Fatturazione", icon: Receipt, path: "/fatturazione" },
-  { id: "kpi_interni", label: "KPI Interni", icon: LineChart, path: "/kpi-interni" },
-  { id: "impostazioni_admin", label: "Impostazioni", icon: Settings, path: "/impostazioni" },
+const superAdminNavGroups: NavGroup[] = [
+  {
+    label: "SISTEMA",
+    items: [
+      { id: "system_dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/" },
+      { id: "global_users", label: "Utenti", icon: Users, path: "/utenti-globali" },
+      { id: "plans_limits", label: "Piani", icon: CreditCard, path: "/piani" },
+      { id: "fatturazione", label: "Fatturazione", icon: Receipt, path: "/fatturazione" },
+      { id: "kpi_interni", label: "KPI Interni", icon: LineChart, path: "/kpi-interni" },
+    ],
+  },
 ];
 
 export function Sidebar() {
@@ -80,16 +115,20 @@ export function Sidebar() {
   const location = useLocation();
   const { user, profile, signOut, userRole, isDemoMode } = useAuth();
   const { data: alertsCount } = useActiveAlertsCount();
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
   const isAdmin = userRole === 'admin_aziendale';
   const isSuperAdmin = userRole === 'super_admin';
 
-  // Completely different sidebar based on role
-  const sidebarSections: SidebarSection[] = isSuperAdmin
-    ? superAdminSidebarSections
-    : isAdmin 
-      ? adminSidebarSections 
-      : userSidebarSections;
+  const navGroups = isSuperAdmin
+    ? superAdminNavGroups
+    : isAdmin
+      ? adminNavGroups
+      : userNavGroups;
+
+  const toggleGroup = (label: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [label]: !prev[label] }));
+  };
 
   const getInitials = () => {
     if (profile?.first_name && profile?.last_name) {
@@ -108,15 +147,6 @@ export function Sidebar() {
     return user?.email?.split("@")[0] || "Utente";
   };
 
-  const getDisplayEmail = () => {
-    if (isDemoMode && userRole) {
-      if (userRole === 'super_admin') return 'Super Amministratore';
-      if (userRole === 'admin_aziendale') return 'Consulente';
-      return 'Utente Standard';
-    }
-    return user?.email || "";
-  };
-
   const handleSignOut = async () => {
     await signOut();
   };
@@ -124,114 +154,154 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-40 h-screen bg-sidebar border-r border-sidebar-border transition-all duration-300",
+        "fixed left-0 top-0 z-40 h-screen transition-all duration-300",
         collapsed ? "w-16" : "w-64"
       )}
+      style={{ background: "linear-gradient(180deg, hsl(var(--sidebar-background)), hsl(230 30% 12%))" }}
     >
       <div className="flex h-full flex-col">
         {/* Logo */}
-        <div className="flex h-16 items-center justify-between px-4 border-b border-sidebar-border">
+        <div className="flex h-16 items-center justify-between px-4 border-b border-white/10">
           <div className="flex items-center gap-2 overflow-hidden">
-            <img 
-              src={collapsed ? miocfoLogoIcon : miocfoLogo} 
-              alt="mioCFO" 
+            <img
+              src={collapsed ? miocfoLogoIcon : miocfoLogo}
+              alt="mioCFO"
               className={cn(
-                "object-contain transition-all duration-300",
+                "object-contain transition-all duration-300 brightness-0 invert",
                 collapsed ? "h-14 w-14" : "h-8 w-auto max-w-[140px]"
               )}
             />
           </div>
           <button
             onClick={() => setCollapsed(!collapsed)}
-            className="p-1.5 rounded-lg hover:bg-sidebar-accent text-sidebar-foreground/70 hover:text-sidebar-foreground transition-colors"
+            className="p-1.5 rounded-lg hover:bg-white/10 text-white/60 hover:text-white transition-colors"
           >
             {collapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
           </button>
         </div>
 
-        {/* Role Badge */}
-        {isDemoMode && !collapsed && (
-          <div className="px-4 py-2 border-b border-sidebar-border">
-            <Badge 
-              variant={isSuperAdmin ? "default" : isAdmin ? "default" : "secondary"} 
-              className={cn(
-                "w-full justify-center text-xs",
-                isSuperAdmin && "bg-violet-500/20 text-violet-600 border-violet-500/30",
-                isAdmin && !isSuperAdmin && "bg-amber-500/20 text-amber-600 border-amber-500/30"
-              )}
-            >
-              {isSuperAdmin ? "👑 Super Admin" : isAdmin ? "🛡️ Consulente" : "👤 Utente Demo"}
-            </Badge>
-          </div>
-        )}
-
         {/* Navigation */}
-        <nav className="flex-1 py-4 px-2 space-y-1 overflow-y-auto">
-          {sidebarSections.map((section, index) => {
-            const isActive = location.pathname === section.path;
-            const isAlertSection = section.id === "alert_notifiche";
-            const showAlertBadge = isAlertSection && alertsCount && alertsCount.total > 0;
-            
+        <nav className="flex-1 py-4 px-2 space-y-5 overflow-y-auto">
+          {navGroups.map((group) => {
+            const isGroupCollapsed = collapsedGroups[group.label];
             return (
-              <Tooltip key={section.id}>
-                <TooltipTrigger asChild>
-                  <NavLink
-                    to={section.path}
+              <div key={group.label}>
+                {!collapsed && (
+                  <div
                     className={cn(
-                      "flex items-center gap-3 px-3 py-2.5 rounded-lg transition-all duration-200 group relative",
-                      isActive
-                        ? "bg-primary/10 text-primary"
-                        : "text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground",
-                      section.adminOnly && "border-l-2 border-amber-500/50"
+                      "px-3 mb-2 flex items-center justify-between",
+                      group.collapsible && "cursor-pointer"
                     )}
-                    style={{ animationDelay: `${index * 50}ms` }}
+                    onClick={() => group.collapsible && toggleGroup(group.label)}
                   >
-                    <section.icon className={cn("h-5 w-5 shrink-0", isActive && "text-primary")} />
-                    {!collapsed && (
-                      <span className="text-sm font-medium truncate">{section.label}</span>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.15em] text-white/40">
+                      {group.label}
+                    </span>
+                    {group.collapsible && (
+                      isGroupCollapsed
+                        ? <ChevronDown className="h-3 w-3 text-white/40" />
+                        : <ChevronUp className="h-3 w-3 text-white/40" />
                     )}
-                    {/* Alert badge */}
-                    {showAlertBadge && (
-                      <span className={cn(
-                        "flex items-center justify-center text-xs font-bold text-white rounded-full",
-                        alertsCount.highPriority > 0 ? "bg-destructive" : "bg-amber-500",
-                        collapsed ? "absolute -top-1 -right-1 h-5 w-5" : "ml-auto h-5 min-w-5 px-1.5"
-                      )}>
-                        {alertsCount.total > 99 ? "99+" : alertsCount.total}
-                      </span>
-                    )}
-                    {isActive && !collapsed && !showAlertBadge && (
-                      <div className="ml-auto w-1.5 h-1.5 rounded-full bg-primary animate-pulse-glow" />
-                    )}
-                  </NavLink>
-                </TooltipTrigger>
-                {collapsed && (
-                  <TooltipContent side="right">
-                    <p>{section.label}</p>
-                  </TooltipContent>
+                  </div>
                 )}
-              </Tooltip>
+                {(!group.collapsible || !isGroupCollapsed) && (
+                  <div className="space-y-0.5">
+                    {group.items.map((item) => {
+                      const isActive = location.pathname === item.path;
+                      const isAlertItem = item.id === "alert_notifiche";
+                      const showBadge = isAlertItem && alertsCount && alertsCount.total > 0;
+
+                      return (
+                        <Tooltip key={item.id}>
+                          <TooltipTrigger asChild>
+                            <NavLink
+                              to={item.path}
+                              className={cn(
+                                "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group relative",
+                                isActive
+                                  ? "bg-white/10 text-white"
+                                  : "text-white/60 hover:bg-white/5 hover:text-white/90"
+                              )}
+                            >
+                              {isActive && (
+                                <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 rounded-r-full bg-sidebar-primary" />
+                              )}
+                              <item.icon className={cn("h-[18px] w-[18px] shrink-0", isActive && "text-sidebar-primary")} />
+                              {!collapsed && (
+                                <span className="text-sm font-medium truncate">{item.label}</span>
+                              )}
+                              {showBadge && (
+                                <span className={cn(
+                                  "flex items-center justify-center text-xs font-bold text-white rounded-full bg-destructive",
+                                  collapsed ? "absolute -top-1 -right-1 h-5 w-5" : "ml-auto h-5 min-w-5 px-1.5"
+                                )}>
+                                  {alertsCount.total > 99 ? "99+" : alertsCount.total}
+                                </span>
+                              )}
+                            </NavLink>
+                          </TooltipTrigger>
+                          {collapsed && (
+                            <TooltipContent side="right">
+                              <p>{item.label}</p>
+                            </TooltipContent>
+                          )}
+                        </Tooltip>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             );
           })}
         </nav>
 
+        {/* Bottom actions */}
+        <div className="px-2 pb-2 space-y-0.5">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <NavLink
+                to="/configurazione"
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200",
+                  location.pathname === "/configurazione"
+                    ? "bg-white/10 text-white"
+                    : "text-white/60 hover:bg-white/5 hover:text-white/90"
+                )}
+              >
+                <Cog className="h-[18px] w-[18px] shrink-0" />
+                {!collapsed && <span className="text-sm font-medium">Configurazione</span>}
+              </NavLink>
+            </TooltipTrigger>
+            {collapsed && <TooltipContent side="right"><p>Configurazione</p></TooltipContent>}
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <NavLink
+                to="/impostazioni"
+                className={cn(
+                  "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200",
+                  location.pathname === "/impostazioni"
+                    ? "bg-white/10 text-white"
+                    : "text-white/60 hover:bg-white/5 hover:text-white/90"
+                )}
+              >
+                <Settings className="h-[18px] w-[18px] shrink-0" />
+                {!collapsed && <span className="text-sm font-medium">Impostazioni</span>}
+              </NavLink>
+            </TooltipTrigger>
+            {collapsed && <TooltipContent side="right"><p>Impostazioni</p></TooltipContent>}
+          </Tooltip>
+        </div>
+
         {/* User section */}
-        <div className="p-4 border-t border-sidebar-border">
+        <div className="p-3 border-t border-white/10">
           <div className={cn("flex items-center gap-3", collapsed && "justify-center")}>
-            <div className={cn(
-              "h-9 w-9 rounded-full flex items-center justify-center text-primary-foreground font-medium text-sm shrink-0",
-              isSuperAdmin 
-                ? "bg-gradient-to-br from-violet-500 to-violet-600"
-                : isAdmin 
-                  ? "bg-gradient-to-br from-amber-500 to-amber-600" 
-                  : "bg-gradient-to-br from-primary to-primary/60"
-            )}>
+            <div className="h-8 w-8 rounded-full bg-sidebar-primary/30 flex items-center justify-center text-white font-medium text-xs shrink-0">
               {getInitials()}
             </div>
             {!collapsed && (
               <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-sidebar-foreground truncate">{getDisplayName()}</p>
-                <p className="text-xs text-sidebar-foreground/60 truncate">{getDisplayEmail()}</p>
+                <p className="text-sm font-medium text-white truncate">{getDisplayName()}</p>
               </div>
             )}
             {collapsed ? (
@@ -241,21 +311,19 @@ export function Sidebar() {
                     variant="ghost"
                     size="icon"
                     onClick={handleSignOut}
-                    className="h-8 w-8 text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10"
+                    className="h-8 w-8 text-white/50 hover:text-red-400 hover:bg-white/5"
                   >
                     <LogOut className="h-4 w-4" />
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="right">
-                  <p>Esci</p>
-                </TooltipContent>
+                <TooltipContent side="right"><p>Esci</p></TooltipContent>
               </Tooltip>
             ) : (
               <Button
                 variant="ghost"
                 size="icon"
                 onClick={handleSignOut}
-                className="h-8 w-8 text-sidebar-foreground/70 hover:text-destructive hover:bg-destructive/10 shrink-0"
+                className="h-8 w-8 text-white/50 hover:text-red-400 hover:bg-white/5 shrink-0"
               >
                 <LogOut className="h-4 w-4" />
               </Button>

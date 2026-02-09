@@ -1,10 +1,10 @@
 import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
-import { TrendingUp, TrendingDown } from "lucide-react";
 
 interface KPICardProps {
   title: string;
   value: string;
+  subtitle?: string;
   change?: number;
   changeLabel?: string;
   icon?: ReactNode;
@@ -15,36 +15,24 @@ interface KPICardProps {
 export function KPICard({
   title,
   value,
-  change,
-  changeLabel,
+  subtitle,
   icon,
   variant = "default",
-  delay = 0,
 }: KPICardProps) {
-  const isPositive = change && change > 0;
-  const isNegative = change && change < 0;
-
   return (
-    <div
-      className={cn(
-        "glass rounded-xl p-5 opacity-0 animate-fade-in",
-        variant === "success" && "border-success/20",
-        variant === "warning" && "border-warning/20",
-        variant === "destructive" && "border-destructive/20"
-      )}
-      style={{ animationDelay: `${delay}ms` }}
-    >
+    <div className="rounded-2xl bg-card border border-border p-5 shadow-sm">
       <div className="flex items-start justify-between">
         <div className="space-y-1">
-          <p className="text-sm text-muted-foreground">{title}</p>
-          <p className="text-2xl font-bold text-foreground animate-count-up" style={{ animationDelay: `${delay + 100}ms` }}>
-            {value}
-          </p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">{title}</p>
+          <p className="text-2xl font-bold text-foreground">{value}</p>
+          {subtitle && (
+            <p className="text-xs text-muted-foreground">{subtitle}</p>
+          )}
         </div>
         {icon && (
           <div
             className={cn(
-              "p-2.5 rounded-lg",
+              "h-10 w-10 rounded-xl flex items-center justify-center",
               variant === "default" && "bg-primary/10 text-primary",
               variant === "success" && "bg-success/10 text-success",
               variant === "warning" && "bg-warning/10 text-warning",
@@ -55,27 +43,6 @@ export function KPICard({
           </div>
         )}
       </div>
-
-      {change !== undefined && (
-        <div className="mt-3 flex items-center gap-1.5">
-          {isPositive && <TrendingUp className="h-4 w-4 text-success" />}
-          {isNegative && <TrendingDown className="h-4 w-4 text-destructive" />}
-          <span
-            className={cn(
-              "text-sm font-medium",
-              isPositive && "text-success",
-              isNegative && "text-destructive",
-              !isPositive && !isNegative && "text-muted-foreground"
-            )}
-          >
-            {isPositive && "+"}
-            {change}%
-          </span>
-          {changeLabel && (
-            <span className="text-xs text-muted-foreground">{changeLabel}</span>
-          )}
-        </div>
-      )}
     </div>
   );
 }
