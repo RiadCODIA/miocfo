@@ -2,3 +2,6 @@ project_id = "yzhonmuhywdiqaxxbnsj"
 
 [functions.acube-banking]
 verify_jwt = false
+
+[functions.enable-banking]
+verify_jwt = false

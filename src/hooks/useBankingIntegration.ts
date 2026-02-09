@@ -35,30 +35,41 @@ export interface BankTransaction {
   created_at: string;
 }
 
+export interface ASPSP {
+  name: string;
+  country: string;
+  logo?: string;
+  bic?: string;
+  [key: string]: unknown;
+}
+
 export function useBankingIntegration() {
   const [isLoading, setIsLoading] = useState(false);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
   const { toast } = useToast();
 
-  const callAcubeFunction = useCallback(
+  const callEnableBankingFunction = useCallback(
     async (action: string, params: Record<string, unknown> = {}) => {
-      // Get the current session for auth token
+      const publicActions = ["get_aspsps"];
+
       const { data: { session } } = await supabase.auth.getSession();
 
-      if (!session?.access_token) {
+      if (!publicActions.includes(action) && !session?.access_token) {
         throw new Error("Autenticazione richiesta. Effettua il login per utilizzare i conti bancari.");
       }
 
       const supabaseUrl = "https://yzhonmuhywdiqaxxbnsj.supabase.co";
       const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6aG9ubXVoeXdkaXFheHhibnNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzNzEzMTMsImV4cCI6MjA4NTk0NzMxM30.7oaiC1P4pwNdj8mIv4rU5Jsdm2jgkxKwz85PzUxWcvY";
-      
-      const response = await fetch(`${supabaseUrl}/functions/v1/acube-banking`, {
+
+      const authToken = session?.access_token || anonKey;
+
+      const response = await fetch(`${supabaseUrl}/functions/v1/enable-banking`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "apikey": anonKey,
-          "Authorization": `Bearer ${session.access_token}`,
+          "Authorization": `Bearer ${authToken}`,
         },
         body: JSON.stringify({ action, ...params }),
       });
@@ -81,33 +92,53 @@ export function useBankingIntegration() {
     []
   );
 
-  // Start bank connection flow with fiscal ID
-  const createConnectRequest = useCallback(
-    async (
-      redirectUri: string,
-      fiscalId: string
-    ): Promise<{ connect_url: string }> => {
+  // Get list of available banks (ASPSPs) for a country
+  const getASPSPs = useCallback(
+    async (country: string = "IT"): Promise<ASPSP[]> => {
       setIsLoading(true);
       try {
-        const data = await callAcubeFunction("connect_request", {
+        const data = await callEnableBankingFunction("get_aspsps", {
+          aspsp_country: country,
+        });
+        return (data.aspsps || []) as ASPSP[];
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [callEnableBankingFunction]
+  );
+
+  // Start bank authorization - returns URL to redirect user to
+  const startAuth = useCallback(
+    async (
+      aspspName: string,
+      aspspCountry: string,
+      redirectUri: string,
+      psuType: string = "personal"
+    ): Promise<{ authorization_url: string; state: string }> => {
+      setIsLoading(true);
+      try {
+        const data = await callEnableBankingFunction("start_auth", {
+          aspsp_name: aspspName,
+          aspsp_country: aspspCountry,
           redirect_uri: redirectUri,
-          fiscal_id: fiscalId,
+          psu_type: psuType,
         });
         return data;
       } finally {
         setIsLoading(false);
       }
     },
-    [callAcubeFunction]
+    [callEnableBankingFunction]
   );
 
-  // Complete connection after redirect (sync accounts)
-  const completeConnection = useCallback(
-    async (fiscalId: string): Promise<BankAccount[]> => {
+  // Complete session after user redirect - sync accounts
+  const completeSession = useCallback(
+    async (code: string): Promise<BankAccount[]> => {
       setIsLoading(true);
       try {
-        const data = await callAcubeFunction("complete_connection", {
-          fiscal_id: fiscalId,
+        const data = await callEnableBankingFunction("complete_session", {
+          code,
         });
 
         const newAccounts = data.accounts as BankAccount[];
@@ -131,16 +162,15 @@ export function useBankingIntegration() {
         setIsLoading(false);
       }
     },
-    [callAcubeFunction, toast]
+    [callEnableBankingFunction, toast]
   );
 
   const fetchAccounts = useCallback(async (): Promise<BankAccount[]> => {
     setIsLoading(true);
     try {
-      const data = await callAcubeFunction("get_accounts");
+      const data = await callEnableBankingFunction("get_accounts");
       const fetchedAccounts = (data.accounts as (BankAccount & { is_connected?: boolean })[]).map(acc => ({
         ...acc,
-        // Ensure balance fields are set for compatibility
         current_balance: acc.balance,
         available_balance: acc.balance,
         status: (acc.is_connected !== false ? "active" : "disconnected") as "active" | "pending" | "error" | "disconnected",
@@ -157,7 +187,7 @@ export function useBankingIntegration() {
     } finally {
       setIsLoading(false);
     }
-  }, [callAcubeFunction, toast]);
+  }, [callEnableBankingFunction, toast]);
 
   const syncAccount = useCallback(
     async (
@@ -165,7 +195,7 @@ export function useBankingIntegration() {
     ): Promise<{ account: BankAccount; transactions_synced: number }> => {
       setIsLoading(true);
       try {
-        const data = await callAcubeFunction("sync_account", {
+        const data = await callEnableBankingFunction("sync_account", {
           account_id: accountId,
         });
 
@@ -174,9 +204,7 @@ export function useBankingIntegration() {
           description: `${data.transactions_synced} transazioni sincronizzate`,
         });
 
-        // Refresh all accounts from DB
         await fetchAccounts();
-
         return data;
       } catch (error) {
         toast({
@@ -185,20 +213,19 @@ export function useBankingIntegration() {
             error instanceof Error ? error.message : "Errore nella sincronizzazione",
           variant: "destructive",
         });
-        
-        // Refresh accounts to sync UI
+
         try {
           await fetchAccounts();
         } catch {
-          // Ignore fetch error
+          // Ignore
         }
-        
+
         throw error;
       } finally {
         setIsLoading(false);
       }
     },
-    [callAcubeFunction, toast, fetchAccounts]
+    [callEnableBankingFunction, toast, fetchAccounts]
   );
 
   const fetchTransactions = useCallback(
@@ -209,7 +236,6 @@ export function useBankingIntegration() {
     ): Promise<BankTransaction[]> => {
       setIsLoading(true);
       try {
-        // Fetch from database directly
         const { data, error } = await supabase
           .from("bank_transactions")
           .select("*")
@@ -241,11 +267,10 @@ export function useBankingIntegration() {
     async (accountId: string): Promise<void> => {
       setIsLoading(true);
       try {
-        const result = await callAcubeFunction("remove_connection", {
+        const result = await callEnableBankingFunction("remove_connection", {
           account_id: accountId,
         });
 
-        // Refresh accounts from DB
         await fetchAccounts();
 
         toast({
@@ -264,15 +289,16 @@ export function useBankingIntegration() {
         setIsLoading(false);
       }
     },
-    [callAcubeFunction, toast, fetchAccounts]
+    [callEnableBankingFunction, toast, fetchAccounts]
   );
 
   return {
     isLoading,
     accounts,
     transactions,
-    createConnectRequest,
-    completeConnection,
+    getASPSPs,
+    startAuth,
+    completeSession,
     fetchAccounts,
     syncAccount,
     fetchTransactions,

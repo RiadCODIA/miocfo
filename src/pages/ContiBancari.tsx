@@ -85,7 +85,7 @@ export default function ContiBancari() {
       currency: account.currency || "EUR",
       status: account.status as "active" | "pending" | "error" | "disconnected",
       lastSync: account.last_sync_at ? new Date(account.last_sync_at) : new Date(),
-      source: source || "acube",
+      source: source || "enable_banking",
     };
   };
 
