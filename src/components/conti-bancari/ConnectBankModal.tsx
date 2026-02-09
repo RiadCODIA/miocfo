@@ -286,7 +286,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[500px]">
+      <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>
             {provider === "choose" && "Scegli il metodo di collegamento"}
