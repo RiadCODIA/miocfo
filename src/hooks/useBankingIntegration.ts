@@ -67,7 +67,7 @@ export function useBankingIntegration() {
 
       if (!response.ok) {
         console.error("[useBankingIntegration] Function error:", response.status, data);
-        const errorMessage = data?.error || "Errore nella chiamata A-Cube";
+        const errorMessage = data?.error || "Errore nella chiamata Enable Banking";
         throw new Error(errorMessage);
       }
 
