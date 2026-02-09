@@ -37,7 +37,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     return `${window.location.origin}/conti-bancari?fiscalId=${encodeURIComponent(fiscalIdParam)}&success=true`;
   }, []);
 
-  // Handle A-Cube callback (check for fiscal_id in URL params after redirect)
+  // Handle Enable Banking callback (check for fiscal_id in URL params after redirect)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const callbackFiscalId = urlParams.get("fiscalId") || urlParams.get("fiscal_id");
@@ -113,7 +113,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     }
   };
 
-  const handleOpenAcubePortal = () => {
+  const handleOpenBankingPortal = () => {
     if (connectUrl) {
       window.location.href = connectUrl;
     }
@@ -238,7 +238,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
             </div>
             <div className="space-y-3">
               <Button
-                onClick={handleOpenAcubePortal}
+                onClick={handleOpenBankingPortal}
                 disabled={!connectUrl || isLoading}
                 className="w-full"
               >
