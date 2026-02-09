@@ -13,7 +13,21 @@ import { useBankingIntegration, BankAccount, ASPSP } from "@/hooks/useBankingInt
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
+
+const COUNTRIES = [
+  { code: "IT", label: "Italia" },
+  { code: "DE", label: "Germania" },
+  { code: "FR", label: "Francia" },
+  { code: "ES", label: "Spagna" },
+  { code: "NL", label: "Paesi Bassi" },
+  { code: "AT", label: "Austria" },
+  { code: "BE", label: "Belgio" },
+  { code: "PT", label: "Portogallo" },
+  { code: "FI", label: "Finlandia" },
+  { code: "IE", label: "Irlanda" },
+] as const;
 
 interface ConnectBankModalProps {
   open: boolean;
@@ -30,6 +44,8 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   const [connectedAccounts, setConnectedAccounts] = useState<BankAccount[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [loadingBanks, setLoadingBanks] = useState(false);
+  const [selectedCountry, setSelectedCountry] = useState("IT");
+  const [psuType, setPsuType] = useState<"personal" | "business">("personal");
   const [fiscalId, setFiscalId] = useState("");
   const [acubeLoading, setAcubeLoading] = useState(false);
   
@@ -136,25 +152,29 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     }
   }, [completeSession, onOpenChange]);
 
-  // Load banks when modal opens
-  useEffect(() => {
-    if (open && step === "select_bank" && aspsps.length === 0) {
-      setLoadingBanks(true);
-      getASPSPs("IT")
-        .then((banks) => {
-          setAspsps(banks);
-        })
-        .catch((err) => {
-          console.error("Failed to load banks:", err);
-          toast({
-            title: "Errore",
-            description: "Impossibile caricare la lista delle banche",
-            variant: "destructive",
-          });
-        })
-        .finally(() => setLoadingBanks(false));
+  // Load banks when modal opens or country changes
+  const fetchBanks = useCallback(async (country: string) => {
+    setLoadingBanks(true);
+    try {
+      const banks = await getASPSPs(country);
+      setAspsps(banks);
+    } catch (err) {
+      console.error("Failed to load banks:", err);
+      toast({
+        title: "Errore",
+        description: "Impossibile caricare la lista delle banche",
+        variant: "destructive",
+      });
+    } finally {
+      setLoadingBanks(false);
     }
-  }, [open, step, aspsps.length, getASPSPs, toast]);
+  }, [getASPSPs, toast]);
+
+  useEffect(() => {
+    if (open && provider === "enable_banking" && step === "select_bank") {
+      fetchBanks(selectedCountry);
+    }
+  }, [open, provider, step, selectedCountry, fetchBanks]);
 
   const filteredBanks = aspsps.filter((bank) =>
     bank.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -173,7 +193,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     setStep("redirecting");
     try {
       const redirectUri = getRedirectUri();
-      const data = await startAuth(bank.name, bank.country, redirectUri);
+      const data = await startAuth(bank.name, bank.country, redirectUri, psuType);
       
       // Redirect user to bank authorization page
       window.location.href = data.authorization_url;
@@ -196,6 +216,8 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     setSelectedBank(null);
     setConnectedAccounts([]);
     setErrorMessage("");
+    setSelectedCountry("IT");
+    setPsuType("personal");
     setFiscalId("");
     setAcubeLoading(false);
     onOpenChange(false);
@@ -204,6 +226,8 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   const handleRetry = () => {
     setErrorMessage("");
     setFiscalId("");
+    setSelectedCountry("IT");
+    setPsuType("personal");
     setProvider("choose");
     setStep("select_bank");
   };
@@ -330,6 +354,35 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
                 </span>
               </div>
             )}
+
+            {/* Filters */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Paese</label>
+                <Select value={selectedCountry} onValueChange={setSelectedCountry}>
+                  <SelectTrigger className="bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover z-50">
+                    {COUNTRIES.map((c) => (
+                      <SelectItem key={c.code} value={c.code}>{c.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">Tipo di conto</label>
+                <Select value={psuType} onValueChange={(v) => setPsuType(v as "personal" | "business")}>
+                  <SelectTrigger className="bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-popover z-50">
+                    <SelectItem value="personal">Personale</SelectItem>
+                    <SelectItem value="business">Aziendale</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
 
             {/* Search */}
             <div className="relative">
