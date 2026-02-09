@@ -97,7 +97,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     if (isDemoMode) {
       toast({
         title: "Modalità Demo - Ambiente Sandbox",
-        description: "Stai testando con l'ambiente sandbox A-Cube. Nessun dato bancario reale verrà utilizzato.",
+        description: "Stai testando con l'ambiente sandbox Enable Banking. Nessun dato bancario reale verrà utilizzato.",
       });
     }
 
@@ -108,7 +108,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       setConnectUrl(data.connect_url);
     } catch (error) {
       console.error("Failed to create connect request:", error);
-      setErrorMessage(error instanceof Error ? error.message : "Impossibile inizializzare A-Cube");
+      setErrorMessage(error instanceof Error ? error.message : "Impossibile inizializzare Enable Banking");
       setStep("error");
     }
   };
@@ -144,14 +144,14 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
         <DialogHeader>
           <DialogTitle>
             {step === "enter_fiscal_id" && "Collega il tuo conto bancario"}
-            {step === "ready" && "Collega con A-Cube"}
+            {step === "ready" && "Collega con Enable Banking"}
             {step === "connecting" && "Collegamento in corso..."}
             {step === "success" && "Connessione riuscita!"}
             {step === "error" && "Errore di connessione"}
           </DialogTitle>
           <DialogDescription>
             {step === "enter_fiscal_id" && "Inserisci la Partita IVA della tua azienda per collegare i conti bancari"}
-            {step === "ready" && "Clicca per completare il collegamento nel portale A-Cube"}
+            {step === "ready" && "Clicca per completare il collegamento nel portale Enable Banking"}
             {step === "connecting" && "Stiamo salvando i tuoi dati..."}
             {step === "success" && `${connectedAccounts.length} conto/i collegati con successo`}
             {step === "error" && "Si è verificato un errore durante il collegamento"}
@@ -193,7 +193,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
               <p className="font-medium text-foreground mb-2">Come funziona:</p>
               <ol className="list-decimal list-inside space-y-1">
                 <li>Inserisci la Partita IVA della tua azienda</li>
-                <li>Verrai reindirizzato al portale A-Cube</li>
+                <li>Verrai reindirizzato al portale Enable Banking</li>
                 <li>Seleziona la tua banca e autorizza l'accesso</li>
                 <li>I tuoi conti saranno collegati automaticamente</li>
               </ol>
@@ -233,7 +233,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
                 Clicca il pulsante qui sotto per autorizzare l'accesso ai tuoi conti.
               </p>
               <p className="text-xs text-muted-foreground">
-                Powered by A-Cube - i tuoi dati sono criptati e al sicuro
+                Powered by Enable Banking - i tuoi dati sono criptati e al sicuro
               </p>
             </div>
             <div className="space-y-3">

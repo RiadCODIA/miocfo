@@ -105,7 +105,7 @@ export function BankAccountCard({ account, onSync, onTest, onRemove, onDebug }: 
   const status = statusConfig[account.status];
 
   const isManual = account.source === "manual";
-  const providerLabel = account.source === "acube" ? "A-Cube" : account.source === "enable_banking" ? "Enable Banking" : account.source === "powens" ? "Powens" : "Manuale";
+  const providerLabel = account.source === "acube" ? "Enable Banking" : account.source === "enable_banking" ? "Enable Banking" : account.source === "powens" ? "Powens" : "Manuale";
   return (
     <>
       <Card className="hover:shadow-lg transition-shadow">
@@ -231,7 +231,7 @@ export function BankAccountCard({ account, onSync, onTest, onRemove, onDebug }: 
                     <p><strong>Enable Banking UID:</strong> {debugResult.enable_banking_uid}</p>
                   )}
                   {debugResult.acube_account_id && (
-                    <p><strong>A-Cube Account ID:</strong> {debugResult.acube_account_id}</p>
+                    <p><strong>Enable Banking Account ID:</strong> {debugResult.acube_account_id}</p>
                   )}
                   {debugResult.psu_context && (
                     <>
