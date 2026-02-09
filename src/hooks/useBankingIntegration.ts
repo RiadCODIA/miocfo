@@ -53,10 +53,19 @@ export function useBankingIntegration() {
     async (action: string, params: Record<string, unknown> = {}) => {
       const publicActions = ["get_aspsps"];
 
-      const { data: { session } } = await supabase.auth.getSession();
+      // After OAuth redirect, session may take time to restore - retry a few times
+      let session = (await supabase.auth.getSession()).data.session;
 
       if (!publicActions.includes(action) && !session?.access_token) {
-        throw new Error("Autenticazione richiesta. Effettua il login per utilizzare i conti bancari.");
+        // Wait and retry for session restoration (e.g. after bank redirect)
+        for (let i = 0; i < 5; i++) {
+          await new Promise(r => setTimeout(r, 1000));
+          session = (await supabase.auth.getSession()).data.session;
+          if (session?.access_token) break;
+        }
+        if (!session?.access_token) {
+          throw new Error("Autenticazione richiesta. Effettua il login per utilizzare i conti bancari.");
+        }
       }
 
       const supabaseUrl = "https://yzhonmuhywdiqaxxbnsj.supabase.co";
