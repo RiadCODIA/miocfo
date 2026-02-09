@@ -13,6 +13,7 @@ import { useBankingIntegration, BankAccount, ASPSP } from "@/hooks/useBankingInt
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ConnectBankModalProps {
   open: boolean;
@@ -29,6 +30,8 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   const [connectedAccounts, setConnectedAccounts] = useState<BankAccount[]>([]);
   const [errorMessage, setErrorMessage] = useState<string>("");
   const [loadingBanks, setLoadingBanks] = useState(false);
+  const [fiscalId, setFiscalId] = useState("");
+  const [acubeLoading, setAcubeLoading] = useState(false);
   
   const { getASPSPs, startAuth, completeSession, isLoading } = useBankingIntegration();
   const { isDemoMode } = useAuth();
@@ -39,16 +42,16 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     return `${window.location.origin}/conti-bancari`;
   }, []);
 
-  // Handle Enable Banking callback (check for code in URL params after redirect)
+  // Handle callbacks after redirect (Enable Banking code or A-Cube acube_done)
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const code = urlParams.get("code");
+    const acubeDone = urlParams.get("acube_done");
+    const acubeFiscalId = urlParams.get("fiscal_id");
 
     if (code) {
-      // Remove params from URL immediately
+      // Enable Banking callback
       window.history.replaceState({}, document.title, window.location.pathname);
-
-      // Complete the session
       setStep("connecting");
       onOpenChange(true);
 
@@ -59,20 +62,77 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
           setStep("success");
         } catch (error) {
           console.error("Failed to complete session:", error);
-          
           if (retries > 0 && error instanceof Error && 
               (error.message.includes("session") || error.message.includes("auth"))) {
-            console.log(`Retrying in 1 second... (${retries} retries left)`);
             await new Promise(resolve => setTimeout(resolve, 1000));
             return complete(retries - 1);
           }
-          
           setErrorMessage(error instanceof Error ? error.message : "Errore nel collegamento");
           setStep("error");
         }
       };
-
       complete();
+    } else if (acubeDone && acubeFiscalId) {
+      // A-Cube callback after bank authorization
+      window.history.replaceState({}, document.title, window.location.pathname);
+      setProvider("acube");
+      setStep("connecting");
+      onOpenChange(true);
+
+      const completeAcube = async (retries = 5) => {
+        try {
+          let session = (await supabase.auth.getSession()).data.session;
+          if (!session?.access_token) {
+            for (let i = 0; i < retries; i++) {
+              await new Promise(r => setTimeout(r, 1000));
+              session = (await supabase.auth.getSession()).data.session;
+              if (session?.access_token) break;
+            }
+          }
+          if (!session?.access_token) throw new Error("Sessione non disponibile");
+
+          const response = await fetch(
+            `https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/acube-banking`,
+            {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+                Authorization: `Bearer ${session.access_token}`,
+                apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6aG9ubXVoeXdkaXFheHhibnNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzNzEzMTMsImV4cCI6MjA4NTk0NzMxM30.7oaiC1P4pwNdj8mIv4rU5Jsdm2jgkxKwz85PzUxWcvY",
+              },
+              body: JSON.stringify({
+                action: "complete_connection",
+                fiscal_id: acubeFiscalId,
+              }),
+            }
+          );
+          if (!response.ok) {
+            const err = await response.json();
+            throw new Error(err.error || "Errore nel completamento A-Cube");
+          }
+          const data = await response.json();
+          const mapped: BankAccount[] = (data.accounts || []).map((a: Record<string, unknown>) => ({
+            id: a.id as string,
+            bank_name: (a.bank_name as string) || "Banca",
+            name: (a.name as string) || "Conto",
+            iban: a.iban as string,
+            balance: (a.balance as number) || 0,
+            available_balance: (a.balance as number) || 0,
+            current_balance: (a.balance as number) || 0,
+            currency: (a.currency as string) || "EUR",
+            status: "active",
+            provider: "acube",
+            last_sync_at: a.last_sync_at as string,
+          }));
+          setConnectedAccounts(mapped);
+          setStep("success");
+        } catch (error) {
+          console.error("A-Cube complete error:", error);
+          setErrorMessage(error instanceof Error ? error.message : "Errore A-Cube");
+          setStep("error");
+        }
+      };
+      completeAcube();
     }
   }, [completeSession, onOpenChange]);
 
@@ -136,13 +196,68 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
     setSelectedBank(null);
     setConnectedAccounts([]);
     setErrorMessage("");
+    setFiscalId("");
+    setAcubeLoading(false);
     onOpenChange(false);
   };
 
   const handleRetry = () => {
     setErrorMessage("");
+    setFiscalId("");
     setProvider("choose");
     setStep("select_bank");
+  };
+
+  const handleAcubeConnect = async () => {
+    if (!fiscalId.trim()) {
+      toast({ title: "Errore", description: "Inserisci il codice fiscale o P.IVA", variant: "destructive" });
+      return;
+    }
+    setAcubeLoading(true);
+    try {
+      const session = (await supabase.auth.getSession()).data.session;
+      if (!session?.access_token) throw new Error("Sessione non disponibile. Effettua il login.");
+
+      const redirectUri = `${window.location.origin}/conti-bancari?acube_done=1&fiscal_id=${encodeURIComponent(fiscalId.trim())}`;
+
+      const response = await fetch(
+        `https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/acube-banking`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${session.access_token}`,
+            apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6aG9ubXVoeXdkaXFheHhibnNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzNzEzMTMsImV4cCI6MjA4NTk0NzMxM30.7oaiC1P4pwNdj8mIv4rU5Jsdm2jgkxKwz85PzUxWcvY",
+          },
+          body: JSON.stringify({
+            action: "connect_request",
+            fiscal_id: fiscalId.trim(),
+            redirect_uri: redirectUri,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Errore nella richiesta A-Cube");
+      }
+
+      const data = await response.json();
+      const connectUrl = data.connect_url || data.url;
+
+      if (connectUrl) {
+        setStep("redirecting");
+        window.location.href = connectUrl;
+      } else {
+        throw new Error("Nessun URL di reindirizzamento ricevuto da A-Cube");
+      }
+    } catch (error) {
+      console.error("A-Cube connect error:", error);
+      setErrorMessage(error instanceof Error ? error.message : "Errore A-Cube");
+      setStep("error");
+    } finally {
+      setAcubeLoading(false);
+    }
   };
 
   return (
@@ -299,26 +414,39 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
         {/* A-Cube - Bank Selection */}
         {provider === "acube" && step === "select_bank" && (
           <div className="space-y-4 py-2">
-            <div className="flex flex-col items-center justify-center py-8 space-y-3">
+            <div className="flex flex-col items-center justify-center py-6 space-y-3">
               <Building2 className="h-12 w-12 text-muted-foreground" />
               <p className="text-foreground font-medium">Collegamento tramite A-Cube</p>
               <p className="text-sm text-muted-foreground text-center">
                 Inserisci il tuo codice fiscale o P.IVA per avviare il collegamento AISP tramite A-Cube.
               </p>
             </div>
-            <Input placeholder="Codice Fiscale o Partita IVA" />
-            <Button className="w-full" disabled>
-              Avvia collegamento A-Cube
+            <Input
+              placeholder="Codice Fiscale o Partita IVA"
+              value={fiscalId}
+              onChange={(e) => setFiscalId(e.target.value)}
+              disabled={acubeLoading}
+            />
+            <Button
+              className="w-full"
+              onClick={handleAcubeConnect}
+              disabled={acubeLoading || !fiscalId.trim()}
+            >
+              {acubeLoading ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Collegamento in corso...
+                </>
+              ) : (
+                "Avvia collegamento A-Cube"
+              )}
             </Button>
-            <p className="text-xs text-muted-foreground text-center">
-              Funzionalità in fase di attivazione — disponibile a breve
-            </p>
             <div className="flex gap-2">
-              <Button variant="outline" onClick={() => setProvider("choose")} className="flex-1">
+              <Button variant="outline" onClick={() => setProvider("choose")} className="flex-1" disabled={acubeLoading}>
                 <ArrowLeft className="h-4 w-4 mr-2" />
                 Indietro
               </Button>
-              <Button variant="outline" onClick={handleClose} className="flex-1">
+              <Button variant="outline" onClick={handleClose} className="flex-1" disabled={acubeLoading}>
                 Annulla
               </Button>
             </div>
