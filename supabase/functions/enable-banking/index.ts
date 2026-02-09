@@ -105,7 +105,7 @@ async function generateJWT(): Promise<string> {
   const now = Math.floor(Date.now() / 1000);
   const payload = base64url(JSON.stringify({
     iss: ENABLE_BANKING_APP_ID,
-    aud: "enablebanking.com",
+    aud: "https://api.enablebanking.com",
     iat: now,
     exp: now + 3600,
   }));
