@@ -57,6 +57,8 @@ async function generateJWT(): Promise<string> {
   }
 
   console.log(`[EnableBanking] Key length: ${b64Content.length} chars, starts with: ${b64Content.substring(0, 20)}...`);
+  console.log(`[EnableBanking] APP_ID: ${ENABLE_BANKING_APP_ID}`);
+  console.log(`[EnableBanking] APP_ID length: ${ENABLE_BANKING_APP_ID?.length}, type: ${typeof ENABLE_BANKING_APP_ID}`);
 
   // Decode base64 to binary
   const binaryDer = Uint8Array.from(atob(b64Content), (c) => c.charCodeAt(0));
