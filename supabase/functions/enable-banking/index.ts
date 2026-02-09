@@ -101,7 +101,7 @@ async function generateJWT(): Promise<string> {
   }
 
   // Build JWT
-  const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT" }));
+  const header = base64url(JSON.stringify({ alg: "RS256", typ: "JWT", kid: ENABLE_BANKING_APP_ID }));
   const now = Math.floor(Date.now() / 1000);
   const payload = base64url(JSON.stringify({
     iss: ENABLE_BANKING_APP_ID,
