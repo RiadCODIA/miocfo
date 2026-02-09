@@ -347,13 +347,6 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
         {/* Enable Banking - Bank Selection */}
         {provider === "enable_banking" && step === "select_bank" && (
           <div className="space-y-4 py-2">
-            {isDemoMode && (
-              <div className="flex items-center justify-center">
-                <span className="px-3 py-1 text-xs font-medium bg-warning/20 text-warning-foreground border border-warning rounded-full">
-                  🧪 SANDBOX / TEST
-                </span>
-              </div>
-            )}
 
             {/* Filters */}
             <div className="grid grid-cols-2 gap-3">
