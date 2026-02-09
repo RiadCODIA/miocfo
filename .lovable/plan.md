@@ -1,25 +1,27 @@
 
+## Add "Paese" and "Tipo di conto" filters to Enable Banking bank selection
 
-## Update All Remaining "A-Cube" References to "Enable Banking"
+Currently the Enable Banking bank selection screen only shows a search bar ("Cerca banca"). The user wants two additional filters:
 
-### Overview
-Several user-facing error messages and code comments still reference "A-Cube" instead of "Enable Banking". This plan fixes all remaining instances in frontend code.
+1. **Paese (Country)** -- a dropdown to select which country's banks to load (currently hardcoded to "IT")
+2. **Tipo di conto (Account type)** -- a selector for personal vs business accounts (maps to the existing `psu_type` parameter: "personal" or "business")
 
 ### Changes
 
-**1. `src/hooks/useBankingIntegration.ts`**
-- Line 70: Change error message from `"Errore nella chiamata A-Cube"` to `"Errore nella chiamata Enable Banking"`
+**File: `src/components/conti-bancari/ConnectBankModal.tsx`**
 
-**2. `src/components/conti-bancari/ConnectBankModal.tsx`**
-- Line 40: Update comment from `"Handle A-Cube callback"` to `"Handle Enable Banking callback"`
-- Line 116: Rename function from `handleOpenAcubePortal` to `handleOpenBankingPortal`
-- Line 241: Update `onClick={handleOpenAcubePortal}` to `onClick={handleOpenBankingPortal}`
+- Add two new state variables: `selectedCountry` (default "IT") and `psuType` (default "personal")
+- Add a row with two `Select` dropdowns above the search bar in the Enable Banking bank selection section:
+  - **Paese**: Italy (IT), Germany (DE), France (FR), Spain (ES), Netherlands (NL), etc. -- common European countries supported by Enable Banking PSD2
+  - **Tipo di conto**: Personale / Aziendale
+- When country changes, re-fetch the ASPSP list via `getASPSPs(selectedCountry)`
+- Pass `psuType` to `handleSelectBank` which already forwards it to `startAuth`
+- Reset `selectedCountry`, `psuType` in `handleClose` and `handleRetry`
 
-These are the only remaining user-facing or near-user-facing "A-Cube" references in the frontend. Internal variable names like `callAcubeFunction`, database fields like `acube_account_id`, and the Edge Function code remain unchanged as they are backend/infrastructure concerns.
+### Technical details
 
-### What stays unchanged
-- Edge Function (`supabase/functions/acube-banking/index.ts`) -- backend only
-- `callAcubeFunction` variable name in hooks -- internal code, not shown to users
-- `acube_account_id` fields -- database schema
-- Provider value `"acube"` in source mappings -- internal identifier (already maps to "Enable Banking" label)
-
+- Use the existing `@/components/ui/select` (Radix Select) for both dropdowns
+- The `getASPSPs` function already accepts a `country` parameter
+- The `startAuth` function already accepts a `psuType` parameter (defaults to "personal")
+- The ASPSP list will reload via useEffect when country changes
+- Country list will include the main Enable Banking supported countries: IT, DE, FR, ES, NL, AT, BE, PT, FI, IE
