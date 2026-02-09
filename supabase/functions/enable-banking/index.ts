@@ -174,7 +174,7 @@ async function extractUserId(req: Request): Promise<string | null> {
   });
 
   try {
-    const { data, error } = await supabaseAuth.auth.getUser();
+    const { data, error } = await supabaseAuth.auth.getUser(token);
     if (error || !data?.user) return null;
     return data.user.id;
   } catch {
