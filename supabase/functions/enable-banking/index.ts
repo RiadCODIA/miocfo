@@ -273,10 +273,35 @@ async function getAccountTransactions(
   if (dateTo) params.append("date_to", dateTo);
   if (params.toString()) endpoint += `?${params.toString()}`;
 
-  const result = (await ebRequest(endpoint)) as {
-    transactions?: unknown[];
-  };
-  return result.transactions || result;
+  const result = (await ebRequest(endpoint)) as Record<string, unknown>;
+  console.log(`[EnableBanking] Transactions response keys: ${Object.keys(result)}`);
+  
+  // Enable Banking returns { booked: [...], pending: [...] } format
+  // deno-lint-ignore no-explicit-any
+  let allTransactions: any[] = [];
+  if (Array.isArray(result.booked)) {
+    console.log(`[EnableBanking] Found ${result.booked.length} booked transactions`);
+    allTransactions = allTransactions.concat(result.booked);
+  }
+  if (Array.isArray(result.pending)) {
+    console.log(`[EnableBanking] Found ${result.pending.length} pending transactions`);
+    allTransactions = allTransactions.concat(result.pending);
+  }
+  if (Array.isArray(result.transactions)) {
+    console.log(`[EnableBanking] Found ${result.transactions.length} transactions (flat)`);
+    allTransactions = allTransactions.concat(result.transactions);
+  }
+  // If result itself is an array
+  if (Array.isArray(result)) {
+    allTransactions = result;
+  }
+  
+  console.log(`[EnableBanking] Total transactions to sync: ${allTransactions.length}`);
+  if (allTransactions.length > 0) {
+    console.log(`[EnableBanking] Sample transaction: ${JSON.stringify(allTransactions[0]).substring(0, 500)}`);
+  }
+  
+  return allTransactions;
 }
 
 // Sync accounts and transactions to database
@@ -428,7 +453,11 @@ async function syncToDatabase(
               ignoreDuplicates: true,
             });
 
-          if (!txError) totalTransactions++;
+          if (txError) {
+            console.error(`[EnableBanking] TX upsert error:`, txError.message);
+          } else {
+            totalTransactions++;
+          }
         }
       }
     } catch (e) {
@@ -531,10 +560,7 @@ async function syncSingleAccount(
           tx.credit_debit_indicator === "debit";
         const signedAmount = isDebit ? -Math.abs(amount) : Math.abs(amount);
 
-        const { error: txError } = await supabase
-          .from("bank_transactions")
-          .upsert(
-            {
+        const txData = {
               user_id: userId,
               bank_account_id: accountId,
               external_id:
@@ -549,11 +575,17 @@ async function syncSingleAccount(
               description: tx.remittance_information?.join(" ") || "",
               merchant_name: tx.creditor_name || tx.debtor_name || null,
               transaction_type: isDebit ? "expense" : "income",
-            },
-            { onConflict: "external_id", ignoreDuplicates: true }
-          );
+            };
 
-        if (!txError) transactionsSynced++;
+        const { error: txError } = await supabase
+          .from("bank_transactions")
+          .upsert(txData, { onConflict: "external_id", ignoreDuplicates: true });
+
+        if (txError) {
+          console.error(`[EnableBanking] Sync TX upsert error:`, txError.message);
+        } else {
+          transactionsSynced++;
+        }
       }
     }
   } catch (e) {
