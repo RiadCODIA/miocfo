@@ -423,9 +423,13 @@ async function syncToDatabase(
           const rawAmount = tx.transaction_amount?.amount;
           const amount =
             typeof rawAmount === "string" ? parseFloat(rawAmount) : (rawAmount || 0);
+          // deno-lint-ignore no-explicit-any
+          const indicator = (tx as any).credit_debit_indicator || (tx as any).creditDebitIndicator || "";
           const isDebit =
-            tx.credit_debit_indicator === "DBIT" ||
-            tx.credit_debit_indicator === "debit";
+            indicator === "DBIT" ||
+            indicator === "debit" ||
+            indicator === "DEBIT" ||
+            amount < 0;
           const signedAmount = isDebit ? -Math.abs(amount) : Math.abs(amount);
 
           const txData = {
@@ -555,10 +559,15 @@ async function syncSingleAccount(
         const rawAmount = tx.transaction_amount?.amount;
         const amount =
           typeof rawAmount === "string" ? parseFloat(rawAmount) : (rawAmount || 0);
+        // deno-lint-ignore no-explicit-any
+        const indicator = (tx as any).credit_debit_indicator || (tx as any).creditDebitIndicator || "";
         const isDebit =
-          tx.credit_debit_indicator === "DBIT" ||
-          tx.credit_debit_indicator === "debit";
+          indicator === "DBIT" ||
+          indicator === "debit" ||
+          indicator === "DEBIT" ||
+          amount < 0;
         const signedAmount = isDebit ? -Math.abs(amount) : Math.abs(amount);
+        console.log(`[EnableBanking] TX: amount=${amount}, indicator=${indicator}, isDebit=${isDebit}`);
 
         const txData = {
               user_id: userId,
