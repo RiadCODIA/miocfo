@@ -183,12 +183,6 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   const handleSelectBank = async (bank: ASPSP) => {
     setSelectedBank(bank);
 
-    if (isDemoMode) {
-      toast({
-        title: "Modalità Demo - Ambiente Sandbox",
-        description: "Stai testando con l'ambiente sandbox Enable Banking. Nessun dato bancario reale verrà utilizzato.",
-      });
-    }
 
     setStep("redirecting");
     try {
