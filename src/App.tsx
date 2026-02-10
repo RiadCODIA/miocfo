@@ -25,7 +25,6 @@ import Impostazioni from "./pages/Impostazioni";
 import Configurazione from "./pages/Configurazione";
 import NotFound from "./pages/NotFound";
 // Admin pages
-import DashboardAdmin from "./pages/DashboardAdmin";
 import Clienti from "./pages/Clienti";
 import KpiClienti from "./pages/KpiClienti";
 import FlussiClienti from "./pages/FlussiClienti";
