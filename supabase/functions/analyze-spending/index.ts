@@ -8,7 +8,7 @@ const corsHeaders = {
 
 interface Transaction {
   id: string;
-  name: string;
+  description: string | null;
   merchant_name: string | null;
   amount: number;
   date: string;
@@ -68,7 +68,7 @@ serve(async (req) => {
     // Fetch ALL transactions (both income and expenses)
     const { data: allTransactions, error: allTxError } = await supabase
       .from("bank_transactions")
-      .select("id, name, merchant_name, amount, date, ai_category_id")
+      .select("id, description, merchant_name, amount, date, ai_category_id")
       .order("date", { ascending: false });
 
     if (allTxError) {
@@ -143,7 +143,7 @@ serve(async (req) => {
     // Aggregate by supplier with enhanced metrics
     const supplierMap = new Map<string, SupplierAggregation>();
     expenses.forEach((tx: Transaction) => {
-      const supplierName = (tx.merchant_name || tx.name || "Sconosciuto").toUpperCase().trim();
+      const supplierName = (tx.merchant_name || tx.description || "Sconosciuto").toUpperCase().trim();
       const existing = supplierMap.get(supplierName);
       const catName = tx.ai_category_id ? categoryMap.get(tx.ai_category_id)?.name || null : null;
 
@@ -206,7 +206,7 @@ serve(async (req) => {
       .filter((tx) => Math.abs(tx.amount) > avgTransaction * 5) // 5x average
       .slice(0, 10)
       .map((tx) => ({
-        name: tx.merchant_name || tx.name,
+        name: tx.merchant_name || tx.description || "Sconosciuto",
         amount: Math.abs(tx.amount),
         date: tx.date,
         deviation: Math.round((Math.abs(tx.amount) / avgTransaction) * 10) / 10,
