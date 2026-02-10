@@ -31,11 +31,11 @@ interface CostCategory {
 
 interface Transaction {
   id: string;
-  name: string;
+  description?: string | null;
+  merchantName?: string | null;
   merchant_name?: string;
   amount: number;
   ai_category_id?: string;
-  ai_confidence?: number;
 }
 
 interface CategoryModalProps {
@@ -107,7 +107,7 @@ export function CategoryModal({
       if (createRule) {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          const pattern = transaction.merchant_name || transaction.name;
+          const pattern = transaction.merchant_name || transaction.description || "";
           const { error: ruleError } = await supabase
             .from("categorization_rules")
             .insert({
@@ -145,8 +145,8 @@ export function CategoryModal({
         <DialogHeader>
           <DialogTitle>Categorizza Transazione</DialogTitle>
           <DialogDescription>
-            {transaction?.name}
-            {transaction?.merchant_name && ` - ${transaction.merchant_name}`}
+            {transaction?.merchantName || transaction?.description || "Transazione"}
+            {transaction?.merchantName && transaction?.description && ` - ${transaction.description}`}
           </DialogDescription>
         </DialogHeader>
 

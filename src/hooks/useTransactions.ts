@@ -5,31 +5,16 @@ import { format, subDays, subWeeks, subMonths } from "date-fns";
 export interface Transaction {
   id: string;
   date: string;
-  name: string;
+  description: string | null;
   amount: number;
   bankAccountId: string;
   bankName: string;
-  category: string[];
-  pending: boolean;
+  category: string | null;
   merchantName: string | null;
   aiCategoryId: string | null;
-  aiConfidence: number | null;
   categoryConfirmed: boolean;
-  // Extended fields from Enable Banking PSD2 API
-  valueDate: string | null;
-  transactionDate: string | null;
-  creditDebitIndicator: string | null;
-  creditorName: string | null;
-  creditorIban: string | null;
-  debtorName: string | null;
-  debtorIban: string | null;
-  mccCode: string | null;
-  bankTxCode: string | null;
-  bankTxDescription: string | null;
-  referenceNumber: string | null;
-  balanceAfter: number | null;
-  entryReference: string | null;
-  currency: string;
+  transactionType: string | null;
+  externalId: string | null;
 }
 
 interface UseTransactionsOptions {
@@ -66,29 +51,15 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
         .select(`
           id,
           date,
-          name,
+          description,
           amount,
           bank_account_id,
           category,
-          pending,
           merchant_name,
           ai_category_id,
-          ai_confidence,
           category_confirmed,
-          currency,
-          value_date,
-          transaction_date,
-          credit_debit_indicator,
-          creditor_name,
-          creditor_iban,
-          debtor_name,
-          debtor_iban,
-          mcc_code,
-          bank_tx_code,
-          bank_tx_description,
-          reference_number,
-          balance_after,
-          entry_reference,
+          transaction_type,
+          external_id,
           bank_accounts!inner(bank_name)
         `)
         .order("date", { ascending: false })
@@ -126,30 +97,16 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
       let transactions = data?.map((tx: any) => ({
         id: tx.id,
         date: tx.date,
-        name: tx.name,
+        description: tx.description,
         amount: Number(tx.amount),
         bankAccountId: tx.bank_account_id,
         bankName: tx.bank_accounts?.bank_name || "N/A",
-        category: tx.category || [],
-        pending: tx.pending,
+        category: tx.category,
         merchantName: tx.merchant_name,
         aiCategoryId: tx.ai_category_id,
-        aiConfidence: tx.ai_confidence,
         categoryConfirmed: tx.category_confirmed ?? false,
-        currency: tx.currency || "EUR",
-        valueDate: tx.value_date,
-        transactionDate: tx.transaction_date,
-        creditDebitIndicator: tx.credit_debit_indicator,
-        creditorName: tx.creditor_name,
-        creditorIban: tx.creditor_iban,
-        debtorName: tx.debtor_name,
-        debtorIban: tx.debtor_iban,
-        mccCode: tx.mcc_code,
-        bankTxCode: tx.bank_tx_code,
-        bankTxDescription: tx.bank_tx_description,
-        referenceNumber: tx.reference_number,
-        balanceAfter: tx.balance_after ? Number(tx.balance_after) : null,
-        entryReference: tx.entry_reference,
+        transactionType: tx.transaction_type,
+        externalId: tx.external_id,
       })) || [];
 
       // Apply search filter client-side
@@ -157,9 +114,9 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
         const search = searchTerm.toLowerCase();
         transactions = transactions.filter(
           tx =>
-            tx.name.toLowerCase().includes(search) ||
+            (tx.description || "").toLowerCase().includes(search) ||
             tx.merchantName?.toLowerCase().includes(search) ||
-            tx.category?.some((c: string) => c.toLowerCase().includes(search))
+            (tx.category || "").toLowerCase().includes(search)
         );
       }
 
