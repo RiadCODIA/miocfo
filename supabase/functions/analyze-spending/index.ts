@@ -80,12 +80,12 @@ serve(async (req) => {
     const expenses = allTransactions?.filter((tx) => tx.amount < 0) || [];
     const incomes = allTransactions?.filter((tx) => tx.amount > 0) || [];
 
-    console.log(`Found ${expenses.length} expenses, ${incomes.length} incomes`);
+    console.log(`Found ${expenses.length} expenses, ${incomes.length} incomes, total: ${allTransactions?.length || 0}`);
 
-    if (expenses.length === 0) {
+    if (!allTransactions || allTransactions.length === 0) {
       return new Response(
         JSON.stringify({
-          error: "Nessuna transazione di spesa trovata. Importa prima un estratto conto.",
+          error: "Nessuna transazione trovata. Sincronizza prima i conti bancari.",
         }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
