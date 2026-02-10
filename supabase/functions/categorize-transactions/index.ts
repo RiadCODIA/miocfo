@@ -15,10 +15,10 @@ interface CostCategory {
 
 interface Transaction {
   id: string;
-  name: string;
+  description: string | null;
   merchant_name?: string;
   amount: number;
-  category?: string[];
+  category?: string;
 }
 
 interface CategorizationResult {
@@ -74,7 +74,7 @@ serve(async (req) => {
     if (transaction_ids && transaction_ids.length > 0) {
       const { data: transactions, error: txError } = await supabase
         .from("bank_transactions")
-        .select("id, name, merchant_name, amount, category")
+        .select("id, description, merchant_name, amount, category")
         .in("id", transaction_ids);
 
       if (txError) throw new Error(`Failed to fetch transactions: ${txError.message}`);
@@ -101,7 +101,7 @@ serve(async (req) => {
         // Fetch multiple batches at once for parallel processing
         const { data: transactions, error: txError } = await supabase
           .from("bank_transactions")
-          .select("id, name, merchant_name, amount, category")
+          .select("id, description, merchant_name, amount, category")
           .is("ai_category_id", null)
           .limit(BATCH_SIZE * PARALLEL_BATCHES);
 
@@ -182,7 +182,7 @@ async function processBatch(
 
   // First, try to match using existing rules
   for (const tx of transactions) {
-    const txText = `${tx.name || ""} ${tx.merchant_name || ""}`.toLowerCase();
+    const txText = `${tx.description || ""} ${tx.merchant_name || ""}`.toLowerCase();
     let matched = false;
 
     if (rules.length > 0) {
@@ -232,7 +232,7 @@ async function processBatch(
       .join("\n");
 
     const transactionsList = needsAI
-      .map((tx) => `- ID: ${tx.id}, Nome: "${tx.name}", Merchant: "${tx.merchant_name || "N/A"}", Importo: €${tx.amount}`)
+      .map((tx) => `- ID: ${tx.id}, Descrizione: "${tx.description || "N/A"}", Merchant: "${tx.merchant_name || "N/A"}", Importo: €${tx.amount}`)
       .join("\n");
 
     const systemPrompt = `Sei un assistente finanziario esperto nella categorizzazione di transazioni bancarie italiane.
@@ -326,7 +326,6 @@ ${transactionsList}`;
       .from("bank_transactions")
       .update({
         ai_category_id: result.category_id,
-        ai_confidence: result.confidence,
         category_confirmed: false,
       })
       .eq("id", result.transaction_id);
