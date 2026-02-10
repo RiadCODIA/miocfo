@@ -465,49 +465,61 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                     Breakdown per Categoria
                   </h3>
                   <div className="bg-card border border-border rounded-lg p-4">
-                    <div className="h-[200px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <RechartsPie>
-                          <Pie
-                            data={pieData}
-                            cx="50%"
-                            cy="50%"
-                            innerRadius={50}
-                            outerRadius={80}
-                            dataKey="value"
-                            label={({ name, percentage }) =>
-                              `${name.substring(0, 10)}${name.length > 10 ? "..." : ""} ${percentage.toFixed(0)}%`
-                            }
-                            labelLine={false}
-                          >
-                            {pieData.map((entry, index) => (
-                              <Cell key={`cell-${index}`} fill={entry.fill} />
-                            ))}
-                          </Pie>
-                          <Tooltip
-                            formatter={(value: number) => formatCurrency(value)}
-                            contentStyle={{
-                              backgroundColor: "hsl(var(--card))",
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: "8px",
-                            }}
-                          />
-                        </RechartsPie>
-                      </ResponsiveContainer>
-                    </div>
-                    <div className="space-y-2 mt-4">
-                      {data.categoryBreakdown.slice(0, 5).map((cat, i) => (
-                        <div key={i} className="flex items-center gap-2">
-                          <div
-                            className="w-3 h-3 rounded-full shrink-0"
-                            style={{ backgroundColor: COLORS[i % COLORS.length] }}
-                          />
-                          <span className="text-sm truncate flex-1">{cat.name}</span>
-                          <span className="text-sm text-muted-foreground">{cat.percentage.toFixed(0)}%</span>
-                          <Progress value={cat.percentage} className="w-16 h-2" />
+                    {pieData.length === 0 ? (
+                      <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm text-center">
+                        <div>
+                          <PieChart className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                          <p>Nessuna categoria di spesa disponibile</p>
+                          <p className="text-xs mt-1">Sincronizza i conti per importare più transazioni</p>
                         </div>
-                      ))}
-                    </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="h-[200px]">
+                          <ResponsiveContainer width="100%" height="100%">
+                            <RechartsPie>
+                              <Pie
+                                data={pieData}
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={50}
+                                outerRadius={80}
+                                dataKey="value"
+                                label={({ name, percentage }) =>
+                                  `${name.substring(0, 10)}${name.length > 10 ? "..." : ""} ${percentage.toFixed(0)}%`
+                                }
+                                labelLine={false}
+                              >
+                                {pieData.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={entry.fill} />
+                                ))}
+                              </Pie>
+                              <Tooltip
+                                formatter={(value: number) => formatCurrency(value)}
+                                contentStyle={{
+                                  backgroundColor: "hsl(var(--card))",
+                                  border: "1px solid hsl(var(--border))",
+                                  borderRadius: "8px",
+                                }}
+                              />
+                            </RechartsPie>
+                          </ResponsiveContainer>
+                        </div>
+                        <div className="space-y-2 mt-4">
+                          {data.categoryBreakdown.slice(0, 5).map((cat, i) => (
+                            <div key={i} className="flex items-center gap-2">
+                              <div
+                                className="w-3 h-3 rounded-full shrink-0"
+                                style={{ backgroundColor: COLORS[i % COLORS.length] }}
+                              />
+                              <span className="text-sm truncate flex-1">{cat.name}</span>
+                              <span className="text-sm text-muted-foreground">{cat.percentage.toFixed(0)}%</span>
+                              <Progress value={cat.percentage} className="w-16 h-2" />
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -518,24 +530,34 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                     Top Fornitori per Spesa
                   </h3>
                   <div className="bg-card border border-border rounded-lg p-4">
-                    <div className="h-[200px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 10 }}>
-                          <XAxis type="number" tickFormatter={(v) => `€${(v / 1000).toFixed(0)}k`} />
-                          <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
-                          <Tooltip
-                            formatter={(value: number) => formatCurrency(value)}
-                            labelFormatter={(label) => barData.find((d) => d.name === label)?.fullName || label}
-                            contentStyle={{
-                              backgroundColor: "hsl(var(--card))",
-                              border: "1px solid hsl(var(--border))",
-                              borderRadius: "8px",
-                            }}
-                          />
-                          <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
-                        </BarChart>
-                      </ResponsiveContainer>
-                    </div>
+                    {barData.length === 0 ? (
+                      <div className="h-[200px] flex items-center justify-center text-muted-foreground text-sm text-center">
+                        <div>
+                          <Users className="h-8 w-8 mx-auto mb-2 opacity-30" />
+                          <p>Nessun fornitore identificato</p>
+                          <p className="text-xs mt-1">I fornitori appariranno con più transazioni</p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="h-[200px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <BarChart data={barData} layout="vertical" margin={{ left: 0, right: 10 }}>
+                            <XAxis type="number" tickFormatter={(v) => `€${(v / 1000).toFixed(0)}k`} />
+                            <YAxis type="category" dataKey="name" width={100} tick={{ fontSize: 11 }} />
+                            <Tooltip
+                              formatter={(value: number) => formatCurrency(value)}
+                              labelFormatter={(label) => barData.find((d) => d.name === label)?.fullName || label}
+                              contentStyle={{
+                                backgroundColor: "hsl(var(--card))",
+                                border: "1px solid hsl(var(--border))",
+                                borderRadius: "8px",
+                              }}
+                            />
+                            <Bar dataKey="amount" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
