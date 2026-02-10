@@ -191,16 +191,24 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
             </div>
           ) : error ? (
             <div className="flex flex-col items-center justify-center py-16 space-y-6">
-              <div className="w-20 h-20 rounded-full bg-destructive/10 flex items-center justify-center">
-                <AlertTriangle className="h-10 w-10 text-destructive" />
+              <div className="w-20 h-20 rounded-full bg-warning/10 flex items-center justify-center">
+                <AlertTriangle className="h-10 w-10 text-warning" />
               </div>
               <div className="text-center space-y-2">
-                <h3 className="text-lg font-semibold">Errore nell'analisi</h3>
-                <p className="text-muted-foreground max-w-md">{error}</p>
+                <h3 className="text-lg font-semibold">Nessuna transazione disponibile</h3>
+                <p className="text-muted-foreground max-w-md">
+                  Per generare il report, devi prima sincronizzare i tuoi conti bancari.
+                  Vai alla pagina <strong>Conti Bancari</strong> e clicca <strong>Sincronizza</strong>.
+                </p>
               </div>
-              <Button variant="outline" onClick={handleStart}>
-                Riprova
-              </Button>
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => { handleClose(); window.location.href = "/conti-bancari"; }}>
+                  Vai a Conti Bancari
+                </Button>
+                <Button variant="outline" onClick={handleStart}>
+                  Riprova
+                </Button>
+              </div>
             </div>
           ) : data ? (
             <div className="space-y-6 pt-4">
