@@ -434,7 +434,7 @@ export default function Transazioni() {
                     {format(new Date(tx.date), "dd/MM/yyyy", { locale: it })}
                   </TableCell>
                   <TableCell className="max-w-[300px] truncate">
-                    {tx.merchantName || tx.name}
+                    {tx.merchantName || tx.description || "—"}
                   </TableCell>
                   <TableCell className={cn(
                     "text-right font-semibold",
@@ -446,12 +446,12 @@ export default function Transazioni() {
                   <TableCell>
                     <CategoryBadge
                       categoryName={getCategoryName(tx.aiCategoryId)}
-                      confidence={tx.aiConfidence}
+                      confidence={null}
                       confirmed={tx.categoryConfirmed}
                       onClick={() => handleCategorizeOne(tx)}
                     />
                   </TableCell>
-                  <TableCell>{getStatoBadge(tx.pending)}</TableCell>
+                  <TableCell>{getStatoBadge(false)}</TableCell>
                   <TableCell>
                     <Button 
                       variant="ghost" 
