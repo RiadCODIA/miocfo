@@ -111,7 +111,7 @@ export default function Fatture() {
 
         // 2. Chiama edge function per processare il file già caricato
         const response = await fetch(
-          'https://ublsnradzhfpqhunfqbn.supabase.co/functions/v1/process-invoice',
+          'https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/process-invoice',
           {
             method: 'POST',
             headers: {
@@ -299,7 +299,7 @@ export default function Fatture() {
     
     try {
       const response = await fetch(
-        'https://ublsnradzhfpqhunfqbn.supabase.co/functions/v1/process-invoice',
+        'https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/process-invoice',
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
