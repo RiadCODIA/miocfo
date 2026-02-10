@@ -289,9 +289,10 @@ serve(async (req) => {
           .update({
             invoice_number: extracted.invoice_number,
             invoice_date: extracted.invoice_date,
-            supplier_name: extracted.supplier_name,
+            vendor_name: extracted.supplier_name,
             amount: extracted.amount,
-            raw_data: extracted.raw_data,
+            total_amount: extracted.amount,
+            extracted_data: extracted.raw_data as Record<string, unknown> ?? {},
             updated_at: new Date().toISOString()
           })
           .eq('id', body.reprocessInvoiceId);
@@ -409,14 +410,14 @@ serve(async (req) => {
           user_id: userId,
           invoice_number: invoice.invoice_number,
           invoice_date: invoice.invoice_date,
-          supplier_name: invoice.supplier_name,
+          vendor_name: invoice.supplier_name,
           amount: invoice.amount,
-          currency: invoice.currency,
+          total_amount: invoice.amount,
+          invoice_type: 'passive',
           file_name: fileName,
           file_path: storagePath,
-          file_type: fileType,
-          raw_data: invoice.raw_data,
-          match_status: 'pending'
+          extracted_data: invoice.raw_data as Record<string, unknown> ?? {},
+          payment_status: 'pending'
         });
 
       if (insertError) {
