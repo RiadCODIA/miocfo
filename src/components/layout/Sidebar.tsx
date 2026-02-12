@@ -95,7 +95,6 @@ const userNavGroups: NavGroup[] = [
     items: [
       { id: "kpi_report", label: "Dati & Statistiche", icon: BarChart3, path: "/kpi-report" },
       { id: "alert_notifiche", label: "Notifiche", icon: Bell, path: "/alert" },
-      { id: "comunicazioni", label: "Comunicazioni", icon: MessageSquare, path: "/comunicazioni" },
       { id: "ai_assistant", label: "AI Assistant", icon: Bot, path: "/ai-assistant", badge: "New" },
     ],
   },
