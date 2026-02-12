@@ -1,127 +1,166 @@
 import { useState } from "react";
-import { Building2, CreditCard, FileSpreadsheet, CheckCircle2, Circle, ShieldCheck } from "lucide-react";
+import { ShieldCheck, CheckCircle2, Circle, FileText, Download, Loader2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
-import { ConnectBankModal } from "@/components/conti-bancari/ConnectBankModal";
 import { CassettoFiscaleModal } from "@/components/fatture/CassettoFiscaleModal";
+import { format } from "date-fns";
+import { it } from "date-fns/locale";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 export default function Collegamenti() {
   const { user } = useAuth();
-  const [bankModalOpen, setBankModalOpen] = useState(false);
   const [cassettoModalOpen, setCassettoModalOpen] = useState(false);
 
-  const { data: bankCount = 0 } = useQuery({
-    queryKey: ["bank-accounts-count", user?.id],
+  const { data: cassettoInvoices = [], isLoading } = useQuery({
+    queryKey: ["cassetto-fiscale-invoices", user?.id],
     queryFn: async () => {
-      const { count } = await supabase
-        .from("bank_accounts")
-        .select("*", { count: "exact", head: true });
-      return count ?? 0;
-    },
-    enabled: !!user,
-  });
-
-  const { data: cassettoCount = 0 } = useQuery({
-    queryKey: ["cassetto-fiscale-count", user?.id],
-    queryFn: async () => {
-      const { count } = await supabase
+      const { data, error } = await supabase
         .from("invoices")
-        .select("*", { count: "exact", head: true })
-        .eq("source", "cassetto_fiscale");
-      return count ?? 0;
+        .select("*")
+        .eq("source", "cassetto_fiscale")
+        .order("invoice_date", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data ?? [];
     },
     enabled: !!user,
   });
 
-  const bankConnected = bankCount > 0;
-  const cassettoConnected = cassettoCount > 0;
-
-  const integrations = [
-    {
-      id: "banca",
-      name: "Collegamento Bancario",
-      description: "Collega i tuoi conti correnti per importare automaticamente le transazioni",
-      icon: Building2,
-      connected: bankConnected,
-      category: "Banche",
-      onClick: () => setBankModalOpen(true),
-    },
-    {
-      id: "cassetto-fiscale",
-      name: "Cassetto Fiscale (A-Cube)",
-      description: "Importa automaticamente le fatture passive dall'Agenzia delle Entrate",
-      icon: ShieldCheck,
-      connected: cassettoConnected,
-      category: "Fiscale",
-      onClick: () => setCassettoModalOpen(true),
-    },
-    {
-      id: "fatturazione",
-      name: "Software di Fatturazione",
-      description: "Importa automaticamente le fatture dal tuo gestionale",
-      icon: FileSpreadsheet,
-      connected: false,
-      category: "Contabilità",
-      onClick: undefined,
-    },
-    {
-      id: "pagamenti",
-      name: "Gateway di Pagamento",
-      description: "Collega Stripe, PayPal o altri sistemi di pagamento",
-      icon: CreditCard,
-      connected: false,
-      category: "Pagamenti",
-      onClick: undefined,
-    },
-  ];
+  const cassettoConnected = cassettoInvoices.length > 0;
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Collegamenti</h1>
+        <h1 className="text-2xl font-bold text-foreground">Cassetto Fiscale</h1>
         <p className="text-muted-foreground mt-1">
-          Gestisci le integrazioni con banche, software contabili e servizi esterni
+          Collegamento con l'Agenzia delle Entrate tramite A-Cube
         </p>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {integrations.map((integration) => (
-          <Card key={integration.id} className="relative">
-            <CardHeader className="pb-3">
-              <div className="flex items-center justify-between">
-                <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
-                  <integration.icon className="h-5 w-5 text-primary" />
-                </div>
-                <Badge variant={integration.connected ? "default" : "secondary"}>
-                  {integration.connected ? (
-                    <><CheckCircle2 className="h-3 w-3 mr-1" /> Connesso</>
-                  ) : (
-                    <><Circle className="h-3 w-3 mr-1" /> Non connesso</>
-                  )}
-                </Badge>
+      {/* Status Card */}
+      <Card>
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <ShieldCheck className="h-5 w-5 text-primary" />
               </div>
-              <CardTitle className="text-base mt-3">{integration.name}</CardTitle>
-              <CardDescription className="text-sm">{integration.description}</CardDescription>
-            </CardHeader>
-            <CardContent>
+              <div>
+                <CardTitle className="text-base">Cassetto Fiscale (A-Cube)</CardTitle>
+                <CardDescription className="text-sm">
+                  Importa automaticamente le fatture passive dall'Agenzia delle Entrate
+                </CardDescription>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <Badge variant={cassettoConnected ? "default" : "secondary"}>
+                {cassettoConnected ? (
+                  <><CheckCircle2 className="h-3 w-3 mr-1" /> Connesso</>
+                ) : (
+                  <><Circle className="h-3 w-3 mr-1" /> Non connesso</>
+                )}
+              </Badge>
               <Button
-                className="w-full"
-                variant={integration.connected ? "outline" : "default"}
-                onClick={integration.onClick}
-                disabled={!integration.onClick}
+                variant={cassettoConnected ? "outline" : "default"}
+                onClick={() => setCassettoModalOpen(true)}
               >
-                {integration.connected ? "Gestisci" : "Collega"}
+                {cassettoConnected ? "Gestisci" : "Collega"}
               </Button>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+            </div>
+          </div>
+        </CardHeader>
+      </Card>
 
-      <ConnectBankModal open={bankModalOpen} onOpenChange={setBankModalOpen} onConnect={() => {}} />
+      {/* Invoices from Cassetto Fiscale */}
+      {isLoading ? (
+        <div className="flex items-center justify-center py-12">
+          <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+        </div>
+      ) : cassettoInvoices.length > 0 ? (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-base flex items-center gap-2">
+                <FileText className="h-4 w-4" />
+                Fatture dal Cassetto Fiscale ({cassettoInvoices.length})
+              </CardTitle>
+            </div>
+          </CardHeader>
+          <CardContent>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>N. Fattura</TableHead>
+                  <TableHead>Fornitore</TableHead>
+                  <TableHead>Data</TableHead>
+                  <TableHead className="text-right">Imponibile</TableHead>
+                  <TableHead className="text-right">IVA</TableHead>
+                  <TableHead className="text-right">Totale</TableHead>
+                  <TableHead>Stato</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {cassettoInvoices.map((inv) => (
+                  <TableRow key={inv.id}>
+                    <TableCell className="font-medium">{inv.invoice_number || "—"}</TableCell>
+                    <TableCell>{inv.vendor_name || inv.client_name || "—"}</TableCell>
+                    <TableCell>
+                      {inv.invoice_date
+                        ? format(new Date(inv.invoice_date), "dd MMM yyyy", { locale: it })
+                        : "—"}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      €{inv.amount?.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      €{(inv.vat_amount ?? 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell className="text-right font-semibold">
+                      €{inv.total_amount?.toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+                    </TableCell>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          inv.payment_status === "paid"
+                            ? "default"
+                            : inv.payment_status === "overdue"
+                            ? "destructive"
+                            : "secondary"
+                        }
+                      >
+                        {inv.payment_status === "paid"
+                          ? "Pagata"
+                          : inv.payment_status === "overdue"
+                          ? "Scaduta"
+                          : "In attesa"}
+                      </Badge>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </CardContent>
+        </Card>
+      ) : (
+        <Card>
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <FileText className="h-12 w-12 text-muted-foreground/40 mb-4" />
+            <p className="text-muted-foreground font-medium">Nessuna fattura importata</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Collega il Cassetto Fiscale per importare automaticamente le fatture passive
+            </p>
+            <Button className="mt-4" onClick={() => setCassettoModalOpen(true)}>
+              <ShieldCheck className="h-4 w-4 mr-2" />
+              Collega Cassetto Fiscale
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
       <CassettoFiscaleModal
         open={cassettoModalOpen}
         onOpenChange={setCassettoModalOpen}
