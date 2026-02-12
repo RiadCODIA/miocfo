@@ -1,103 +1,35 @@
 
-# Integrazione Cassetto Fiscale con A-Cube
 
-## Cosa fa
+# Aggiornamento pagina Collegamenti
 
-Collegando il Cassetto Fiscale tramite A-Cube, il software potra:
-- **Scaricare automaticamente** tutte le fatture attive e passive dal portale dell'Agenzia delle Entrate
-- **Importarle nella sezione Fatture** senza doverle caricare manualmente
-- **Schedulare il download giornaliero** per avere le fatture sempre aggiornate
+## Cosa cambia
 
-## Prerequisiti per l'utente
+La pagina **Collegamenti** attualmente mostra 3 card statiche (Collegamento Bancario, Software di Fatturazione, Gateway di Pagamento) tutte con stato "Non connesso" e senza funzionalita reale.
 
-Per collegare il Cassetto Fiscale servono le credenziali **Fisconline** dell'azienda:
-- **Codice Fiscale** dell'azienda
-- **Password** del portale Agenzia delle Entrate
-- **PIN** Fisconline
+L'obiettivo e trasformarla in un hub funzionale che:
 
-Se l'azienda non ha queste credenziali, puo richiederle dal [portale dell'Agenzia delle Entrate](https://ivaservizi.agenziaentrate.gov.it/portale/).
+1. **Aggiunge la card "Cassetto Fiscale"** (A-Cube) con il modale gia creato per inserire le credenziali Fisconline
+2. **Rende funzionale la card "Collegamento Bancario"** collegandola al modale di connessione banca gia esistente (`ConnectBankModal`)
+3. **Mostra lo stato reale** delle connessioni (leggendo dal database se ci sono conti bancari collegati o fatture importate dal cassetto fiscale)
 
-In alternativa, A-Cube supporta anche la modalita "Appointee" (delegato) o "Proxy" (delega unificata) per evitare di condividere le credenziali dirette.
+## Card previste
 
-## Architettura
-
-```text
-Frontend (Fatture.tsx)
-    |
-    v
-Edge Function "acube-cassetto-fiscale"
-    |
-    +-- POST /business-registry-configurations  (crea azienda su A-Cube Gov IT)
-    +-- PUT  /business-registry-configurations/{id}/credentials/fisconline  (salva credenziali)
-    +-- POST /schedule/invoice-download/{fiscal_id}  (attiva download giornaliero)
-    +-- POST /jobs/invoice-download  (download on-demand)
-    +-- GET  /invoices?fiscal_id=...  (recupera fatture scaricate)
-    |
-    v
-Database (tabella invoices)
-```
-
-## File da creare/modificare
-
-| File | Azione |
-|------|--------|
-| `supabase/functions/acube-cassetto-fiscale/index.ts` | **Creare**: nuova edge function per Gov IT API |
-| `src/components/fatture/CassettoFiscaleModal.tsx` | **Creare**: modale per inserire credenziali Fisconline |
-| `src/pages/Fatture.tsx` | **Modificare**: aggiungere pulsante "Collega Cassetto Fiscale" e "Scarica dal Cassetto" |
-| `supabase/config.toml` | **Modificare**: aggiungere configurazione per la nuova edge function |
+| Card | Icona | Stato | Azione click |
+|------|-------|-------|-------------|
+| Collegamento Bancario | Building2 | Connesso se ci sono conti in `bank_accounts` | Apre `ConnectBankModal` / gestisci |
+| Cassetto Fiscale (A-Cube) | ShieldCheck | Connesso se ci sono fatture con `source = 'cassetto_fiscale'` | Apre `CassettoFiscaleModal` / scarica fatture |
+| Software di Fatturazione | FileSpreadsheet | Non connesso (futuro) | Placeholder |
+| Gateway di Pagamento | CreditCard | Non connesso (futuro) | Placeholder |
 
 ## Dettagli tecnici
 
-### 1. Edge Function `acube-cassetto-fiscale`
+### File modificato: `src/pages/Collegamenti.tsx`
 
-Nuova edge function che usa lo stesso login A-Cube (`ACUBE_EMAIL`, `ACUBE_PASSWORD`) ma chiama l'API Gov IT:
-- **Base URL sandbox**: `https://gov-it-sandbox.api.acubeapi.com`
-- **Base URL produzione**: `https://api.acubeapi.com`
+- Importare `ConnectBankModal`, `CassettoFiscaleModal`, e i hook necessari
+- Aggiungere query al database per verificare lo stato reale delle connessioni:
+  - `bank_accounts` con `count` per sapere se ci sono conti collegati
+  - `invoices` con filtro `source = 'cassetto_fiscale'` per sapere se il cassetto e collegato
+- Gestire lo state per apertura/chiusura dei modali
+- Rendere i pulsanti "Collega" / "Gestisci" funzionali per le card bancarie e cassetto fiscale
+- Le card "Software di Fatturazione" e "Gateway di Pagamento" restano come placeholder per sviluppi futuri
 
-Azioni supportate:
-
-- **`setup`**: Crea un `BusinessRegistryConfiguration` per il codice fiscale e salva le credenziali Fisconline
-- **`schedule`**: Attiva il download automatico giornaliero delle fatture dal Cassetto Fiscale
-- **`download-now`**: Avvia un download on-demand per un intervallo di date specifico
-- **`fetch-invoices`**: Recupera le fatture scaricate da A-Cube e le importa nella tabella `invoices` del database
-- **`status`**: Verifica lo stato della connessione e dello schedule
-
-### 2. Modale Credenziali Fisconline
-
-Un componente `CassettoFiscaleModal.tsx` con form per:
-- Codice Fiscale / Partita IVA
-- Password portale Agenzia delle Entrate
-- PIN Fisconline
-
-Le credenziali vengono inviate all'edge function che le salva su A-Cube (A-Cube le cripta e gestisce il rinnovo password).
-
-### 3. Modifiche pagina Fatture
-
-- Nuovo pulsante **"Collega Cassetto Fiscale"** nell'header
-- Una volta collegato, il pulsante diventa **"Scarica dal Cassetto"** per importare le fatture
-- Le fatture scaricate dal Cassetto vengono inserite nella stessa tabella `invoices` con un campo che indica la fonte (`source: "cassetto_fiscale"`)
-- Badge visivo per distinguere le fatture importate dal Cassetto da quelle caricate manualmente
-
-### 4. Flusso utente
-
-1. L'utente clicca "Collega Cassetto Fiscale"
-2. Inserisce codice fiscale, password e PIN nel modale
-3. Il sistema crea il Business Registry su A-Cube e salva le credenziali
-4. (Opzionale) L'utente attiva il download automatico giornaliero
-5. L'utente puo cliccare "Scarica dal Cassetto" per importare le fatture immediatamente
-6. Le fatture appaiono nella tabella con tutte le informazioni estratte (numero, data, fornitore, importo)
-
-### 5. Migrazione database
-
-Aggiungere un campo `source` alla tabella `invoices` per distinguere la provenienza:
-- `manual` - caricata manualmente dall'utente
-- `cassetto_fiscale` - importata dal Cassetto Fiscale
-- `null` - fatture esistenti (default)
-
-Aggiungere anche un campo `acube_invoice_id` per evitare duplicati durante le sincronizzazioni successive.
-
-### Note
-
-- Le credenziali Fisconline scadono ogni 90 giorni. A-Cube invia email di notifica automaticamente.
-- Le fatture nel Cassetto Fiscale possono impiegare fino a 72 ore per essere disponibili dopo l'emissione.
-- Il download dell'archivio completo include le fatture dal 1 gennaio dell'anno precedente.
