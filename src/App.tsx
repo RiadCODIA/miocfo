@@ -23,6 +23,9 @@ import KPIReport from "./pages/KPIReport";
 import AlertNotifiche from "./pages/AlertNotifiche";
 import Impostazioni from "./pages/Impostazioni";
 import Configurazione from "./pages/Configurazione";
+import Collegamenti from "./pages/Collegamenti";
+import Comunicazioni from "./pages/Comunicazioni";
+import AIAssistant from "./pages/AIAssistant";
 import NotFound from "./pages/NotFound";
 // Admin pages
 import Clienti from "./pages/Clienti";
@@ -247,6 +250,36 @@ const App = () => (
                 <ProtectedRoute>
                   <MainLayout>
                     <Configurazione />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/collegamenti"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Collegamenti />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/comunicazioni"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <Comunicazioni />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/ai-assistant"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <AIAssistant />
                   </MainLayout>
                 </ProtectedRoute>
               }
