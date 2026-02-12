@@ -216,7 +216,7 @@ export function useKPIData() {
         stato: quarter === Math.floor(now.getMonth() / 3) + 1 ? "in elaborazione" : "completato",
       });
 
-      return { kpis, reports };
+      return { kpis, reports, transactionCount: transactions?.length ?? 0 };
     },
   });
 }

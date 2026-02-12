@@ -1,4 +1,5 @@
-import { Download, FileText, BarChart3, TrendingUp, Percent, Clock, Loader2 } from "lucide-react";
+import { useState } from "react";
+import { Download, FileText, BarChart3, TrendingUp, Percent, Clock, Loader2, Brain, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -6,6 +7,9 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { useKPIData } from "@/hooks/useKPIData";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/client";
+import { AIReportSection, type AIReport } from "@/components/area-economica/AIReportSection";
+import { useNavigate } from "react-router-dom";
 
 const getKPIIcon = (id: string, categoria: string) => {
   const colorClass = categoria === "standard" ? "text-primary" : "text-warning";
@@ -28,15 +32,16 @@ const getKPIIcon = (id: string, categoria: string) => {
 
 export default function KPIReport() {
   const { data, isLoading } = useKPIData();
+  const [aiReport, setAiReport] = useState<AIReport | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const navigate = useNavigate();
 
   const handleExport = () => {
     if (!data) return;
-    
     const csvContent = [
       ["KPI", "Valore", "Target", "Raggiunto", "Trend"].join(","),
       ...data.kpis.map(kpi => [kpi.nome, kpi.valore, kpi.target, kpi.raggiunto ? "Sì" : "No", kpi.trend].join(","))
     ].join("\n");
-    
     const blob = new Blob([csvContent], { type: "text/csv" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -47,12 +52,34 @@ export default function KPIReport() {
     toast.success("Report esportato con successo");
   };
 
+  const handleAIAnalysis = async () => {
+    if (!data?.kpis.length) {
+      toast.error("Nessun dato KPI disponibile per l'analisi");
+      return;
+    }
+    setAiLoading(true);
+    try {
+      const { data: report, error } = await supabase.functions.invoke("analyze-kpi", {
+        body: { kpis: data.kpis },
+      });
+      if (error) throw error;
+      if (report?.error) throw new Error(report.error);
+      setAiReport(report);
+      toast.success("Analisi AI completata");
+    } catch (e) {
+      console.error(e);
+      toast.error(e instanceof Error ? e.message : "Errore nell'analisi AI");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="space-y-6">
         <div>
           <h1 className="text-2xl font-bold text-foreground">KPI & Report</h1>
-          <p className="text-muted-foreground mt-1">Indicatori sintetici e reportistica</p>
+          <p className="text-muted-foreground mt-1">Indicatori calcolati dai tuoi dati bancari reali</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
@@ -64,17 +91,37 @@ export default function KPIReport() {
   }
 
   const kpis = data?.kpis || [];
-  const reports = data?.reports || [];
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="opacity-0 animate-fade-in">
-        <h1 className="text-2xl font-bold text-foreground">KPI & Report</h1>
-        <p className="text-muted-foreground mt-1">
-          Indicatori sintetici e reportistica
-        </p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">KPI & Report</h1>
+            <p className="text-muted-foreground mt-1">
+              Indicatori calcolati in tempo reale dalle tue {data?.transactionCount ?? 0} transazioni bancarie
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" onClick={() => navigate("/flussi-cassa")} className="gap-2">
+              <ArrowRight className="h-4 w-4" />
+              Flussi di Cassa
+            </Button>
+            <Button onClick={handleAIAnalysis} disabled={aiLoading || !kpis.length} className="gap-2">
+              {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+              Analisi AI
+            </Button>
+          </div>
+        </div>
       </div>
+
+      {/* AI Report */}
+      {aiReport && (
+        <div className="opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
+          <AIReportSection report={aiReport} />
+        </div>
+      )}
 
       {/* KPI Grid */}
       <div className="opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
@@ -134,53 +181,16 @@ export default function KPIReport() {
         )}
       </div>
 
-      {/* Reports List */}
-      <div className="glass rounded-xl overflow-hidden opacity-0 animate-fade-in" style={{ animationDelay: "400ms" }}>
-        <div className="p-5 border-b border-border flex items-center justify-between">
-          <div>
-            <h3 className="text-lg font-semibold text-foreground">Report Periodici</h3>
-            <p className="text-sm text-muted-foreground">Cronologia e stato dei report generati</p>
-          </div>
-          <Button onClick={handleExport} className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90">
-            <Download className="h-4 w-4" />
-            Esporta Report
-          </Button>
+      {/* Export */}
+      <div className="glass rounded-xl p-5 opacity-0 animate-fade-in flex items-center justify-between" style={{ animationDelay: "400ms" }}>
+        <div>
+          <h3 className="text-lg font-semibold text-foreground">Esporta Report</h3>
+          <p className="text-sm text-muted-foreground">Scarica i KPI attuali in formato CSV</p>
         </div>
-        <div className="divide-y divide-border">
-          {reports.map((report, index) => (
-            <div
-              key={report.id}
-              className="flex items-center gap-4 p-4 hover:bg-secondary/50 transition-colors opacity-0 animate-slide-in"
-              style={{ animationDelay: `${500 + index * 50}ms` }}
-            >
-              <div className="p-2.5 rounded-lg bg-secondary">
-                <FileText className="h-5 w-5 text-muted-foreground" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-foreground">{report.nome}</p>
-                <div className="flex items-center gap-3 mt-1">
-                  <Badge variant="outline" className="text-xs border-border">{report.tipo}</Badge>
-                  <span className="text-xs text-muted-foreground">Creato: {report.dataCreazione}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <Badge className={cn(
-                  "text-xs",
-                  report.stato === "completato" && "bg-success/10 text-success border-success/20",
-                  report.stato === "in elaborazione" && "bg-warning/10 text-warning border-warning/20",
-                  report.stato === "programmato" && "bg-primary/10 text-primary border-primary/20"
-                )}>
-                  {report.stato}
-                </Badge>
-                {report.stato === "completato" && (
-                  <Button variant="ghost" size="icon" className="h-8 w-8 hover:bg-secondary" onClick={handleExport}>
-                    <Download className="h-4 w-4 text-muted-foreground" />
-                  </Button>
-                )}
-              </div>
-            </div>
-          ))}
-        </div>
+        <Button onClick={handleExport} disabled={!kpis.length} className="gap-2">
+          <Download className="h-4 w-4" />
+          Esporta CSV
+        </Button>
       </div>
     </div>
   );
