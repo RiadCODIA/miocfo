@@ -63,7 +63,7 @@ export function useTransactions(options: UseTransactionsOptions = {}) {
           bank_accounts!inner(bank_name)
         `)
         .order("date", { ascending: false })
-        .limit(500);
+        .limit(5000);
 
       // Apply period filter (only if no custom date range)
       const now = new Date();

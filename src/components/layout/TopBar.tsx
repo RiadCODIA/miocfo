@@ -18,6 +18,7 @@ const PERIOD_OPTIONS = [
   { label: "Ultimo trimestre", getValue: () => ({ from: subMonths(new Date(), 3), to: new Date() }) },
   { label: "Anno corrente", getValue: () => ({ from: startOfYear(new Date()), to: new Date() }) },
   { label: "Ultimo anno", getValue: () => ({ from: subDays(new Date(), 365), to: new Date() }) },
+  { label: "Tutto il periodo", getValue: () => ({ from: new Date("2020-01-01"), to: new Date() }) },
 ] as const;
 
 export function TopBar() {
