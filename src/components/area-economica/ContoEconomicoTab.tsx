@@ -1,10 +1,15 @@
 import { useState, useEffect } from "react";
 import { useContoEconomico, MONTHS, MonthlyData } from "@/hooks/useContoEconomico";
 import { IVASection } from "./IVASection";
+import { AIReportSection, AIReport } from "./AIReportSection";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { Brain, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "@/hooks/use-toast";
 
 const fmt = (v: number) => v === 0 ? "" : v.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtPerc = (v: number) => isNaN(v) || !isFinite(v) ? "" : `${v.toFixed(1)}%`;
@@ -37,9 +42,12 @@ export function ContoEconomicoTab() {
   const [year, setYear] = useState(currentYear);
   const { data, isLoading } = useContoEconomico(year);
   const [personnel, setPersonnel] = useState<PersonnelData>(() => loadPersonnel(year));
+  const [aiReport, setAiReport] = useState<AIReport | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   useEffect(() => {
     setPersonnel(loadPersonnel(year));
+    setAiReport(null);
   }, [year]);
 
   const handlePersonnelChange = (field: "salari" | "amministratore", month: number, value: string) => {
@@ -52,26 +60,85 @@ export function ContoEconomicoTab() {
     savePersonnel(year, updated);
   };
 
+  const handleAIAnalysis = async () => {
+    if (!data) return;
+    setAiLoading(true);
+    try {
+      const primoMargine: MonthlyData = {};
+      const personnelTotal: MonthlyData = {};
+      const ebitda: MonthlyData = {};
+      const ricaviTotaliMensili: MonthlyData = {};
+      const costiTotaliMensili: MonthlyData = {};
+
+      for (let m = 0; m < 12; m++) {
+        ricaviTotaliMensili[m] = (data.ricavi[m] || 0) + (data.ricaviMovimenti[m] || 0);
+        costiTotaliMensili[m] = (data.costiTotali[m] || 0) + (data.costiMovimentiTotali[m] || 0);
+        primoMargine[m] = ricaviTotaliMensili[m] - costiTotaliMensili[m];
+        personnelTotal[m] = (personnel.salari[m] || 0) + (personnel.amministratore[m] || 0);
+        ebitda[m] = primoMargine[m] - personnelTotal[m];
+      }
+
+      const payload = {
+        year,
+        data: {
+          ricaviFatture: data.ricavi,
+          ricaviMovimenti: data.ricaviMovimenti,
+          ricaviTotali: ricaviTotaliMensili,
+          costiFatture: data.costiTotali,
+          costiMovimenti: data.costiMovimentiTotali,
+          costiTotali: costiTotaliMensili,
+          costiPerCategoria: data.costiPerCategoria,
+          costiMovimentiPerCategoria: data.costiMovimentiPerCategoria,
+          primoMargine,
+          costiPersonale: personnelTotal,
+          ebitda,
+          mesi: ["GEN", "FEB", "MAR", "APR", "MAG", "GIU", "LUG", "AGO", "SET", "OTT", "NOV", "DIC"],
+        },
+      };
+
+      const { data: result, error } = await supabase.functions.invoke("analyze-conto-economico", {
+        body: payload,
+      });
+
+      if (error) throw error;
+      if (result?.error) {
+        toast({ title: "Errore AI", description: result.error, variant: "destructive" });
+        return;
+      }
+
+      setAiReport(result);
+    } catch (e: any) {
+      console.error("AI analysis error:", e);
+      toast({ title: "Errore", description: e.message || "Errore durante l'analisi AI", variant: "destructive" });
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   if (isLoading) {
     return <div className="space-y-4">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 w-full" />)}</div>;
   }
 
   if (!data) return null;
 
-  const { ricavi, costiPerCategoria, costiTotali, ivaRicavi, ivaCosti, categoryNames } = data;
+  const { ricavi, costiPerCategoria, costiTotali, ivaRicavi, ivaCosti, categoryNames, ricaviMovimenti, costiMovimentiPerCategoria, costiMovimentiTotali, movimentiCategoryNames } = data;
 
-  // Compute margins
+  // Compute combined totals
+  const ricaviTotaliCombinati: MonthlyData = {};
+  const costiTotaliCombinati: MonthlyData = {};
   const primoMargine: MonthlyData = {};
   const personnelTotal: MonthlyData = {};
   const ebitda: MonthlyData = {};
 
   for (let m = 0; m < 12; m++) {
-    primoMargine[m] = (ricavi[m] || 0) - (costiTotali[m] || 0);
+    ricaviTotaliCombinati[m] = (ricavi[m] || 0) + (ricaviMovimenti[m] || 0);
+    costiTotaliCombinati[m] = (costiTotali[m] || 0) + (costiMovimentiTotali[m] || 0);
+    primoMargine[m] = ricaviTotaliCombinati[m] - costiTotaliCombinati[m];
     personnelTotal[m] = (personnel.salari[m] || 0) + (personnel.amministratore[m] || 0);
     ebitda[m] = primoMargine[m] - personnelTotal[m];
   }
 
-  const totalRicavi = sumMonthly(ricavi);
+  const totalRicavi = sumMonthly(ricaviTotaliCombinati);
 
   const renderValueCell = (value: number, isTotal = false, isNegative = false) => (
     <td className={cn(
@@ -84,7 +151,7 @@ export function ContoEconomicoTab() {
     </td>
   );
 
-  const renderRow = (label: string, monthlyData: MonthlyData, options?: { bold?: boolean; highlight?: boolean; negative?: boolean }) => {
+  const renderRow = (label: string, monthlyData: MonthlyData, options?: { bold?: boolean; highlight?: boolean; negative?: boolean; indent?: boolean }) => {
     const total = sumMonthly(monthlyData);
     return (
       <tr className={cn(
@@ -92,7 +159,7 @@ export function ContoEconomicoTab() {
         options?.highlight && "bg-muted/30",
         options?.bold && "font-semibold"
       )}>
-        <td className={cn("py-1.5 px-3 text-xs whitespace-nowrap sticky left-0 bg-card z-10", options?.bold && "font-bold text-foreground")}>
+        <td className={cn("py-1.5 px-3 text-xs whitespace-nowrap sticky left-0 bg-card z-10", options?.bold && "font-bold text-foreground", options?.indent && "pl-6")}>
           {label}
         </td>
         {Array.from({ length: 12 }).map((_, m) => renderValueCell(monthlyData[m] || 0, options?.bold, options?.negative))}
@@ -107,21 +174,19 @@ export function ContoEconomicoTab() {
     );
   };
 
-  const renderPercentRow = (label: string, monthlyData: MonthlyData) => {
-    return (
-      <tr className="border-b border-border/30">
-        <td className="py-1 px-3 text-[10px] text-muted-foreground italic sticky left-0 bg-card z-10">{label}</td>
-        {Array.from({ length: 12 }).map((_, m) => (
-          <td key={m} className="py-1 px-2 text-right text-[10px] text-muted-foreground italic">
-            {fmtPerc(((monthlyData[m] || 0) / (ricavi[m] || 1)) * 100)}
-          </td>
-        ))}
-        <td className="py-1 px-2 text-right text-[10px] text-muted-foreground italic">
-          {fmtPerc((sumMonthly(monthlyData) / (totalRicavi || 1)) * 100)}
+  const renderPercentRow = (label: string, monthlyData: MonthlyData) => (
+    <tr className="border-b border-border/30">
+      <td className="py-1 px-3 text-[10px] text-muted-foreground italic sticky left-0 bg-card z-10">{label}</td>
+      {Array.from({ length: 12 }).map((_, m) => (
+        <td key={m} className="py-1 px-2 text-right text-[10px] text-muted-foreground italic">
+          {fmtPerc(((monthlyData[m] || 0) / (ricaviTotaliCombinati[m] || 1)) * 100)}
         </td>
-      </tr>
-    );
-  };
+      ))}
+      <td className="py-1 px-2 text-right text-[10px] text-muted-foreground italic">
+        {fmtPerc((sumMonthly(monthlyData) / (totalRicavi || 1)) * 100)}
+      </td>
+    </tr>
+  );
 
   const renderEditableRow = (label: string, field: "salari" | "amministratore") => (
     <tr className="border-b border-border/50">
@@ -143,23 +208,37 @@ export function ContoEconomicoTab() {
     </tr>
   );
 
+  const hasMovimenti = sumMonthly(ricaviMovimenti) > 0 || sumMonthly(costiMovimentiTotali) > 0;
+
   return (
     <div className="space-y-6">
-      {/* Year selector */}
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-muted-foreground">Analisi economica mensile basata su fatture emesse e ricevute</p>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted-foreground">Anno:</span>
-          <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
-            <SelectTrigger className="w-24 h-8 text-sm">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
-                <SelectItem key={y} value={String(y)}>{y}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      {/* Year selector + AI button */}
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <p className="text-sm text-muted-foreground">Analisi economica mensile basata su fatture e movimenti bancari</p>
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleAIAnalysis}
+            disabled={aiLoading}
+            className="gap-2"
+          >
+            {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+            {aiLoading ? "Analisi in corso..." : "Analisi AI"}
+          </Button>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Anno:</span>
+            <Select value={String(year)} onValueChange={(v) => setYear(Number(v))}>
+              <SelectTrigger className="w-24 h-8 text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {[currentYear - 2, currentYear - 1, currentYear, currentYear + 1].map((y) => (
+                  <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
       </div>
 
@@ -177,23 +256,42 @@ export function ContoEconomicoTab() {
               </tr>
             </thead>
             <tbody>
-              {/* RICAVI */}
-              {renderRow("RICAVI DA FATTURE EMESSE", ricavi, { bold: true, highlight: true })}
+              {/* RICAVI DA FATTURE */}
+              {renderRow("Ricavi da fatture emesse", ricavi, { bold: false })}
 
-              {/* COSTI header */}
+              {/* RICAVI DA MOVIMENTI */}
+              {hasMovimenti && renderRow("Ricavi da movimenti bancari", ricaviMovimenti, { bold: false })}
+
+              {/* TOTALE RICAVI */}
+              {renderRow("TOTALE RICAVI", ricaviTotaliCombinati, { bold: true, highlight: true })}
+
+              {/* COSTI DA FATTURE header */}
               <tr className="bg-muted/20">
-                <td colSpan={14} className="py-1.5 px-3 text-xs font-bold text-muted-foreground uppercase">Costi</td>
+                <td colSpan={14} className="py-1.5 px-3 text-xs font-bold text-muted-foreground uppercase">Costi da fatture</td>
               </tr>
-              {categoryNames.map((cat) => renderRow(cat, costiPerCategoria[cat] || {}))}
+              {categoryNames.map((cat) => renderRow(cat, costiPerCategoria[cat] || {}, { indent: true }))}
+
+              {/* COSTI DA MOVIMENTI */}
+              {hasMovimenti && movimentiCategoryNames.length > 0 && (
+                <>
+                  <tr className="bg-muted/20">
+                    <td colSpan={14} className="py-1.5 px-3 text-xs font-bold text-muted-foreground uppercase">Costi da movimenti bancari</td>
+                  </tr>
+                  {movimentiCategoryNames.map((cat) => renderRow(cat, costiMovimentiPerCategoria[cat] || {}, { indent: true }))}
+                </>
+              )}
+
+              {/* TOTALE COSTI */}
+              {renderRow("TOTALE COSTI", costiTotaliCombinati, { bold: true, highlight: true })}
 
               {/* PRIMO MARGINE */}
               {renderRow("PRIMO MARGINE", primoMargine, { bold: true, highlight: true, negative: true })}
               {renderPercentRow("% sul fatturato", primoMargine)}
 
-              {/* Personnel info */}
+              {/* Personnel */}
               <tr className="bg-amber-500/10">
                 <td colSpan={14} className="py-2 px-3 text-xs text-amber-600 dark:text-amber-400">
-                  <strong>Inserimento manuale dei valori:</strong> Inserire i costi totali del personale e compensi amministratore. Il sistema aggiornerà automaticamente il conto economico.
+                  <strong>Inserimento manuale:</strong> Inserire i costi del personale e compensi amministratore.
                 </td>
               </tr>
               {renderEditableRow("Salari e stipendi", "salari")}
@@ -206,6 +304,9 @@ export function ContoEconomicoTab() {
           </table>
         </div>
       </div>
+
+      {/* AI Report */}
+      {aiReport && <AIReportSection report={aiReport} />}
 
       {/* IVA Section */}
       <IVASection year={year} ivaRicavi={ivaRicavi} ivaCosti={ivaCosti} />
