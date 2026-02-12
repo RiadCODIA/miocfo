@@ -1,73 +1,65 @@
 
 
-# Area Economica - Nuova Pagina con Conto Economico, Scadenzario e Previsioni
+# Conto Economico con dati dai Movimenti e Analisi AI
 
-## Panoramica
+## Problema attuale
+Il Conto Economico prende dati solo dalle **fatture** (tabella `invoices`). I **movimenti bancari** (tabella `bank_transactions`) non vengono utilizzati, quindi il report e' incompleto.
 
-Creare una nuova pagina "Area Economica" accessibile dalla sidebar, con 3 tab principali come nel design di riferimento. I dati verranno calcolati automaticamente dalle fatture emesse (ricavi) e ricevute (costi), con possibilita di inserimento manuale per i costi del personale.
+## Soluzione
 
-## Struttura della pagina
+Integrare i movimenti bancari nel Conto Economico e aggiungere una sezione di **analisi AI** che genera un report intelligente sui dati aggregati.
 
-La pagina avra:
-- Header con titolo "Area Economica" e sottotitolo
-- Filtri (periodo, conti bancari)  
-- 3 tab: **CONTO ECONOMICO**, **SCADENZARIO CLIENTI/FORNITORI**, **PREVISIONI**
+### 1. Aggiornare l'hook `useContoEconomico.ts`
 
-### Tab 1: Conto Economico
-Tabella mensile (GEN-DIC) con le seguenti righe:
-- **RICAVI DA FATTURE EMESSE** - calcolato automaticamente dalle fatture con `invoice_type = 'emessa'`
-- **COSTI** - calcolati dalle fatture con `invoice_type = 'ricevuta'`, suddivisi per categorie di costo (da `cost_categories`):
-  - Acquisto materie prime, Energia, Lavorazioni di terzi, Provvigioni, Carburanti, Manutenzioni, Assicurazioni, Formazione, Marketing, Godimento beni di terzi, Canoni di leasing, Consulenze, Altre spese
-- **PRIMO MARGINE** = Ricavi - Costi (con % sul fatturato)
-- **Costi del personale** (inserimento manuale): Salari e stipendi, Compenso amministratore
-- **MARGINE OPERATIVO (EBITDA)** = Primo Margine - Costi personale (con % sul fatturato)
-- **Sezione IVA**: Calcolo IVA annuale con Ricavi, Costi, Differenza, A credito, A debito, IVA netta
+Oltre alle fatture, il hook carichera anche i movimenti bancari (`bank_transactions`) per l'anno selezionato:
+- **Ricavi da movimenti**: transazioni con `amount > 0`, aggregate per mese
+- **Costi da movimenti**: transazioni con `amount < 0`, categorizzate tramite `ai_category_id` e aggregate per mese
+- I dati dei movimenti verranno mostrati come righe separate nella tabella, cosi l'utente vede sia i dati da fatture che da movimenti
 
-### Tab 2: Scadenzario Clienti/Fornitori
-Vista delle scadenze raggruppate per clienti e fornitori (riutilizzo logica esistente da `useDeadlines`)
+### 2. Creare edge function `analyze-conto-economico`
 
-### Tab 3: Previsioni
-Vista previsionale (riutilizzo logica da `useBudgets` e `useBudgetComparison`)
+Una nuova edge function dedicata che:
+- Riceve anno e dati aggregati (ricavi, costi, margini) dal frontend
+- Invia il tutto a Lovable AI (Gemini) con un prompt specifico da CFO
+- Restituisce un report strutturato con:
+  - **Score di salute economica** (1-100)
+  - **Trend dei margini** e confronto con benchmark PMI
+  - **Aree critiche** identificate
+  - **Suggerimenti operativi** con priorita e timeline
+  - **Previsioni** per i mesi successivi
 
-## Modifiche alla Sidebar
+### 3. Aggiornare `ContoEconomicoTab.tsx`
 
-Aggiornare "Area economica" nel gruppo "GESTIONE BUSINESS" per includere:
-- **Conto Economico** (nuova voce, link a `/area-economica`)
-- **Budget & Previsioni** (esistente)
-- **Movimenti** (esistente)
+- Aggiungere righe per "Ricavi da movimenti bancari" e "Costi da movimenti bancari"
+- Aggiungere un pulsante **"Analisi AI"** sopra la tabella
+- Mostrare sotto la tabella una sezione con il report AI che include:
+  - Card con score di salute e indicatori chiave
+  - Lista di suggerimenti con priorita
+  - Aree critiche evidenziate
+  - Azioni raccomandate
 
-## Dettagli tecnici
+### 4. File coinvolti
 
-### File da creare
+| File | Azione |
+|------|--------|
+| `src/hooks/useContoEconomico.ts` | Modificare: aggiungere query su `bank_transactions` |
+| `supabase/functions/analyze-conto-economico/index.ts` | Creare: edge function AI per analisi conto economico |
+| `src/components/area-economica/ContoEconomicoTab.tsx` | Modificare: aggiungere righe movimenti + sezione AI report |
+| `src/components/area-economica/AIReportSection.tsx` | Creare: componente per visualizzare il report AI |
+| `supabase/config.toml` | Modificare: registrare nuova edge function |
 
-| File | Descrizione |
-|------|-------------|
-| `src/pages/AreaEconomica.tsx` | Pagina principale con i 3 tab |
-| `src/components/area-economica/ContoEconomicoTab.tsx` | Tab Conto Economico con griglia mensile |
-| `src/components/area-economica/ScadenzarioTab.tsx` | Tab Scadenzario Clienti/Fornitori |
-| `src/components/area-economica/PrevisioniTab.tsx` | Tab Previsioni |
-| `src/components/area-economica/IVASection.tsx` | Sezione calcolo IVA |
-| `src/hooks/useContoEconomico.ts` | Hook per aggregare dati fatture per mese/categoria |
+### 5. Dettagli tecnici
 
-### File da modificare
+**Hook aggiornato** - aggiungera una query parallela:
+```
+bank_transactions -> select amount, date, ai_category_id
+                  -> filtro per anno
+                  -> aggregazione per mese
+```
 
-| File | Modifica |
-|------|----------|
-| `src/components/layout/Sidebar.tsx` | Aggiungere voce "Conto Economico" in Area economica |
-| `src/App.tsx` | Aggiungere route `/area-economica` |
+Nuovi campi nel return: `ricaviMovimenti`, `costiMovimentiPerCategoria`, `costiMovimentiTotali`
 
-### Fonti dati
-- **Ricavi**: query su `invoices` dove `invoice_type = 'emessa'`, raggruppati per mese tramite `invoice_date`
-- **Costi**: query su `invoices` dove `invoice_type = 'ricevuta'`, con join su `cost_categories` per suddivisione
-- **IVA**: calcolata da `vat_amount` nelle fatture
-- **Costi personale**: salvati in `localStorage` o in una nuova tabella (inizialmente localStorage per semplicita)
-- **Scadenzario**: riutilizzo hook `useDeadlines` esistente
-- **Previsioni**: riutilizzo hook `useBudgets` esistente
+**Edge function** - usa Lovable AI (LOVABLE_API_KEY gia configurato) con modello `google/gemini-3-flash-preview`. Riceve i dati aggregati dal frontend (non fa query al DB), analizza e restituisce JSON strutturato.
 
-### Logica Conto Economico
-- Anno selezionabile (default: anno corrente)
-- Divisione: Mensile
-- Celle editabili solo per costi del personale
-- Totali calcolati automaticamente per ogni riga
-- Percentuali sul fatturato calcolate dinamicamente
+**UI** - Pulsante "Genera Analisi AI" con stato di loading. Il report viene mostrato in cards sotto la tabella con score, suggerimenti e azioni. Gestione errori 429/402 con toast.
 
