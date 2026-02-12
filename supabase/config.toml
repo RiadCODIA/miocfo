@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.analyze-conto-economico]
 verify_jwt = false
+
+[functions.acube-cassetto-fiscale]
+verify_jwt = false

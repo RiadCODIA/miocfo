@@ -731,6 +731,7 @@ export type Database = {
       }
       invoices: {
         Row: {
+          acube_invoice_id: string | null
           amount: number
           category_id: string | null
           client_name: string | null
@@ -746,6 +747,7 @@ export type Database = {
           matched_transaction_id: string | null
           notes: string | null
           payment_status: string | null
+          source: string | null
           total_amount: number
           updated_at: string
           user_id: string
@@ -753,6 +755,7 @@ export type Database = {
           vendor_name: string | null
         }
         Insert: {
+          acube_invoice_id?: string | null
           amount: number
           category_id?: string | null
           client_name?: string | null
@@ -768,6 +771,7 @@ export type Database = {
           matched_transaction_id?: string | null
           notes?: string | null
           payment_status?: string | null
+          source?: string | null
           total_amount: number
           updated_at?: string
           user_id: string
@@ -775,6 +779,7 @@ export type Database = {
           vendor_name?: string | null
         }
         Update: {
+          acube_invoice_id?: string | null
           amount?: number
           category_id?: string | null
           client_name?: string | null
@@ -790,6 +795,7 @@ export type Database = {
           matched_transaction_id?: string | null
           notes?: string | null
           payment_status?: string | null
+          source?: string | null
           total_amount?: number
           updated_at?: string
           user_id?: string
