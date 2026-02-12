@@ -1,50 +1,73 @@
 
-# Allineamento Sidebar al Design di Riferimento
 
-## Cosa manca nella sidebar attuale
+# Area Economica - Nuova Pagina con Conto Economico, Scadenzario e Previsioni
 
-Confrontando con lo screenshot di riferimento, vanno aggiunte 3 voci mancanti e riorganizzata la struttura.
+## Panoramica
 
-## Modifiche previste
+Creare una nuova pagina "Area Economica" accessibile dalla sidebar, con 3 tab principali come nel design di riferimento. I dati verranno calcolati automaticamente dalle fatture emesse (ricavi) e ricevute (costi), con possibilita di inserimento manuale per i costi del personale.
 
-### 1. Nuove pagine da creare
-- **Collegamenti** (`/collegamenti`) - Pagina per gestire integrazioni e collegamenti esterni (es. banche, software contabili)
-- **Comunicazioni** (`/comunicazioni`) - Pagina per messaggi e comunicazioni interne
-- **AI Assistant** (`/ai-assistant`) - Pagina con chatbot AI per assistenza finanziaria
+## Struttura della pagina
 
-### 2. Aggiornamento Sidebar
-La struttura della navigazione verra riorganizzata cosi:
+La pagina avra:
+- Header con titolo "Area Economica" e sottotitolo
+- Filtri (periodo, conti bancari)  
+- 3 tab: **CONTO ECONOMICO**, **SCADENZARIO CLIENTI/FORNITORI**, **PREVISIONI**
 
-**NAVIGAZIONE**
-- Dashboard
-- Collegamenti (NUOVA)
-- Conti & Transazioni
+### Tab 1: Conto Economico
+Tabella mensile (GEN-DIC) con le seguenti righe:
+- **RICAVI DA FATTURE EMESSE** - calcolato automaticamente dalle fatture con `invoice_type = 'emessa'`
+- **COSTI** - calcolati dalle fatture con `invoice_type = 'ricevuta'`, suddivisi per categorie di costo (da `cost_categories`):
+  - Acquisto materie prime, Energia, Lavorazioni di terzi, Provvigioni, Carburanti, Manutenzioni, Assicurazioni, Formazione, Marketing, Godimento beni di terzi, Canoni di leasing, Consulenze, Altre spese
+- **PRIMO MARGINE** = Ricavi - Costi (con % sul fatturato)
+- **Costi del personale** (inserimento manuale): Salari e stipendi, Compenso amministratore
+- **MARGINE OPERATIVO (EBITDA)** = Primo Margine - Costi personale (con % sul fatturato)
+- **Sezione IVA**: Calcolo IVA annuale con Ricavi, Costi, Differenza, A credito, A debito, IVA netta
 
-**GESTIONE BUSINESS** (collapsible, con sotto-gruppi)
-- Area finanziaria: Fatture, Flussi di Cassa, Scadenzario
-- Area economica: Budget & Previsioni, Movimenti
+### Tab 2: Scadenzario Clienti/Fornitori
+Vista delle scadenze raggruppate per clienti e fornitori (riutilizzo logica esistente da `useDeadlines`)
 
-**ANALYTICS & AI**
-- Dati & Statistiche (rinominata da "KPI & Report")
-- Notifiche
-- Comunicazioni (NUOVA)
-- AI Assistant (NUOVA, con badge "New")
+### Tab 3: Previsioni
+Vista previsionale (riutilizzo logica da `useBudgets` e `useBudgetComparison`)
 
-### 3. File coinvolti
+## Modifiche alla Sidebar
 
-| File | Azione |
-|------|--------|
-| `src/pages/Collegamenti.tsx` | Creare - pagina integrazioni |
-| `src/pages/Comunicazioni.tsx` | Creare - pagina comunicazioni |
-| `src/pages/AIAssistant.tsx` | Creare - pagina AI chatbot |
-| `src/components/layout/Sidebar.tsx` | Modificare - aggiungere voci e riorganizzare gruppi |
-| `src/App.tsx` | Modificare - aggiungere le 3 nuove route protette |
+Aggiornare "Area economica" nel gruppo "GESTIONE BUSINESS" per includere:
+- **Conto Economico** (nuova voce, link a `/area-economica`)
+- **Budget & Previsioni** (esistente)
+- **Movimenti** (esistente)
 
-### 4. Dettagli tecnici
+## Dettagli tecnici
 
-- Le nuove pagine avranno inizialmente un layout placeholder con header, descrizione e contenuto base funzionante
-- La pagina **Collegamenti** mostrera le integrazioni disponibili (banche, software) con stato connesso/non connesso
-- La pagina **Comunicazioni** avra una lista di messaggi/notifiche con filtri
-- La pagina **AI Assistant** avra un'interfaccia chat per interagire con l'AI
-- Il badge "New" sull'AI Assistant sara implementato con lo stesso pattern del badge notifiche esistente
-- La sidebar supportera sotto-gruppi dentro "GESTIONE BUSINESS" per separare area finanziaria e area economica
+### File da creare
+
+| File | Descrizione |
+|------|-------------|
+| `src/pages/AreaEconomica.tsx` | Pagina principale con i 3 tab |
+| `src/components/area-economica/ContoEconomicoTab.tsx` | Tab Conto Economico con griglia mensile |
+| `src/components/area-economica/ScadenzarioTab.tsx` | Tab Scadenzario Clienti/Fornitori |
+| `src/components/area-economica/PrevisioniTab.tsx` | Tab Previsioni |
+| `src/components/area-economica/IVASection.tsx` | Sezione calcolo IVA |
+| `src/hooks/useContoEconomico.ts` | Hook per aggregare dati fatture per mese/categoria |
+
+### File da modificare
+
+| File | Modifica |
+|------|----------|
+| `src/components/layout/Sidebar.tsx` | Aggiungere voce "Conto Economico" in Area economica |
+| `src/App.tsx` | Aggiungere route `/area-economica` |
+
+### Fonti dati
+- **Ricavi**: query su `invoices` dove `invoice_type = 'emessa'`, raggruppati per mese tramite `invoice_date`
+- **Costi**: query su `invoices` dove `invoice_type = 'ricevuta'`, con join su `cost_categories` per suddivisione
+- **IVA**: calcolata da `vat_amount` nelle fatture
+- **Costi personale**: salvati in `localStorage` o in una nuova tabella (inizialmente localStorage per semplicita)
+- **Scadenzario**: riutilizzo hook `useDeadlines` esistente
+- **Previsioni**: riutilizzo hook `useBudgets` esistente
+
+### Logica Conto Economico
+- Anno selezionabile (default: anno corrente)
+- Divisione: Mensile
+- Celle editabili solo per costi del personale
+- Totali calcolati automaticamente per ogni riga
+- Percentuali sul fatturato calcolate dinamicamente
+
