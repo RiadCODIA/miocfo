@@ -1,73 +1,58 @@
 
 
-# Scadenzario e Previsioni con Analisi AI
+# Recuperare tutte le transazioni da Revolut
 
-## Problema
-Le tab "Scadenzario Clienti/Fornitori" e "Previsioni" mostrano solo dati statici dal database senza nessuna analisi intelligente.
+## Problema identificato
+
+Due limitazioni impediscono di vedere tutte le transazioni:
+
+1. **Edge function `enable-banking`**: Le funzioni `syncToDatabase` (riga 397) e `syncSingleAccount` (riga 537) calcolano la data di inizio come `Date.now() - 90 giorni`. Questo scarica solo 3 mesi di storico.
+
+2. **Hook `useTransactions`**: Ha un `.limit(500)` che taglia i risultati se ci sono piu di 500 transazioni.
+
+3. **Paginazione API Enable Banking**: L'API potrebbe restituire le transazioni in pagine (continuation token), ma il codice attuale non gestisce la paginazione.
 
 ## Soluzione
 
-Aggiungere analisi AI a entrambe le sezioni, riutilizzando la stessa edge function `analyze-conto-economico` con un parametro `type` per distinguere il tipo di analisi, oppure creando funzioni dedicate per maggiore chiarezza.
+### 1. Estendere il periodo di sync nella edge function
 
----
+Cambiare la finestra di sincronizzazione da 90 giorni a **730 giorni (2 anni)** sia in `syncToDatabase` che in `syncSingleAccount`. Enable Banking PSD2 supporta tipicamente fino a 2 anni di storico.
 
-### Tab Scadenzario - Miglioramenti
+**File:** `supabase/functions/enable-banking/index.ts`
+- Riga 397: `90 * 24 * 60 * 60 * 1000` diventa `730 * 24 * 60 * 60 * 1000`
+- Riga 537: stessa modifica
 
-**Dati esistenti:** scadenze clienti/fornitori con importi, date, stati (in attesa, scadute, completate)
+### 2. Gestire la paginazione dell'API Enable Banking
 
-**Aggiunta AI:**
-- Pulsante "Analisi AI Scadenzario" che invia i dati delle scadenze all'AI
-- L'AI analizza:
-  - Rischio di liquidita basato sulle scadenze in arrivo
-  - Clienti con pagamenti piu lenti / fornitori critici
-  - Suggerimenti su priorita di incasso e pagamento
-  - Previsione flusso di cassa basata sulle scadenze
+La funzione `getAccountTransactions` deve gestire il `continuation_key` restituito dall'API per scaricare tutte le pagine di transazioni, non solo la prima.
 
-**Report AI restituito:**
-- Score rischio liquidita (1-100)
-- Azioni prioritarie (quali incassi sollecitare, quali pagamenti posticipare)
-- Alert su scadenze critiche
-- Suggerimenti operativi
+**File:** `supabase/functions/enable-banking/index.ts`
+- Modificare `getAccountTransactions` per iterare finche c'e un `continuation_key` nella risposta
 
----
+### 3. Rimuovere il limite di 500 nel hook useTransactions
 
-### Tab Previsioni - Miglioramenti
+Aumentare o rimuovere il `.limit(500)` per permettere di caricare tutte le transazioni disponibili nel periodo selezionato.
 
-**Dati esistenti:** budget, confronto consuntivo vs previsionale, scostamenti
+**File:** `src/hooks/useTransactions.ts`
+- Rimuovere `.limit(500)` o aumentare a 5000
 
-**Aggiunta AI:**
-- Pulsante "Analisi AI Previsioni" che invia dati budget + consuntivo
-- L'AI analizza:
-  - Attendibilita delle previsioni rispetto al consuntivo
-  - Trend di scostamento e cause probabili
-  - Suggerimenti per migliorare la pianificazione
-  - Previsioni aggiornate basate sui trend
+### 4. Aggiungere opzione "Tutto" nei preset della TopBar
 
-**Report AI restituito:**
-- Score attendibilita previsioni (1-100)
-- Analisi scostamenti principali
-- Suggerimenti di aggiustamento budget
-- Forecast aggiornato
+Aggiungere un preset "Tutto il periodo" che non applica filtri di data, cosi l'utente puo vedere tutte le transazioni storiche.
 
----
+**File:** `src/components/layout/TopBar.tsx`
+- Aggiungere opzione con range molto ampio (es. dal 2020 a oggi)
 
 ### File coinvolti
 
 | File | Azione |
 |------|--------|
-| `supabase/functions/analyze-conto-economico/index.ts` | Modificare: aggiungere supporto per `type: "scadenzario"` e `type: "previsioni"` |
-| `src/components/area-economica/ScadenzarioTab.tsx` | Modificare: aggiungere pulsante AI + sezione report |
-| `src/components/area-economica/PrevisioniTab.tsx` | Modificare: aggiungere pulsante AI + sezione report |
-| `src/components/area-economica/AIReportSection.tsx` | Modificare: rendere piu generico per supportare diversi tipi di report |
+| `supabase/functions/enable-banking/index.ts` | Modificare: estendere periodo sync + paginazione API |
+| `src/hooks/useTransactions.ts` | Modificare: rimuovere limit(500) |
+| `src/components/layout/TopBar.tsx` | Modificare: aggiungere preset "Tutto il periodo" |
 
-### Dettagli tecnici
+### Note importanti
 
-**Edge function** - Aggiungere un campo `type` nel body della richiesta:
-- `type: "conto-economico"` (default, comportamento attuale)
-- `type: "scadenzario"` - prompt CFO focalizzato su gestione scadenze e rischio liquidita
-- `type: "previsioni"` - prompt CFO focalizzato su analisi budget e forecasting
-
-Ogni tipo avra un prompt specifico e una struttura JSON di risposta adatta.
-
-**Frontend** - Riutilizzare il componente `AIReportSection` esistente con piccoli adattamenti per mostrare i campi specifici di ogni tipo di analisi (es. "Azioni prioritarie" per scadenzario, "Forecast aggiornato" per previsioni).
+- Dopo il deploy, sara necessario **ri-sincronizzare** il conto Revolut dalla pagina Conti Bancari per scaricare lo storico completo
+- La prima sincronizzazione sara piu lenta perche scarichera 2 anni di dati
 
