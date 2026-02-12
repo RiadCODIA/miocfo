@@ -2,6 +2,7 @@ import { ReactNode, useState, createContext, useContext } from "react";
 import { Sidebar } from "./Sidebar";
 import { AlertListener } from "@/components/AlertListener";
 import { TopBar } from "./TopBar";
+import { DateRangeProvider } from "@/contexts/DateRangeContext";
 
 interface SidebarContextType {
   collapsed: boolean;
@@ -24,16 +25,18 @@ export function MainLayout({ children }: MainLayoutProps) {
 
   return (
     <SidebarContext.Provider value={{ collapsed, setCollapsed }}>
-      <div className="min-h-screen bg-background">
-        <AlertListener />
-        <Sidebar />
-        <main className={`min-h-screen transition-all duration-300 ${collapsed ? "pl-16" : "pl-64"}`}>
-          <div className="p-6 lg:p-8">
-            <TopBar />
-            {children}
-          </div>
-        </main>
-      </div>
+      <DateRangeProvider>
+        <div className="min-h-screen bg-background">
+          <AlertListener />
+          <Sidebar />
+          <main className={`min-h-screen transition-all duration-300 ${collapsed ? "pl-16" : "pl-64"}`}>
+            <div className="p-6 lg:p-8">
+              <TopBar />
+              {children}
+            </div>
+          </main>
+        </div>
+      </DateRangeProvider>
     </SidebarContext.Provider>
   );
 }

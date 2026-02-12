@@ -1,5 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Search, Filter, Download, Edit2, BarChart3, Loader2, X, Sparkles } from "lucide-react";
+import { useDateRange } from "@/contexts/DateRangeContext";
+import { format as formatDate } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,7 +46,7 @@ interface CostCategory {
 
 export default function Transazioni() {
   const [searchTerm, setSearchTerm] = useState("");
-  const [period, setPeriod] = useState<"all" | "today" | "week" | "month">("all");
+  const { dateRange } = useDateRange();
   const [accountId, setAccountId] = useState("all");
   const [category, setCategory] = useState("all");
   const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
@@ -62,16 +64,19 @@ export default function Transazioni() {
 
   const queryClient = useQueryClient();
 
+  const contextStartDate = formatDate(dateRange.from, "yyyy-MM-dd");
+  const contextEndDate = formatDate(dateRange.to, "yyyy-MM-dd");
+
   const { data: transactions, isLoading, refetch } = useTransactions({
     searchTerm,
-    period,
+    period: "all",
     accountId,
     category,
     minAmount: minAmount ? parseFloat(minAmount) : undefined,
     maxAmount: maxAmount ? parseFloat(maxAmount) : undefined,
     transactionType,
-    startDate: startDate || undefined,
-    endDate: endDate || undefined,
+    startDate: startDate || contextStartDate,
+    endDate: endDate || contextEndDate,
   });
   
   const activeFiltersCount = [
@@ -215,17 +220,8 @@ export default function Transazioni() {
           />
         </div>
 
-        <Select value={period} onValueChange={(v) => setPeriod(v as typeof period)}>
-          <SelectTrigger className="w-[160px] bg-card border-border">
-            <SelectValue placeholder="Periodo" />
-          </SelectTrigger>
-          <SelectContent className="bg-card border-border">
-            <SelectItem value="all">Tutti i periodi</SelectItem>
-            <SelectItem value="today">Oggi</SelectItem>
-            <SelectItem value="week">Ultima settimana</SelectItem>
-            <SelectItem value="month">Ultimo mese</SelectItem>
-          </SelectContent>
-        </Select>
+
+
 
         <Select value={accountId} onValueChange={setAccountId}>
           <SelectTrigger className="w-[180px] bg-card border-border">
