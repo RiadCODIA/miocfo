@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Building2, Calendar, ChevronDown } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
+import { useDateRange } from "@/contexts/DateRangeContext";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -19,20 +20,10 @@ const PERIOD_OPTIONS = [
   { label: "Ultimo anno", getValue: () => ({ from: subDays(new Date(), 365), to: new Date() }) },
 ] as const;
 
-export interface DateRange {
-  from: Date;
-  to: Date;
-}
-
-interface TopBarProps {
-  dateRange?: DateRange;
-  onDateRangeChange?: (range: DateRange) => void;
-}
-
-export function TopBar({ dateRange, onDateRangeChange }: TopBarProps) {
+export function TopBar() {
   const { profile, user } = useAuth();
+  const { dateRange, setDateRange, activeLabel, setActiveLabel } = useDateRange();
   const [open, setOpen] = useState(false);
-  const [activeLabel, setActiveLabel] = useState("Ultimi 30 giorni");
   const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
 
   const hour = new Date().getHours();
@@ -42,10 +33,10 @@ export function TopBar({ dateRange, onDateRangeChange }: TopBarProps) {
     ? profile.first_name
     : user?.email?.split("@")[0] || "Utente";
 
-  const handlePresetSelect = (label: string, range: DateRange) => {
+  const handlePresetSelect = (label: string, range: { from: Date; to: Date }) => {
     setActiveLabel(label);
     setCustomRange({});
-    onDateRangeChange?.(range);
+    setDateRange(range);
     setOpen(false);
   };
 
@@ -57,8 +48,9 @@ export function TopBar({ dateRange, onDateRangeChange }: TopBarProps) {
       const from = date < customRange.from ? date : customRange.from;
       const to = date < customRange.from ? customRange.from : date;
       setCustomRange({ from, to });
-      setActiveLabel(`${format(from, "dd/MM/yy")} – ${format(to, "dd/MM/yy")}`);
-      onDateRangeChange?.({ from, to });
+      const label = `${format(from, "dd/MM/yy")} – ${format(to, "dd/MM/yy")}`;
+      setActiveLabel(label);
+      setDateRange({ from, to });
       setOpen(false);
     }
   };
@@ -93,7 +85,6 @@ export function TopBar({ dateRange, onDateRangeChange }: TopBarProps) {
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="end">
             <div className="flex">
-              {/* Preset list */}
               <div className="border-r border-border p-2 space-y-0.5 min-w-[160px]">
                 {PERIOD_OPTIONS.map((opt) => (
                   <button
@@ -114,7 +105,6 @@ export function TopBar({ dateRange, onDateRangeChange }: TopBarProps) {
                   Personalizzato
                 </p>
               </div>
-              {/* Calendar */}
               <div className="p-2">
                 <CalendarComponent
                   mode="single"
