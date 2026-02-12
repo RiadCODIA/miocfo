@@ -83,6 +83,7 @@ const userNavGroups: NavGroup[] = [
       {
         label: "Area economica",
         items: [
+          { id: "conto_economico", label: "Conto Economico", icon: Receipt, path: "/area-economica" },
           { id: "budget_previsioni", label: "Budget & Previsioni", icon: CalendarRange, path: "/budget" },
           { id: "transazioni", label: "Movimenti", icon: ArrowLeftRight, path: "/transazioni" },
         ],

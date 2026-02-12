@@ -26,6 +26,7 @@ import Configurazione from "./pages/Configurazione";
 import Collegamenti from "./pages/Collegamenti";
 import Comunicazioni from "./pages/Comunicazioni";
 import AIAssistant from "./pages/AIAssistant";
+import AreaEconomica from "./pages/AreaEconomica";
 import NotFound from "./pages/NotFound";
 // Admin pages
 import Clienti from "./pages/Clienti";
@@ -280,6 +281,16 @@ const App = () => (
                 <ProtectedRoute>
                   <MainLayout>
                     <AIAssistant />
+                  </MainLayout>
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/area-economica"
+              element={
+                <ProtectedRoute>
+                  <MainLayout>
+                    <AreaEconomica />
                   </MainLayout>
                 </ProtectedRoute>
               }
