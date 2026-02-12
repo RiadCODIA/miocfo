@@ -165,14 +165,14 @@ export default function AIAssistant() {
                   </div>
                 )}
                 <div
-                  className={`rounded-xl px-4 py-2.5 max-w-[75%] text-sm ${
+                  className={`rounded-xl px-4 py-3 max-w-[80%] text-sm leading-relaxed ${
                     msg.role === "user"
                       ? "bg-primary text-primary-foreground"
                       : "bg-muted text-foreground"
                   }`}
                 >
                   {msg.role === "assistant" ? (
-                    <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                    <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_th]:bg-muted-foreground/10 [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_th]:border [&_th]:border-border [&_td]:px-3 [&_td]:py-1.5 [&_td]:text-xs [&_td]:border [&_td]:border-border [&_strong]:text-primary [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_h4]:text-xs [&_h4]:font-semibold [&_h4]:mt-2 [&_h4]:mb-1 [&_ul]:my-1.5 [&_ul]:pl-4 [&_ol]:my-1.5 [&_ol]:pl-4 [&_li]:my-0.5 [&_p]:my-1.5 [&_hr]:my-3 [&_hr]:border-border">
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
                     </div>
                   ) : (
