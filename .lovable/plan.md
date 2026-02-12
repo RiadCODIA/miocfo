@@ -1,47 +1,73 @@
 
 
-# Collegamento filtro periodo TopBar alle pagine
+# Scadenzario e Previsioni con Analisi AI
 
 ## Problema
-Il selettore di periodo nella TopBar funziona visivamente ma non e' collegato ai dati. Ogni pagina (Transazioni, Area Economica, ecc.) ha i propri filtri indipendenti, quindi cambiare il periodo nella TopBar non ha effetto.
+Le tab "Scadenzario Clienti/Fornitori" e "Previsioni" mostrano solo dati statici dal database senza nessuna analisi intelligente.
 
 ## Soluzione
 
-Creare un contesto globale per il date range e collegarlo sia alla TopBar che alle pagine che mostrano dati filtrabili per periodo.
+Aggiungere analisi AI a entrambe le sezioni, riutilizzando la stessa edge function `analyze-conto-economico` con un parametro `type` per distinguere il tipo di analisi, oppure creando funzioni dedicate per maggiore chiarezza.
 
-## Modifiche previste
+---
 
-### 1. Creare un DateRangeContext
-Un nuovo context (`src/contexts/DateRangeContext.tsx`) che espone:
-- `dateRange: { from: Date; to: Date }` (default: ultimi 30 giorni)
-- `setDateRange(range)` - per aggiornare il periodo
-- `activeLabel: string` - etichetta attiva nel selettore
+### Tab Scadenzario - Miglioramenti
 
-### 2. Aggiornare MainLayout
-- Wrappare i children con `DateRangeProvider`
-- Collegare il context alla TopBar tramite le props esistenti
+**Dati esistenti:** scadenze clienti/fornitori con importi, date, stati (in attesa, scadute, completate)
 
-### 3. Aggiornare la pagina Transazioni
-- Rimuovere il filtro "Periodo" locale (il select con "Tutti i periodi / Oggi / Settimana / Mese")
-- Usare il `dateRange` dal context per passare `startDate` e `endDate` al hook `useTransactions`
-- Mantenere gli altri filtri locali (ricerca, conto, categoria, filtri avanzati) invariati
+**Aggiunta AI:**
+- Pulsante "Analisi AI Scadenzario" che invia i dati delle scadenze all'AI
+- L'AI analizza:
+  - Rischio di liquidita basato sulle scadenze in arrivo
+  - Clienti con pagamenti piu lenti / fornitori critici
+  - Suggerimenti su priorita di incasso e pagamento
+  - Previsione flusso di cassa basata sulle scadenze
 
-### 4. Aggiornare la pagina Area Economica (opzionale)
-- Collegare il context al selettore anno del Conto Economico
+**Report AI restituito:**
+- Score rischio liquidita (1-100)
+- Azioni prioritarie (quali incassi sollecitare, quali pagamenti posticipare)
+- Alert su scadenze critiche
+- Suggerimenti operativi
+
+---
+
+### Tab Previsioni - Miglioramenti
+
+**Dati esistenti:** budget, confronto consuntivo vs previsionale, scostamenti
+
+**Aggiunta AI:**
+- Pulsante "Analisi AI Previsioni" che invia dati budget + consuntivo
+- L'AI analizza:
+  - Attendibilita delle previsioni rispetto al consuntivo
+  - Trend di scostamento e cause probabili
+  - Suggerimenti per migliorare la pianificazione
+  - Previsioni aggiornate basate sui trend
+
+**Report AI restituito:**
+- Score attendibilita previsioni (1-100)
+- Analisi scostamenti principali
+- Suggerimenti di aggiustamento budget
+- Forecast aggiornato
+
+---
 
 ### File coinvolti
 
 | File | Azione |
 |------|--------|
-| `src/contexts/DateRangeContext.tsx` | Creare - context globale per date range |
-| `src/components/layout/MainLayout.tsx` | Modificare - aggiungere DateRangeProvider e collegare TopBar |
-| `src/components/layout/TopBar.tsx` | Modificare - usare il context invece di stato locale |
-| `src/pages/Transazioni.tsx` | Modificare - rimuovere filtro periodo locale, usare context |
+| `supabase/functions/analyze-conto-economico/index.ts` | Modificare: aggiungere supporto per `type: "scadenzario"` e `type: "previsioni"` |
+| `src/components/area-economica/ScadenzarioTab.tsx` | Modificare: aggiungere pulsante AI + sezione report |
+| `src/components/area-economica/PrevisioniTab.tsx` | Modificare: aggiungere pulsante AI + sezione report |
+| `src/components/area-economica/AIReportSection.tsx` | Modificare: rendere piu generico per supportare diversi tipi di report |
 
 ### Dettagli tecnici
 
-- Il context avra come default "Ultimi 30 giorni" con `from = subDays(now, 30)` e `to = now`
-- Le date dal context verranno convertite in formato `yyyy-MM-dd` e passate come `startDate`/`endDate` al hook `useTransactions`
-- Il filtro periodo locale della pagina Transazioni (select con "all/today/week/month") verra rimosso perche ridondante con la TopBar
-- I filtri avanzati "Intervallo date" nel popover della pagina Transazioni verranno mantenuti come override locale se compilati
+**Edge function** - Aggiungere un campo `type` nel body della richiesta:
+- `type: "conto-economico"` (default, comportamento attuale)
+- `type: "scadenzario"` - prompt CFO focalizzato su gestione scadenze e rischio liquidita
+- `type: "previsioni"` - prompt CFO focalizzato su analisi budget e forecasting
+
+Ogni tipo avra un prompt specifico e una struttura JSON di risposta adatta.
+
+**Frontend** - Riutilizzare il componente `AIReportSection` esistente con piccoli adattamenti per mostrare i campi specifici di ogni tipo di analisi (es. "Azioni prioritarie" per scadenzario, "Forecast aggiornato" per previsioni).
 
