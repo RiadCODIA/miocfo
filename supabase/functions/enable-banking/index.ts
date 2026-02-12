@@ -261,42 +261,54 @@ async function getAccountBalances(accountUid: string) {
   return result.balances || result;
 }
 
-// Get account transactions
+// Get account transactions with pagination support
 async function getAccountTransactions(
   accountUid: string,
   dateFrom?: string,
   dateTo?: string
 ) {
-  let endpoint = `/accounts/${accountUid}/transactions`;
-  const params = new URLSearchParams();
-  if (dateFrom) params.append("date_from", dateFrom);
-  if (dateTo) params.append("date_to", dateTo);
-  if (params.toString()) endpoint += `?${params.toString()}`;
-
-  const result = (await ebRequest(endpoint)) as Record<string, unknown>;
-  console.log(`[EnableBanking] Transactions response keys: ${Object.keys(result)}`);
-  
-  // Enable Banking returns { booked: [...], pending: [...] } format
   // deno-lint-ignore no-explicit-any
   let allTransactions: any[] = [];
-  if (Array.isArray(result.booked)) {
-    console.log(`[EnableBanking] Found ${result.booked.length} booked transactions`);
-    allTransactions = allTransactions.concat(result.booked);
-  }
-  if (Array.isArray(result.pending)) {
-    console.log(`[EnableBanking] Found ${result.pending.length} pending transactions`);
-    allTransactions = allTransactions.concat(result.pending);
-  }
-  if (Array.isArray(result.transactions)) {
-    console.log(`[EnableBanking] Found ${result.transactions.length} transactions (flat)`);
-    allTransactions = allTransactions.concat(result.transactions);
-  }
-  // If result itself is an array
-  if (Array.isArray(result)) {
-    allTransactions = result;
-  }
+  let continuationKey: string | null = null;
+  let pageCount = 0;
+
+  do {
+    let endpoint = `/accounts/${accountUid}/transactions`;
+    const params = new URLSearchParams();
+    if (dateFrom) params.append("date_from", dateFrom);
+    if (dateTo) params.append("date_to", dateTo);
+    if (continuationKey) params.append("continuation_key", continuationKey);
+    if (params.toString()) endpoint += `?${params.toString()}`;
+
+    const result = (await ebRequest(endpoint)) as Record<string, unknown>;
+    pageCount++;
+    console.log(`[EnableBanking] Transactions page ${pageCount}, response keys: ${Object.keys(result)}`);
+    
+    // Enable Banking returns { booked: [...], pending: [...] } format
+    if (Array.isArray(result.booked)) {
+      console.log(`[EnableBanking] Page ${pageCount}: ${result.booked.length} booked transactions`);
+      allTransactions = allTransactions.concat(result.booked);
+    }
+    if (Array.isArray(result.pending)) {
+      console.log(`[EnableBanking] Page ${pageCount}: ${result.pending.length} pending transactions`);
+      allTransactions = allTransactions.concat(result.pending);
+    }
+    if (Array.isArray(result.transactions)) {
+      console.log(`[EnableBanking] Page ${pageCount}: ${result.transactions.length} transactions (flat)`);
+      allTransactions = allTransactions.concat(result.transactions);
+    }
+    if (Array.isArray(result)) {
+      allTransactions = allTransactions.concat(result);
+    }
+
+    // Check for continuation key for next page
+    continuationKey = (result.continuation_key as string) || null;
+    if (continuationKey) {
+      console.log(`[EnableBanking] Continuation key found, fetching next page...`);
+    }
+  } while (continuationKey && pageCount < 50); // Safety limit: max 50 pages
   
-  console.log(`[EnableBanking] Total transactions to sync: ${allTransactions.length}`);
+  console.log(`[EnableBanking] Total transactions fetched across ${pageCount} page(s): ${allTransactions.length}`);
   if (allTransactions.length > 0) {
     console.log(`[EnableBanking] Sample transaction: ${JSON.stringify(allTransactions[0]).substring(0, 500)}`);
   }
@@ -394,7 +406,7 @@ async function syncToDatabase(
     // Sync transactions
     try {
       const endDate = new Date().toISOString().split("T")[0];
-      const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+      const startDate = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000)
         .toISOString()
         .split("T")[0];
 
@@ -534,7 +546,7 @@ async function syncSingleAccount(
   let transactionsSynced = 0;
   try {
     const endDate = new Date().toISOString().split("T")[0];
-    const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000)
+    const startDate = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000)
       .toISOString()
       .split("T")[0];
 
