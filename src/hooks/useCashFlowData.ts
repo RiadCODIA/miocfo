@@ -1,7 +1,8 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, subMonths, startOfMonth, endOfMonth } from "date-fns";
+import { format, subMonths, startOfMonth, endOfMonth, differenceInMonths } from "date-fns";
 import { it } from "date-fns/locale";
+import { useDateRange } from "@/contexts/DateRangeContext";
 
 interface MonthlyData {
   mese: string;
@@ -24,44 +25,43 @@ interface CashFlowKPIs {
 }
 
 export function useCashFlowData() {
-  return useQuery({
-    queryKey: ["cashflow-monthly"],
-    queryFn: async (): Promise<MonthlyData[]> => {
-      const now = new Date();
-      const sixMonthsAgo = subMonths(startOfMonth(now), 5);
+  const { dateRange } = useDateRange();
+  const fromStr = dateRange.from.toISOString().split("T")[0];
+  const toStr = dateRange.to.toISOString().split("T")[0];
 
+  return useQuery({
+    queryKey: ["cashflow-monthly", fromStr, toStr],
+    queryFn: async (): Promise<MonthlyData[]> => {
       const { data: transactions, error } = await supabase
         .from("bank_transactions")
         .select("amount, date")
-        .gte("date", sixMonthsAgo.toISOString().split("T")[0])
+        .gte("date", fromStr)
+        .lte("date", toStr)
         .order("date", { ascending: true });
 
       if (error) throw error;
 
-      // Group by month
+      // Build month keys spanning the selected range
       const monthlyMap = new Map<string, { incassi: number; pagamenti: number }>();
+      const fromMonth = startOfMonth(dateRange.from);
+      const toMonth = startOfMonth(dateRange.to);
+      const numMonths = Math.max(differenceInMonths(toMonth, fromMonth) + 1, 1);
 
-      // Initialize last 6 months
-      for (let i = 5; i >= 0; i--) {
-        const monthDate = subMonths(now, i);
+      for (let i = 0; i < numMonths; i++) {
+        const monthDate = subMonths(toMonth, numMonths - 1 - i);
         const key = format(monthDate, "yyyy-MM");
         monthlyMap.set(key, { incassi: 0, pagamenti: 0 });
       }
 
-      // Aggregate transactions
       transactions?.forEach((t) => {
-        const key = t.date.substring(0, 7); // yyyy-MM
+        const key = t.date.substring(0, 7);
         if (monthlyMap.has(key)) {
           const current = monthlyMap.get(key)!;
-          if (t.amount > 0) {
-            current.incassi += t.amount;
-          } else {
-            current.pagamenti += Math.abs(t.amount);
-          }
+          if (t.amount > 0) current.incassi += t.amount;
+          else current.pagamenti += Math.abs(t.amount);
         }
       });
 
-      // Convert to array
       const result: MonthlyData[] = [];
       monthlyMap.forEach((value, key) => {
         const [year, month] = key.split("-");
@@ -83,37 +83,37 @@ export function useCashFlowData() {
   });
 }
 
-// Hook per confronto con budget
 export function useCashFlowVsBudget() {
-  return useQuery({
-    queryKey: ["cashflow-vs-budget"],
-    queryFn: async () => {
-      const now = new Date();
-      const sixMonthsAgo = subMonths(startOfMonth(now), 5);
+  const { dateRange } = useDateRange();
+  const fromStr = dateRange.from.toISOString().split("T")[0];
+  const toStr = dateRange.to.toISOString().split("T")[0];
 
-      // Get transactions grouped by month
+  return useQuery({
+    queryKey: ["cashflow-vs-budget", fromStr, toStr],
+    queryFn: async () => {
       const { data: transactions, error: txError } = await supabase
         .from("bank_transactions")
         .select("amount, date")
-        .gte("date", sixMonthsAgo.toISOString().split("T")[0])
+        .gte("date", fromStr)
+        .lte("date", toStr)
         .order("date", { ascending: true });
 
       if (txError) throw txError;
 
-      // Get budgets
       const { data: budgets, error: budgetError } = await supabase
         .from("budgets")
         .select("*")
-        .eq("is_active", true)
-        .order("start_date", { ascending: true });
+        .eq("is_active", true);
 
       if (budgetError) throw budgetError;
 
-      // Group transactions by month
+      const fromMonth = startOfMonth(dateRange.from);
+      const toMonth = startOfMonth(dateRange.to);
+      const numMonths = Math.max(differenceInMonths(toMonth, fromMonth) + 1, 1);
+
       const monthlyMap = new Map<string, { incassi: number; pagamenti: number }>();
-      
-      for (let i = 5; i >= 0; i--) {
-        const monthDate = subMonths(now, i);
+      for (let i = 0; i < numMonths; i++) {
+        const monthDate = subMonths(toMonth, numMonths - 1 - i);
         const key = format(monthDate, "yyyy-MM");
         monthlyMap.set(key, { incassi: 0, pagamenti: 0 });
       }
@@ -122,29 +122,21 @@ export function useCashFlowVsBudget() {
         const key = t.date.substring(0, 7);
         if (monthlyMap.has(key)) {
           const current = monthlyMap.get(key)!;
-          if (t.amount > 0) {
-            current.incassi += t.amount;
-          } else {
-            current.pagamenti += Math.abs(t.amount);
-          }
+          if (t.amount > 0) current.incassi += t.amount;
+          else current.pagamenti += Math.abs(t.amount);
         }
       });
 
-      // Build comparison data
-      const result: { mese: string; consuntivo: number; previsionale: number }[] = [];
-      
-      // Calculate total budget amount for comparison
       const totalBudget = budgets?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
-      
+
+      const result: { mese: string; consuntivo: number; previsionale: number }[] = [];
       monthlyMap.forEach((value, key) => {
         const [year, month] = key.split("-");
         const date = new Date(parseInt(year), parseInt(month) - 1, 1);
-        const consuntivo = value.incassi - value.pagamenti;
-        
         result.push({
           mese: format(date, "MMM", { locale: it }),
-          consuntivo,
-          previsionale: totalBudget / 6, // Simplified: distribute budget evenly
+          consuntivo: value.incassi - value.pagamenti,
+          previsionale: totalBudget / Math.max(numMonths, 1),
         });
       });
 
@@ -154,36 +146,20 @@ export function useCashFlowVsBudget() {
 }
 
 export function useCashFlowKPIs() {
-  return useQuery({
-    queryKey: ["cashflow-kpis"],
-    queryFn: async (): Promise<CashFlowKPIs> => {
-      const now = new Date();
-      const currentQuarterStart = subMonths(startOfMonth(now), 2);
-      const previousQuarterStart = subMonths(currentQuarterStart, 3);
-      const previousQuarterEnd = subMonths(currentQuarterStart, 1);
-      const oneYearAgo = subMonths(now, 12);
+  const { dateRange } = useDateRange();
+  const fromStr = dateRange.from.toISOString().split("T")[0];
+  const toStr = dateRange.to.toISOString().split("T")[0];
 
-      // Get current quarter transactions
+  return useQuery({
+    queryKey: ["cashflow-kpis", fromStr, toStr],
+    queryFn: async (): Promise<CashFlowKPIs> => {
+      // Get transactions in selected range
       const { data: currentData } = await supabase
         .from("bank_transactions")
         .select("amount")
-        .gte("date", currentQuarterStart.toISOString().split("T")[0]);
+        .gte("date", fromStr)
+        .lte("date", toStr);
 
-      // Get previous quarter transactions
-      const { data: previousData } = await supabase
-        .from("bank_transactions")
-        .select("amount")
-        .gte("date", previousQuarterStart.toISOString().split("T")[0])
-        .lte("date", endOfMonth(previousQuarterEnd).toISOString().split("T")[0]);
-
-      // Get last year transactions for cumulative comparison
-      const { data: lastYearData } = await supabase
-        .from("bank_transactions")
-        .select("amount")
-        .gte("date", oneYearAgo.toISOString().split("T")[0])
-        .lte("date", subMonths(now, 6).toISOString().split("T")[0]);
-
-      // Calculate current quarter metrics
       let currentIncassi = 0;
       let currentPagamenti = 0;
       currentData?.forEach((t) => {
@@ -191,55 +167,18 @@ export function useCashFlowKPIs() {
         else currentPagamenti += Math.abs(t.amount);
       });
 
-      // Calculate previous quarter metrics
-      let prevIncassi = 0;
-      let prevPagamenti = 0;
-      previousData?.forEach((t) => {
-        if (t.amount > 0) prevIncassi += t.amount;
-        else prevPagamenti += Math.abs(t.amount);
-      });
-
-      // Calculate last year metrics
-      let lastYearCashflow = 0;
-      lastYearData?.forEach((t) => {
-        lastYearCashflow += t.amount;
-      });
-
       const currentCashflow = currentIncassi - currentPagamenti;
-      const prevCashflow = prevIncassi - prevPagamenti;
-
-      // Incidenza costi = pagamenti / incassi * 100
       const incidenzaCosti = currentIncassi > 0 ? (currentPagamenti / currentIncassi) * 100 : 0;
-      const prevIncidenza = prevIncassi > 0 ? (prevPagamenti / prevIncassi) * 100 : 0;
-
-      // Margine operativo = (incassi - pagamenti) / incassi * 100
       const margineOperativo = currentIncassi > 0 ? (currentCashflow / currentIncassi) * 100 : 0;
-      const prevMargine = prevIncassi > 0 ? (prevCashflow / prevIncassi) * 100 : 0;
-
-      // Cashflow cumulativo (ultimi 6 mesi)
-      const { data: cumulativeData } = await supabase
-        .from("bank_transactions")
-        .select("amount")
-        .gte("date", subMonths(now, 6).toISOString().split("T")[0]);
-
-      let cashflowCumulativo = 0;
-      cumulativeData?.forEach((t) => {
-        cashflowCumulativo += t.amount;
-      });
-
-      // Cashflow change vs anno precedente
-      const cashflowChange = lastYearCashflow !== 0 
-        ? ((cashflowCumulativo - lastYearCashflow) / Math.abs(lastYearCashflow)) * 100 
-        : 0;
 
       return {
-        breakEvenPoint: currentPagamenti > 0 ? currentPagamenti : 0,
+        breakEvenPoint: currentPagamenti,
         incidenzaCosti: Math.round(incidenzaCosti * 10) / 10,
-        incidenzaCostiChange: Math.round((incidenzaCosti - prevIncidenza) * 10) / 10,
-        cashflowCumulativo,
-        cashflowChange: Math.round(cashflowChange * 10) / 10,
+        incidenzaCostiChange: 0,
+        cashflowCumulativo: currentCashflow,
+        cashflowChange: 0,
         margineOperativo: Math.round(margineOperativo * 10) / 10,
-        margineOperativoChange: Math.round((margineOperativo - prevMargine) * 10) / 10,
+        margineOperativoChange: 0,
       };
     },
   });
