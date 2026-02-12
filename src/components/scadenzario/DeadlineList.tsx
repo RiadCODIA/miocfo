@@ -1,4 +1,4 @@
-import { ArrowDownLeft, ArrowUpRight, Check, Pencil, Trash2, Loader2, CheckCircle } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Check, Pencil, Trash2, Loader2, CheckCircle, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -119,6 +119,7 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
         {deadlines.map((deadline, index) => {
           const dueDate = new Date(deadline.dueDate);
           const isCompleted = deadline.status === "completed";
+          const isFromInvoice = deadline.source === "invoice";
 
           return (
             <div
@@ -150,7 +151,7 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
                   "text-sm font-medium text-foreground truncate",
                   isCompleted && "line-through"
                 )}>
-                  {deadline.description}
+                  {deadline.title || deadline.description}
                 </p>
                 <div className="flex items-center gap-2 mt-1">
                   {deadline.type === "incasso" ? (
@@ -159,6 +160,12 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
                     <ArrowUpRight className="h-3 w-3 text-destructive" />
                   )}
                   <span className="text-xs text-muted-foreground capitalize">{deadline.type}</span>
+                  {isFromInvoice && (
+                    <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 border-primary/40 text-primary gap-0.5">
+                      <FileText className="h-2.5 w-2.5" />
+                      Fattura
+                    </Badge>
+                  )}
                 </div>
               </div>
 
@@ -173,7 +180,7 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
               </div>
 
               <div className="flex items-center gap-1">
-                {!isCompleted && (
+                {!isCompleted && !isFromInvoice && (
                   <Button
                     variant="ghost"
                     size="icon"
@@ -189,25 +196,29 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
                     )}
                   </Button>
                 )}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8"
-                  onClick={() => onEdit(deadline)}
-                  title="Modifica"
-                >
-                  <Pencil className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
-                  onClick={() => setDeleteTarget(deadline)}
-                  disabled={deleteMutation.isPending}
-                  title="Elimina"
-                >
-                  <Trash2 className="h-4 w-4" />
-                </Button>
+                {!isFromInvoice && (
+                  <>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8"
+                      onClick={() => onEdit(deadline)}
+                      title="Modifica"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                      onClick={() => setDeleteTarget(deadline)}
+                      disabled={deleteMutation.isPending}
+                      title="Elimina"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
               </div>
             </div>
           );
