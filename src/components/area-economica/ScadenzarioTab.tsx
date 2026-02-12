@@ -5,7 +5,12 @@ import { it } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Brain, Loader2 } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { AIReportSection, type AIReport } from "./AIReportSection";
 
 const fmt = (v: number) => `€${v.toLocaleString("it-IT", { minimumFractionDigits: 2 })}`;
 
@@ -13,9 +18,43 @@ export function ScadenzarioTab() {
   const [filters, setFilters] = useState<DeadlineFilters>({ status: "all", type: "all" });
   const { data: deadlines, isLoading } = useDeadlines(filters);
   const { data: summary } = useDeadlinesSummary();
+  const [aiReport, setAiReport] = useState<AIReport | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const clienti = deadlines?.filter((d) => d.type === "incasso") || [];
   const fornitori = deadlines?.filter((d) => d.type === "pagamento") || [];
+
+  const runAIAnalysis = async () => {
+    setAiLoading(true);
+    try {
+      const aiData = {
+        summary: {
+          incassiTotali: summary?.incassiTotali || 0,
+          pagamentiTotali: summary?.pagamentiTotali || 0,
+          saldoNetto: summary?.saldoNetto || 0,
+          scaduteCount: summary?.overdueCount || 0,
+        },
+        clienti: clienti.map((d) => ({ title: d.title, amount: d.amount, dueDate: d.dueDate, status: d.status })),
+        fornitori: fornitori.map((d) => ({ title: d.title, amount: d.amount, dueDate: d.dueDate, status: d.status })),
+      };
+
+      const { data, error } = await supabase.functions.invoke("analyze-conto-economico", {
+        body: { type: "scadenzario", data: aiData },
+      });
+
+      if (error) throw error;
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+      setAiReport(data);
+    } catch (e) {
+      console.error(e);
+      toast.error("Errore durante l'analisi AI");
+    } finally {
+      setAiLoading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -43,26 +82,35 @@ export function ScadenzarioTab() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex gap-3">
-        <Select value={filters.type} onValueChange={(v) => setFilters((f) => ({ ...f, type: v as DeadlineFilters["type"] }))}>
-          <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Tipo" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tutti</SelectItem>
-            <SelectItem value="incasso">Clienti (Incassi)</SelectItem>
-            <SelectItem value="pagamento">Fornitori (Pagamenti)</SelectItem>
-          </SelectContent>
-        </Select>
-        <Select value={filters.status} onValueChange={(v) => setFilters((f) => ({ ...f, status: v as DeadlineFilters["status"] }))}>
-          <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Stato" /></SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">Tutti</SelectItem>
-            <SelectItem value="pending">In attesa</SelectItem>
-            <SelectItem value="overdue">Scadute</SelectItem>
-            <SelectItem value="completed">Completate</SelectItem>
-          </SelectContent>
-        </Select>
+      {/* Filters + AI button */}
+      <div className="flex items-center justify-between">
+        <div className="flex gap-3">
+          <Select value={filters.type} onValueChange={(v) => setFilters((f) => ({ ...f, type: v as DeadlineFilters["type"] }))}>
+            <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Tipo" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tutti</SelectItem>
+              <SelectItem value="incasso">Clienti (Incassi)</SelectItem>
+              <SelectItem value="pagamento">Fornitori (Pagamenti)</SelectItem>
+            </SelectContent>
+          </Select>
+          <Select value={filters.status} onValueChange={(v) => setFilters((f) => ({ ...f, status: v as DeadlineFilters["status"] }))}>
+            <SelectTrigger className="w-40 h-8 text-sm"><SelectValue placeholder="Stato" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Tutti</SelectItem>
+              <SelectItem value="pending">In attesa</SelectItem>
+              <SelectItem value="overdue">Scadute</SelectItem>
+              <SelectItem value="completed">Completate</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <Button variant="outline" size="sm" className="gap-2" onClick={runAIAnalysis} disabled={aiLoading}>
+          {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+          Analisi AI Scadenzario
+        </Button>
       </div>
+
+      {/* AI Report */}
+      {aiReport && <AIReportSection report={aiReport} />}
 
       {isLoading ? (
         <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-14 w-full" />)}</div>

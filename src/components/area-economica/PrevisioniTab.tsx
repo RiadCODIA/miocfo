@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Save, TrendingUp, TrendingDown } from "lucide-react";
+import { Plus, Save, TrendingUp, TrendingDown, Brain, Loader2 } from "lucide-react";
 import { CreateBudgetModal } from "@/components/budget/CreateBudgetModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 import { cn } from "@/lib/utils";
 import { useBudgets, useBudgetComparison, useBudgetVarianceSummary, useUpdateBudget } from "@/hooks/useBudgets";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { AIReportSection, type AIReport } from "./AIReportSection";
 
 const formatCurrency = (value: number) => `€${value.toLocaleString("it-IT")}`;
 
@@ -19,6 +21,8 @@ export function PrevisioniTab() {
   const updateBudget = useUpdateBudget();
   const [editedValues, setEditedValues] = useState<Record<string, { income?: number }>>({});
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [aiReport, setAiReport] = useState<AIReport | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
 
   const handleInputChange = (budgetId: string, value: string) => {
     const numValue = parseFloat(value.replace(/[€.,\s]/g, "")) || 0;
@@ -39,11 +43,42 @@ export function PrevisioniTab() {
     }
   };
 
+  const runAIAnalysis = async () => {
+    setAiLoading(true);
+    try {
+      const aiData = {
+        budgets: budgets?.map((b) => ({ name: b.name, amount: b.amount, startDate: b.startDate, endDate: b.endDate })) || [],
+        comparison: comparison || [],
+        variance: variance || {},
+      };
+
+      const { data, error } = await supabase.functions.invoke("analyze-conto-economico", {
+        body: { type: "previsioni", data: aiData },
+      });
+
+      if (error) throw error;
+      if (data?.error) {
+        toast.error(data.error);
+        return;
+      }
+      setAiReport(data);
+    } catch (e) {
+      console.error(e);
+      toast.error("Errore durante l'analisi AI");
+    } finally {
+      setAiLoading(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">Pianificazione finanziaria futura</p>
         <div className="flex gap-2">
+          <Button variant="outline" size="sm" className="gap-2" onClick={runAIAnalysis} disabled={aiLoading}>
+            {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+            Analisi AI Previsioni
+          </Button>
           <Button variant="outline" size="sm" className="gap-2" onClick={() => setCreateModalOpen(true)}>
             <Plus className="h-4 w-4" /> Inserisci Budget
           </Button>
@@ -52,6 +87,9 @@ export function PrevisioniTab() {
           </Button>
         </div>
       </div>
+
+      {/* AI Report */}
+      {aiReport && <AIReportSection report={aiReport} />}
 
       {/* Budget table */}
       <div className="glass rounded-xl overflow-hidden">
