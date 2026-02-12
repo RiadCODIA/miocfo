@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
 import {
   FileText,
   CheckCircle2,
@@ -10,11 +11,14 @@ import {
   Sparkles,
   Loader2,
   Users,
+  ShieldCheck,
+  Download,
 } from "lucide-react";
 import { InvoiceUploadZone, UploadedInvoice } from "@/components/fatture/InvoiceUploadZone";
 import { InvoiceTable, Invoice } from "@/components/fatture/InvoiceTable";
 import { InvoiceMatchingModal } from "@/components/fatture/InvoiceMatchingModal";
 import { InvoicePreview } from "@/components/fatture/InvoicePreview";
+import { CassettoFiscaleModal } from "@/components/fatture/CassettoFiscaleModal";
 import { useToast } from "@/hooks/use-toast";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -70,6 +74,9 @@ export default function Fatture() {
   const [isAutoMatching, setIsAutoMatching] = useState(false);
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [isCassettoModalOpen, setIsCassettoModalOpen] = useState(false);
+  const [connectedFiscalId, setConnectedFiscalId] = useState<string | null>(null);
+  const [isFetchingCassetto, setIsFetchingCassetto] = useState(false);
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -395,6 +402,62 @@ export default function Fatture() {
     .sort((a, b) => b[1].total - a[1].total)
     .slice(0, 5);
 
+  const handleFetchFromCassetto = async () => {
+    if (!connectedFiscalId) return;
+    setIsFetchingCassetto(true);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+
+      // First trigger download
+      await fetch(
+        "https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/acube-cassetto-fiscale",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ action: "download-now", fiscal_id: connectedFiscalId }),
+        }
+      );
+
+      // Then fetch invoices into DB
+      const response = await fetch(
+        "https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/acube-cassetto-fiscale",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            ...(session?.access_token ? { Authorization: `Bearer ${session.access_token}` } : {}),
+          },
+          body: JSON.stringify({ action: "fetch-invoices", fiscal_id: connectedFiscalId }),
+        }
+      );
+
+      if (!response.ok) {
+        const err = await response.json();
+        throw new Error(err.error || "Errore durante il download");
+      }
+
+      const result = await response.json();
+      queryClient.invalidateQueries({ queryKey: ["invoices"] });
+
+      toast({
+        title: "Fatture importate",
+        description: `${result.imported || 0} nuove fatture importate dal Cassetto Fiscale.`,
+      });
+    } catch (error) {
+      toast({
+        title: "Errore",
+        description: error instanceof Error ? error.message : "Errore sconosciuto",
+        variant: "destructive",
+      });
+    } finally {
+      setIsFetchingCassetto(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -405,14 +468,35 @@ export default function Fatture() {
             Carica e gestisci le fatture ricevute
           </p>
         </div>
-        <Button onClick={handleAutoMatch} disabled={isAutoMatching || pendingCount === 0}>
-          {isAutoMatching ? (
-            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+        <div className="flex flex-wrap gap-2">
+          {connectedFiscalId ? (
+            <Button
+              variant="outline"
+              onClick={handleFetchFromCassetto}
+              disabled={isFetchingCassetto}
+            >
+              {isFetchingCassetto ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Download className="h-4 w-4 mr-2" />
+              )}
+              Scarica dal Cassetto
+            </Button>
           ) : (
-            <Sparkles className="h-4 w-4 mr-2" />
+            <Button variant="outline" onClick={() => setIsCassettoModalOpen(true)}>
+              <ShieldCheck className="h-4 w-4 mr-2" />
+              Collega Cassetto Fiscale
+            </Button>
           )}
-          Abbina automaticamente
-        </Button>
+          <Button onClick={handleAutoMatch} disabled={isAutoMatching || pendingCount === 0}>
+            {isAutoMatching ? (
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4 mr-2" />
+            )}
+            Abbina automaticamente
+          </Button>
+        </div>
       </div>
 
       {/* Stats */}
@@ -546,6 +630,12 @@ export default function Fatture() {
         open={isMatchingOpen}
         onOpenChange={setIsMatchingOpen}
         onMatch={handleConfirmMatch}
+      />
+
+      <CassettoFiscaleModal
+        open={isCassettoModalOpen}
+        onOpenChange={setIsCassettoModalOpen}
+        onConnected={(fid) => setConnectedFiscalId(fid)}
       />
     </div>
   );
