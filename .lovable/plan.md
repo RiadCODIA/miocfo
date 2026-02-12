@@ -1,36 +1,50 @@
 
-## Abilitare AI nella sezione Fatture
+# Allineamento Sidebar al Design di Riferimento
 
-La funzione edge `process-invoice` esiste gia con la logica AI (Lovable AI Gateway + Gemini), ma ha due problemi critici che le impediscono di funzionare:
+## Cosa manca nella sidebar attuale
 
-### Problema 1: URL Supabase sbagliato nel frontend
+Confrontando con lo screenshot di riferimento, vanno aggiunte 3 voci mancanti e riorganizzata la struttura.
 
-Il file `Fatture.tsx` chiama un URL hardcoded errato:
-- Attuale: `https://ublsnradzhfpqhunfqbn.supabase.co`
-- Corretto: `https://yzhonmuhywdiqaxxbnsj.supabase.co`
+## Modifiche previste
 
-Questo significa che ogni upload di fattura fallisce perche punta a un progetto Supabase diverso.
+### 1. Nuove pagine da creare
+- **Collegamenti** (`/collegamenti`) - Pagina per gestire integrazioni e collegamenti esterni (es. banche, software contabili)
+- **Comunicazioni** (`/comunicazioni`) - Pagina per messaggi e comunicazioni interne
+- **AI Assistant** (`/ai-assistant`) - Pagina con chatbot AI per assistenza finanziaria
 
-### Problema 2: Funzione non registrata in config.toml
+### 2. Aggiornamento Sidebar
+La struttura della navigazione verra riorganizzata cosi:
 
-`process-invoice` non e presente in `supabase/config.toml`, quindi potrebbe non essere deployata o avere JWT verification attiva (che blocca le chiamate senza token).
+**NAVIGAZIONE**
+- Dashboard
+- Collegamenti (NUOVA)
+- Conti & Transazioni
 
-### Cosa faro
+**GESTIONE BUSINESS** (collapsible, con sotto-gruppi)
+- Area finanziaria: Fatture, Flussi di Cassa, Scadenzario
+- Area economica: Budget & Previsioni, Movimenti
 
-**1. Aggiornare `supabase/config.toml`**
-- Aggiungere `[functions.process-invoice]` con `verify_jwt = false`
+**ANALYTICS & AI**
+- Dati & Statistiche (rinominata da "KPI & Report")
+- Notifiche
+- Comunicazioni (NUOVA)
+- AI Assistant (NUOVA, con badge "New")
 
-**2. Correggere gli URL in `src/pages/Fatture.tsx`**
-- Sostituire l'URL hardcoded con `import.meta.env.VITE_SUPABASE_URL` (linee 113-114 e 301-302)
-- Questo garantisce che punti sempre al progetto corretto
+### 3. File coinvolti
 
-**3. Deployare la edge function**
-- Deploy di `process-invoice` per assicurarsi che sia attiva
+| File | Azione |
+|------|--------|
+| `src/pages/Collegamenti.tsx` | Creare - pagina integrazioni |
+| `src/pages/Comunicazioni.tsx` | Creare - pagina comunicazioni |
+| `src/pages/AIAssistant.tsx` | Creare - pagina AI chatbot |
+| `src/components/layout/Sidebar.tsx` | Modificare - aggiungere voci e riorganizzare gruppi |
+| `src/App.tsx` | Modificare - aggiungere le 3 nuove route protette |
 
-### Risultato
+### 4. Dettagli tecnici
 
-Dopo queste modifiche:
-- Upload di PDF/immagini fatture funzionera con estrazione AI (Gemini 2.5 Flash)
-- Upload CSV funzionera con parsing automatico
-- Il riprocessamento fatture funzionera
-- I dati estratti (numero fattura, fornitore, importo, data) verranno salvati nel database
+- Le nuove pagine avranno inizialmente un layout placeholder con header, descrizione e contenuto base funzionante
+- La pagina **Collegamenti** mostrera le integrazioni disponibili (banche, software) con stato connesso/non connesso
+- La pagina **Comunicazioni** avra una lista di messaggi/notifiche con filtri
+- La pagina **AI Assistant** avra un'interfaccia chat per interagire con l'AI
+- Il badge "New" sull'AI Assistant sara implementato con lo stesso pattern del badge notifiche esistente
+- La sidebar supportera sotto-gruppi dentro "GESTIONE BUSINESS" per separare area finanziaria e area economica
