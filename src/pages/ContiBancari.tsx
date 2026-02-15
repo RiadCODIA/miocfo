@@ -53,8 +53,19 @@ export default function ContiBancari() {
     refetch();
   };
 
-  const eurAccounts = accounts.filter((acc) => (acc.currency || "EUR").toUpperCase() === "EUR");
-  const totalBalance = eurAccounts.reduce((sum, acc) => sum + (acc.balance || 0), 0);
+  // Approximate exchange rates to EUR (updated periodically)
+  const toEurRate: Record<string, number> = {
+    EUR: 1, USD: 0.92, GBP: 1.17, CHF: 1.06, JPY: 0.0061,
+    CAD: 0.68, AUD: 0.60, SEK: 0.089, NOK: 0.087, DKK: 0.13,
+    PLN: 0.23, CZK: 0.040, HUF: 0.0026, RON: 0.20, BGN: 0.51,
+    HRK: 0.13, TRY: 0.027, CNY: 0.13, INR: 0.011, BRL: 0.16,
+  };
+
+  const totalBalance = accounts.reduce((sum, acc) => {
+    const currency = (acc.currency || "EUR").toUpperCase();
+    const rate = toEurRate[currency] ?? 1;
+    return sum + (acc.balance || 0) * rate;
+  }, 0);
 
   const mapAccountToCard = (account: BankAccount) => {
     const source = account.provider as "enable_banking" | "powens" | "manual" | "acube" | undefined;
