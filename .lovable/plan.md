@@ -1,45 +1,72 @@
 
-# Sidebar Reorganization: Area finanziaria and Area economica
+# Composizione della Liquidita - Analisi Origini dei Flussi
 
-## Current Structure
+## Obiettivo
+Aggiungere alla pagina "Flussi di Cassa" una sezione che analizza la **composizione degli incassi**, classificando automaticamente le entrate in categorie significative per far capire al cliente da dove proviene la liquidita:
+- Incassi da fatture / pagamenti clienti
+- Prestiti e finanziamenti
+- Trasferimenti e versamenti propri (top-up, bonifici interni)
+- Versamenti in contanti
+- Rimborsi
+- Altre entrate non categorizzabili
+
+Il risultato sara mostrato sia graficamente (grafico a torta/donut) che numericamente (lista con percentuali e importi).
+
+## Come funziona la classificazione
+
+L'algoritmo analizzera il campo `description` di ogni transazione positiva (incasso) e classifichera in base a pattern testuali:
+
 ```text
-NAVIGAZIONE
-  - Dashboard
-  - Collegamenti
-  - Conti & Transazioni    <-- will move
-
-GESTIONE BUSINESS
-  Area finanziaria
-    - Fatture              <-- will move to Area economica
-    - Flussi di Cassa      (stays)
-    - Scadenzario          <-- will move to Area economica
-  Area economica
-    - Conto Economico      (stays)
-    - Budget & Previsioni  (stays)
-    - Movimenti            <-- will move to Area finanziaria
+Categoria                  | Pattern riconosciuti
+---------------------------|--------------------------------------------
+Incassi Fatture            | "fattura", "pagamento", "invoice", "payment from" (quando non e rimborso)
+Prestiti/Finanziamenti     | "prestito", "finanziamento", "loan", "mutuo"
+Trasferimenti/Versamenti   | "top-up", "trasferimento", "bonifico", "transfer"
+Versamenti Contanti        | "cash", "contanti", "deposito"
+Rimborsi                   | "rimborso", "refund", "reso"
+Altro                      | Tutto cio che non rientra nelle categorie sopra
 ```
 
-## New Structure
-```text
-NAVIGAZIONE
-  - Dashboard
-  - Collegamenti
+## Modifiche tecniche
 
-GESTIONE BUSINESS
-  Area finanziaria
-    - Flussi di Cassa
-    - Movimenti
-    - Conti & Transazioni
-  Area economica
-    - Conto Economico
-    - Budget & Previsioni
-    - Fatture
-    - Scadenzario
+### 1. Nuovo hook: `useCashFlowComposition` (in `useCashFlowData.ts`)
+- Query delle transazioni positive (`amount > 0`) nel periodo selezionato
+- Classificazione di ogni transazione in base alla `description`
+- Calcolo totale per categoria, percentuale, e importo
+- Restituisce un array di oggetti `{ name, value, percentage, color }`
+
+### 2. Nuovo componente: `CashFlowCompositionChart.tsx`
+- Grafico a torta (PieChart di Recharts) che mostra la distribuzione degli incassi
+- Legenda con ogni categoria, importo e percentuale
+- Stile coerente con i chart esistenti (glass card, stessi colori del tema)
+
+### 3. Aggiornamento pagina `FlussiCassa.tsx`
+- Aggiungere la nuova sezione sotto i grafici esistenti (tra i chart e la tabella mensile)
+- Layout: grafico donut a sinistra, dettaglio numerico (lista categorie con barra di progresso, importo e %) a destra
+
+### 4. Aggiornamento realtime (`useRealtimeSync.ts`)
+- Aggiungere il query key `cashflow-composition` alle invalidazioni della tabella `bank_transactions`
+
+## Layout visuale
+
+```text
++----------------------------------+----------------------------------+
+|                                  |                                  |
+|      [Grafico Donut]             |   Incassi Fatture    €12.500 45% |
+|                                  |   ██████████░░░░░░               |
+|        Composizione              |   Rimborsi           €8.200  30% |
+|        Incassi                   |   ██████████░░░░░░               |
+|                                  |   Prestiti           €4.000  15% |
+|        Totale: €27.400           |   ██████░░░░░░░░░░               |
+|                                  |   Trasferimenti      €1.700   6% |
+|                                  |   ███░░░░░░░░░░░░░               |
+|                                  |   Altro              €1.000   4% |
+|                                  |   ██░░░░░░░░░░░░░░░              |
++----------------------------------+----------------------------------+
 ```
 
-## Changes (single file)
-
-**`src/components/layout/Sidebar.tsx`**:
-1. Remove "Conti & Transazioni" from the NAVIGAZIONE group (line 68)
-2. Update Area finanziaria items to: Flussi di Cassa, Movimenti (moved from Area economica), Conti & Transazioni (moved from NAVIGAZIONE)
-3. Update Area economica items to: Conto Economico, Budget & Previsioni, Fatture (moved from Area finanziaria), Scadenzario (moved from Area finanziaria)
+## File coinvolti
+1. **`src/hooks/useCashFlowData.ts`** - Aggiunta hook `useCashFlowComposition`
+2. **`src/components/flussi-cassa/CashFlowCompositionChart.tsx`** - Nuovo componente (grafico + dettaglio)
+3. **`src/pages/FlussiCassa.tsx`** - Integrazione della nuova sezione
+4. **`src/hooks/useRealtimeSync.ts`** - Aggiunta query key per invalidazione realtime
