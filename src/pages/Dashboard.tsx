@@ -48,7 +48,7 @@ export default function Dashboard() {
       {/* 3 KPI Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <KPICard
-          title="Entrate"
+          title="Entrate Totali"
           value={isLoading ? "..." : formatCurrency(kpis?.periodIncome || 0)}
           subtitle={isLoading ? "..." : `${incomeChange >= 0 ? "+" : ""}${incomeChange.toFixed(1)}% vs mese prec.`}
           icon={<ArrowDownLeft className="h-5 w-5" />}
