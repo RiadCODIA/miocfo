@@ -1,4 +1,5 @@
 import { useState, useCallback } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 
@@ -320,4 +321,33 @@ export function useBankingIntegration() {
     fetchTransactions,
     removeAccount,
   };
+}
+
+/**
+ * React Query-based hook for bank accounts.
+ * Automatically benefits from realtime cache invalidation.
+ */
+export function useBankAccountsQuery() {
+  return useQuery({
+    queryKey: ["bank-accounts"],
+    queryFn: async (): Promise<BankAccount[]> => {
+      const { data, error } = await supabase
+        .from("bank_accounts")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      return ((data || []) as any[]).map((acc) => ({
+        ...acc,
+        current_balance: acc.balance,
+        available_balance: acc.balance,
+        status: (acc.is_connected !== false ? "active" : "disconnected") as
+          | "active"
+          | "pending"
+          | "error"
+          | "disconnected",
+      })) as BankAccount[];
+    },
+  });
 }
