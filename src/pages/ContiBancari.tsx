@@ -1,10 +1,12 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Plus, Landmark, AlertCircle, RefreshCw, Upload } from "lucide-react";
+import { Plus, Landmark, AlertCircle, RefreshCw, Upload, ArrowDownUp } from "lucide-react";
 import { BankAccountCard } from "@/components/conti-bancari/BankAccountCard";
 import { ConnectBankModal } from "@/components/conti-bancari/ConnectBankModal";
 import { UploadStatementModal } from "@/components/conti-bancari/UploadStatementModal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { supabase } from "@/integrations/supabase/client";
 import { useBankingIntegration, BankAccount, useBankAccountsQuery } from "@/hooks/useBankingIntegration";
 
 export default function ContiBancari() {
@@ -12,6 +14,17 @@ export default function ContiBancari() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const { syncAccount, removeAccount } = useBankingIntegration();
   const { data: accounts = [], isLoading, refetch } = useBankAccountsQuery();
+
+  const { data: txCount = 0 } = useQuery({
+    queryKey: ["bank-transactions-count"],
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from("bank_transactions")
+        .select("*", { count: "exact", head: true });
+      if (error) throw error;
+      return count ?? 0;
+    },
+  });
 
   const handleSync = async (id: string) => {
     await syncAccount(id);
@@ -108,13 +121,11 @@ export default function ContiBancari() {
         <div className="bg-card rounded-xl p-6 border border-border">
           <div className="flex items-center gap-3">
             <div className="h-10 w-10 rounded-lg bg-success/10 flex items-center justify-center">
-              <Landmark className="h-5 w-5 text-success" />
+              <ArrowDownUp className="h-5 w-5 text-success" />
             </div>
             <div>
-              <p className="text-sm text-muted-foreground">Conti attivi</p>
-              <p className="text-2xl font-bold text-foreground">
-                {accounts.filter((a) => a.status === "active").length}
-              </p>
+              <p className="text-sm text-muted-foreground">Transazioni totali</p>
+              <p className="text-2xl font-bold text-foreground">{txCount}</p>
             </div>
           </div>
         </div>
