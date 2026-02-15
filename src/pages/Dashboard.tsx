@@ -3,6 +3,7 @@ import { KPICard } from "@/components/dashboard/KPICard";
 import { LiquidityHeroCard } from "@/components/dashboard/LiquidityHeroCard";
 import { AccountBalancesList } from "@/components/dashboard/AccountBalancesList";
 import { CategoryAnalysisCard } from "@/components/dashboard/CategoryAnalysisCard";
+import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
 import { useDashboardKPIs } from "@/hooks/useDashboardData";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -79,6 +80,9 @@ export default function Dashboard() {
           <AccountBalancesList />
         </div>
       </div>
+
+      {/* Incassi vs Pagamenti Chart */}
+      <IncomeExpenseChart />
     </div>
   );
 }
