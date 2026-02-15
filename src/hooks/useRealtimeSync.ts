@@ -40,7 +40,8 @@ export function useRealtimeSync() {
           "connected-accounts-count",
           "dashboard-kpis",
           "liquidity-chart",
-          "cash-flow-data",
+          "cashflow-monthly",
+          "cashflow-kpis",
           "liquidity-forecast",
         ]);
       })
@@ -52,9 +53,9 @@ export function useRealtimeSync() {
           "liquidity-chart",
           "income-expense-chart",
           "transactions",
-          "cash-flow-data",
-          "cash-flow-kpis",
-          "cash-flow-vs-budget",
+          "cashflow-monthly",
+          "cashflow-kpis",
+          "cashflow-vs-budget",
           "budget-comparison",
           "budget-variance-summary",
           "contoeconomico",
@@ -89,7 +90,7 @@ export function useRealtimeSync() {
           "budgets",
           "budget-comparison",
           "budget-variance-summary",
-          "cash-flow-vs-budget",
+          "cashflow-vs-budget",
         ]);
       })
       // ── alerts ──
