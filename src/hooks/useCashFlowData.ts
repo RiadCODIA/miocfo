@@ -153,7 +153,14 @@ export function useCashFlowKPIs() {
   return useQuery({
     queryKey: ["cashflow-kpis", fromStr, toStr],
     queryFn: async (): Promise<CashFlowKPIs> => {
-      // Get transactions in selected range
+      // Get sum of all bank account balances for Cash Flow
+      const { data: accounts } = await supabase
+        .from("bank_accounts")
+        .select("balance");
+
+      const totalBalance = accounts?.reduce((sum, a) => sum + (Number(a.balance) || 0), 0) ?? 0;
+
+      // Get transactions in selected range for other KPIs
       const { data: currentData } = await supabase
         .from("bank_transactions")
         .select("amount")
@@ -175,7 +182,7 @@ export function useCashFlowKPIs() {
         breakEvenPoint: currentPagamenti,
         incidenzaCosti: Math.round(incidenzaCosti * 10) / 10,
         incidenzaCostiChange: 0,
-        cashflowCumulativo: currentCashflow,
+        cashflowCumulativo: totalBalance,
         cashflowChange: 0,
         margineOperativo: Math.round(margineOperativo * 10) / 10,
         margineOperativoChange: 0,

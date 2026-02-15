@@ -66,10 +66,8 @@ export default function FlussiCassa() {
         ) : (
           <>
             <KPICard
-              title="Cashflow Cumulativo"
+              title="Cash Flow"
               value={formatCurrency(kpis?.cashflowCumulativo ?? 0)}
-              change={kpis?.cashflowChange}
-              changeLabel="vs 6 mesi prec."
               icon={<Wallet className="h-5 w-5" />}
               variant={(kpis?.cashflowCumulativo ?? 0) >= 0 ? "success" : "destructive"}
               delay={0}
