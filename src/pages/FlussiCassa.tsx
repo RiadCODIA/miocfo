@@ -10,17 +10,19 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { useCashFlowData, useCashFlowKPIs, useCashFlowVsBudget } from "@/hooks/useCashFlowData";
+import { useCashFlowData, useCashFlowKPIs, useCashFlowVsBudget, useCashFlowComposition } from "@/hooks/useCashFlowData";
 import { useLiquidityForecast } from "@/hooks/useDeadlines";
 import { CashFlowChart } from "@/components/flussi-cassa/CashFlowChart";
 import { BudgetComparisonChart } from "@/components/flussi-cassa/BudgetComparisonChart";
 import { LiquidityProjection } from "@/components/flussi-cassa/LiquidityProjection";
+import { CashFlowCompositionChart } from "@/components/flussi-cassa/CashFlowCompositionChart";
 
 export default function FlussiCassa() {
   const { data: monthlyData = [], isLoading: isLoadingData } = useCashFlowData();
   const { data: kpis, isLoading: isLoadingKPIs } = useCashFlowKPIs();
   const { data: budgetComparison = [], isLoading: isLoadingBudget } = useCashFlowVsBudget();
   const { data: liquidityForecast, isLoading: isLoadingForecast } = useLiquidityForecast();
+  const { data: compositionData = [], isLoading: isLoadingComposition } = useCashFlowComposition();
 
   const totals = monthlyData.reduce(
     (acc, row) => ({
@@ -129,8 +131,13 @@ export default function FlussiCassa() {
         )}
       </div>
 
+      {/* Cash Flow Composition */}
+      <div className="opacity-0 animate-fade-in" style={{ animationDelay: "350ms" }}>
+        <CashFlowCompositionChart data={compositionData} isLoading={isLoadingComposition} />
+      </div>
+
       {/* Monthly Table */}
-      <div className="glass rounded-xl overflow-hidden opacity-0 animate-fade-in" style={{ animationDelay: "400ms" }}>
+      <div className="glass rounded-xl overflow-hidden opacity-0 animate-fade-in" style={{ animationDelay: "450ms" }}>
         <div className="p-5 border-b border-border">
           <h3 className="text-lg font-semibold text-foreground">Riepilogo Mensile</h3>
           <p className="text-sm text-muted-foreground">Logica di cassa - Aggregazione mensile ultimi 6 mesi</p>

@@ -56,6 +56,7 @@ export function useRealtimeSync() {
           "cashflow-monthly",
           "cashflow-kpis",
           "cashflow-vs-budget",
+          "cashflow-composition",
           "budget-comparison",
           "budget-variance-summary",
           "contoeconomico",

@@ -145,6 +145,70 @@ export function useCashFlowVsBudget() {
   });
 }
 
+interface CompositionCategory {
+  name: string;
+  value: number;
+  percentage: number;
+  color: string;
+}
+
+const COMPOSITION_CATEGORIES = [
+  { name: "Incassi Fatture", color: "hsl(var(--primary))", patterns: [/fattura/i, /pagamento/i, /invoice/i, /payment from/i, /saldo fatt/i, /pag\.?\s*fatt/i] },
+  { name: "Prestiti e Finanziamenti", color: "hsl(var(--accent))", patterns: [/prestito/i, /finanziamento/i, /loan/i, /mutuo/i, /fido/i, /credito/i] },
+  { name: "Trasferimenti e Versamenti", color: "hsl(210, 70%, 55%)", patterns: [/top.?up/i, /trasferimento/i, /bonifico/i, /transfer/i, /giroconto/i] },
+  { name: "Versamenti Contanti", color: "hsl(45, 80%, 50%)", patterns: [/contanti/i, /cash/i, /deposito/i, /versamento/i] },
+  { name: "Rimborsi", color: "hsl(280, 60%, 55%)", patterns: [/rimborso/i, /refund/i, /reso/i, /storno/i] },
+  { name: "Altro", color: "hsl(var(--muted-foreground))", patterns: [] },
+];
+
+function classifyTransaction(description: string | null): string {
+  if (!description) return "Altro";
+  for (const cat of COMPOSITION_CATEGORIES) {
+    if (cat.name === "Altro") continue;
+    if (cat.patterns.some((p) => p.test(description))) return cat.name;
+  }
+  return "Altro";
+}
+
+export function useCashFlowComposition() {
+  const { dateRange } = useDateRange();
+  const fromStr = dateRange.from.toISOString().split("T")[0];
+  const toStr = dateRange.to.toISOString().split("T")[0];
+
+  return useQuery({
+    queryKey: ["cashflow-composition", fromStr, toStr],
+    queryFn: async (): Promise<CompositionCategory[]> => {
+      const { data: transactions, error } = await supabase
+        .from("bank_transactions")
+        .select("amount, description")
+        .gt("amount", 0)
+        .gte("date", fromStr)
+        .lte("date", toStr);
+
+      if (error) throw error;
+
+      const totals = new Map<string, number>();
+      COMPOSITION_CATEGORIES.forEach((c) => totals.set(c.name, 0));
+
+      transactions?.forEach((t) => {
+        const cat = classifyTransaction(t.description);
+        totals.set(cat, (totals.get(cat) || 0) + Number(t.amount));
+      });
+
+      const grandTotal = Array.from(totals.values()).reduce((s, v) => s + v, 0);
+
+      return COMPOSITION_CATEGORIES
+        .map((c) => ({
+          name: c.name,
+          value: totals.get(c.name) || 0,
+          percentage: grandTotal > 0 ? Math.round(((totals.get(c.name) || 0) / grandTotal) * 1000) / 10 : 0,
+          color: c.color,
+        }))
+        .filter((c) => c.value > 0);
+    },
+  });
+}
+
 export function useCashFlowKPIs() {
   const { dateRange } = useDateRange();
   const fromStr = dateRange.from.toISOString().split("T")[0];
