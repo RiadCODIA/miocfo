@@ -53,7 +53,8 @@ export default function ContiBancari() {
     refetch();
   };
 
-  const totalBalance = accounts.reduce((sum, acc) => sum + (acc.available_balance || acc.current_balance || acc.balance || 0), 0);
+  const eurAccounts = accounts.filter((acc) => (acc.currency || "EUR").toUpperCase() === "EUR");
+  const totalBalance = eurAccounts.reduce((sum, acc) => sum + (acc.balance || 0), 0);
 
   const mapAccountToCard = (account: BankAccount) => {
     const source = account.provider as "enable_banking" | "powens" | "manual" | "acube" | undefined;
