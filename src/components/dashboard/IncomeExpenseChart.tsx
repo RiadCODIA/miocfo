@@ -56,8 +56,8 @@ export function IncomeExpenseChart() {
                   <span className="text-muted-foreground text-sm capitalize">{value}</span>
                 )}
               />
-              <Bar dataKey="incassi" fill="hsl(142 76% 46%)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="pagamenti" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="incassi" name="Incassi" fill="hsl(142 76% 46%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="pagamenti" name="Pagamenti" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
               <Line
                 type="monotone"
                 dataKey="saldo"
