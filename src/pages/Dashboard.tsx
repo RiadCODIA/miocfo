@@ -55,7 +55,7 @@ export default function Dashboard() {
           variant="success"
         />
         <KPICard
-          title="Uscite"
+          title="Uscite Totali"
           value={isLoading ? "..." : formatCurrency(kpis?.periodExpenses || 0)}
           subtitle={isLoading ? "..." : `${expenseChange >= 0 ? "+" : ""}${expenseChange.toFixed(1)}% vs mese prec.`}
           icon={<ArrowUpRight className="h-5 w-5" />}
