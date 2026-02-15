@@ -65,7 +65,6 @@ const userNavGroups: NavGroup[] = [
     items: [
       { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/" },
       { id: "collegamenti", label: "Collegamenti", icon: Link2, path: "/collegamenti" },
-      { id: "conti_bancari", label: "Conti & Transazioni", icon: Landmark, path: "/conti-bancari" },
     ],
   },
   {
@@ -75,9 +74,9 @@ const userNavGroups: NavGroup[] = [
       {
         label: "Area finanziaria",
         items: [
-          { id: "fatture", label: "Fatture", icon: FileText, path: "/fatture" },
           { id: "flussi_cassa", label: "Flussi di Cassa", icon: TrendingUp, path: "/flussi-cassa" },
-          { id: "scadenzario", label: "Scadenzario", icon: Calendar, path: "/scadenzario" },
+          { id: "transazioni", label: "Movimenti", icon: ArrowLeftRight, path: "/transazioni" },
+          { id: "conti_bancari", label: "Conti & Transazioni", icon: Landmark, path: "/conti-bancari" },
         ],
       },
       {
@@ -85,7 +84,8 @@ const userNavGroups: NavGroup[] = [
         items: [
           { id: "conto_economico", label: "Conto Economico", icon: Receipt, path: "/area-economica" },
           { id: "budget_previsioni", label: "Budget & Previsioni", icon: CalendarRange, path: "/budget" },
-          { id: "transazioni", label: "Movimenti", icon: ArrowLeftRight, path: "/transazioni" },
+          { id: "fatture", label: "Fatture", icon: FileText, path: "/fatture" },
+          { id: "scadenzario", label: "Scadenzario", icon: Calendar, path: "/scadenzario" },
         ],
       },
     ],
