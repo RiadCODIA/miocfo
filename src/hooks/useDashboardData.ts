@@ -23,6 +23,7 @@ interface MonthlyComparison {
   mese: string;
   incassi: number;
   pagamenti: number;
+  saldo: number;
 }
 
 export function useDashboardKPIs() {
@@ -229,6 +230,7 @@ export function useIncomeExpenseChart() {
           mese: data.label || monthLabel,
           incassi: data.incassi,
           pagamenti: data.pagamenti,
+          saldo: data.incassi - data.pagamenti,
         });
       }
 

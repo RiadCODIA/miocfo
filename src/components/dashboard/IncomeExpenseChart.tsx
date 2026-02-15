@@ -1,4 +1,4 @@
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useIncomeExpenseChart } from "@/hooks/useDashboardData";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -25,7 +25,7 @@ export function IncomeExpenseChart() {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 47% 22%)" vertical={false} />
               <XAxis
                 dataKey="mese"
@@ -58,7 +58,15 @@ export function IncomeExpenseChart() {
               />
               <Bar dataKey="incassi" fill="hsl(142 76% 46%)" radius={[4, 4, 0, 0]} />
               <Bar dataKey="pagamenti" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
-            </BarChart>
+              <Line
+                type="monotone"
+                dataKey="saldo"
+                stroke="hsl(217 91% 60%)"
+                strokeWidth={2}
+                dot={{ r: 4, fill: "hsl(217 91% 60%)" }}
+                name="Saldo Netto"
+              />
+            </ComposedChart>
           </ResponsiveContainer>
         )}
       </div>
