@@ -47,8 +47,8 @@ export function AccountBalancesList() {
                   <Landmark className="h-4 w-4 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-foreground truncate">{acc.bank_name}</p>
-                  <p className="text-xs text-muted-foreground">{acc.account_type || "Conto corrente"}</p>
+                  <p className="text-sm font-medium text-foreground truncate">{acc.name}</p>
+                  <p className="text-xs text-muted-foreground">{acc.bank_name}</p>
                 </div>
                 <div className="text-right shrink-0">
                   <p className="text-sm font-semibold text-foreground">{formatCurrency(acc.balance || 0)}</p>
