@@ -39,7 +39,18 @@ import Piani from "./pages/Piani";
 import Fatturazione from "./pages/Fatturazione";
 import KPIInterni from "./pages/KPIInterni";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 1000 * 60 * 2, // 2 minutes
+      refetchOnWindowFocus: true,
+      refetchOnReconnect: true,
+      retry: 1,
+      // Keep previous data while refetching to avoid white flashes
+      placeholderData: (prev: unknown) => prev,
+    },
+  },
+});
 
 // Component to handle conditional dashboard rendering
 function DashboardRouter() {
