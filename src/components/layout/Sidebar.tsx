@@ -70,7 +70,7 @@ const userNavGroups: NavGroup[] = [
   },
   {
     label: "GESTIONE BUSINESS",
-    collapsible: true,
+    collapsible: false,
     subGroups: [
       {
         label: "Area finanziaria",
