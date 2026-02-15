@@ -50,7 +50,7 @@ export default function FlussiCassa() {
       <div className="opacity-0 animate-fade-in">
         <h1 className="text-2xl font-bold text-foreground">Flussi di Cassa</h1>
         <p className="text-muted-foreground mt-1">
-          Controllo di gestione e sostenibilità finanziaria
+          Analizza la liquidità totale della tua attività e le sue componenti
         </p>
       </div>
 
