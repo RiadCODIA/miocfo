@@ -65,7 +65,12 @@ export function BudgetComparisonChart({ data }: BudgetComparisonChartProps) {
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
               axisLine={{ stroke: "hsl(var(--border))" }}
               tickLine={false}
-              tickFormatter={(value) => `€${(value / 1000).toFixed(0)}k`}
+              tickFormatter={(value) => {
+                const abs = Math.abs(value);
+                if (abs >= 1000000) return `€${(value / 1000000).toFixed(1)}M`;
+                if (abs >= 1000) return `€${(value / 1000).toFixed(0)}k`;
+                return `€${value}`;
+              }}
             />
             <Tooltip
               contentStyle={{
