@@ -1,53 +1,23 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Plus, Landmark, AlertCircle, RefreshCw, Upload } from "lucide-react";
 import { BankAccountCard } from "@/components/conti-bancari/BankAccountCard";
 import { ConnectBankModal } from "@/components/conti-bancari/ConnectBankModal";
 import { UploadStatementModal } from "@/components/conti-bancari/UploadStatementModal";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { useBankingIntegration, BankAccount } from "@/hooks/useBankingIntegration";
-import { supabase } from "@/integrations/supabase/client";
+import { useBankingIntegration, BankAccount, useBankAccountsQuery } from "@/hooks/useBankingIntegration";
 
 export default function ContiBancari() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
-  const [sessionReady, setSessionReady] = useState(false);
-  const { accounts, isLoading, fetchAccounts, syncAccount, removeAccount } = useBankingIntegration();
-
-  // Wait for session to be ready before fetching accounts
-  useEffect(() => {
-    const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        setSessionReady(true);
-      }
-    };
-    
-    checkSession();
-    
-    // Also listen for auth state changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (session) {
-        setSessionReady(true);
-      }
-    });
-    
-    return () => subscription.unsubscribe();
-  }, []);
-
-  // Fetch accounts only when session is ready
-  useEffect(() => {
-    if (sessionReady) {
-      fetchAccounts();
-    }
-  }, [sessionReady, fetchAccounts]);
+  const { syncAccount, removeAccount } = useBankingIntegration();
+  const { data: accounts = [], isLoading, refetch } = useBankAccountsQuery();
 
   const handleSync = async (id: string) => {
     await syncAccount(id);
   };
 
   const handleTest = async (id: string) => {
-    // Test connection by syncing
     await syncAccount(id);
   };
 
@@ -56,25 +26,22 @@ export default function ContiBancari() {
   };
 
   const handleDebug = async (id: string) => {
-    // Debug functionality - log account details
     const account = accounts.find(a => a.id === id);
     console.log("[Debug] Account:", account);
     return { account };
   };
 
   const handleConnect = (newAccounts: BankAccount[]) => {
-    // Accounts are already added by the hook
     console.log("Connected accounts:", newAccounts);
+    refetch();
   };
 
   const handleUploadSuccess = () => {
-    fetchAccounts();
+    refetch();
   };
 
-  // Use balance field (available_balance and current_balance are computed for compatibility)
   const totalBalance = accounts.reduce((sum, acc) => sum + (acc.available_balance || acc.current_balance || acc.balance || 0), 0);
 
-  // Map the account format to the card format
   const mapAccountToCard = (account: BankAccount) => {
     const source = account.provider as "enable_banking" | "powens" | "manual" | "acube" | undefined;
     return {
@@ -100,7 +67,7 @@ export default function ContiBancari() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => fetchAccounts()} disabled={isLoading}>
+          <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
             <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
             Aggiorna
           </Button>
@@ -207,7 +174,6 @@ export default function ContiBancari() {
           </Button>
         </div>
       )}
-
 
       {/* Connect Bank Modal */}
       <ConnectBankModal

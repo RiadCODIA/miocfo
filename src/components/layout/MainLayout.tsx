@@ -1,4 +1,5 @@
 import { ReactNode, useState, createContext, useContext } from "react";
+import { useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { AlertListener } from "@/components/AlertListener";
 import { TopBar } from "./TopBar";
@@ -24,6 +25,7 @@ interface MainLayoutProps {
 
 export function MainLayout({ children }: MainLayoutProps) {
   const [collapsed, setCollapsed] = useState(false);
+  const location = useLocation();
   useRealtimeSync();
 
   return (
@@ -35,7 +37,7 @@ export function MainLayout({ children }: MainLayoutProps) {
           <main className={`min-h-screen transition-all duration-300 ${collapsed ? "pl-16" : "pl-64"}`}>
             <div className="p-6 lg:p-8">
               <TopBar />
-              <ErrorBoundary>
+              <ErrorBoundary key={location.pathname}>
                 {children}
               </ErrorBoundary>
             </div>
