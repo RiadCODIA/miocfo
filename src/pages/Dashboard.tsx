@@ -50,14 +50,14 @@ export default function Dashboard() {
         <KPICard
           title="Entrate"
           value={isLoading ? "..." : formatCurrency(kpis?.periodIncome || 0)}
-          subtitle="+0% del totale"
+          subtitle={isLoading ? "..." : `${incomeChange >= 0 ? "+" : ""}${incomeChange.toFixed(1)}% vs mese prec.`}
           icon={<ArrowDownLeft className="h-5 w-5" />}
           variant="success"
         />
         <KPICard
           title="Uscite"
           value={isLoading ? "..." : formatCurrency(kpis?.periodExpenses || 0)}
-          subtitle="+0% del totale"
+          subtitle={isLoading ? "..." : `${expenseChange >= 0 ? "+" : ""}${expenseChange.toFixed(1)}% vs mese prec.`}
           icon={<ArrowUpRight className="h-5 w-5" />}
           variant="destructive"
         />
