@@ -66,7 +66,7 @@ export default function FlussiCassa() {
         ) : (
           <>
             <KPICard
-              title="Cash Flow"
+              title="Flusso di Cassa"
               value={formatCurrency(kpis?.cashflowCumulativo ?? 0)}
               icon={<Wallet className="h-5 w-5" />}
               variant={(kpis?.cashflowCumulativo ?? 0) >= 0 ? "success" : "destructive"}
