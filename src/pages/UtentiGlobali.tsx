@@ -142,7 +142,9 @@ export default function UtentiGlobali() {
       const query = searchQuery.toLowerCase();
       const fullName = `${user.firstName || ''} ${user.lastName || ''}`.toLowerCase();
       const company = (user.companyName || '').toLowerCase();
-      if (!fullName.includes(query) && !company.includes(query)) return false;
+      const email = (user.email || '').toLowerCase();
+      const phone = (user.phone || '').toLowerCase();
+      if (!fullName.includes(query) && !company.includes(query) && !email.includes(query) && !phone.includes(query)) return false;
     }
     return true;
   });
@@ -233,6 +235,8 @@ export default function UtentiGlobali() {
               <TableHeader>
                 <TableRow>
                   <TableHead>Nome</TableHead>
+                  <TableHead>Email</TableHead>
+                  <TableHead>Telefono</TableHead>
                   <TableHead>Azienda</TableHead>
                   <TableHead>Ruolo</TableHead>
                   <TableHead>Registrato</TableHead>
@@ -248,6 +252,8 @@ export default function UtentiGlobali() {
                         : user.id.slice(0, 8)
                       }
                     </TableCell>
+                    <TableCell className="text-muted-foreground">{user.email}</TableCell>
+                    <TableCell className="text-muted-foreground">{user.phone || '-'}</TableCell>
                     <TableCell>{user.companyName || '-'}</TableCell>
                     <TableCell>{getRoleBadge(user.role)}</TableCell>
                     <TableCell className="text-muted-foreground">
@@ -328,6 +334,14 @@ export default function UtentiGlobali() {
                   <div>
                     <p className="text-muted-foreground">Cognome</p>
                     <p className="font-medium">{selectedUser.lastName || '-'}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Email</p>
+                    <p className="font-medium">{selectedUser.email}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">Telefono</p>
+                    <p className="font-medium">{selectedUser.phone || '-'}</p>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Azienda</p>
