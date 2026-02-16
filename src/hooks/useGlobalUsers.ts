@@ -8,6 +8,7 @@ export interface GlobalUser {
   firstName: string | null;
   lastName: string | null;
   companyName: string | null;
+  phone: string | null;
   role: 'user' | 'admin_aziendale' | 'super_admin';
   createdAt: string;
   lastSignIn: string | null;
@@ -63,6 +64,7 @@ export const useGlobalUsers = () => {
           firstName: profile.first_name,
           lastName: profile.last_name,
           companyName: profile.company_name,
+          phone: profile.phone || null,
           role: userRole?.role || 'user',
           createdAt: profile.created_at,
           lastSignIn: emailData?.lastSignIn || null,
