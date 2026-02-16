@@ -1,72 +1,38 @@
 
-# Composizione della Liquidita - Analisi Origini dei Flussi
+# Fix: White Screen Freeze After Any Action
 
-## Obiettivo
-Aggiungere alla pagina "Flussi di Cassa" una sezione che analizza la **composizione degli incassi**, classificando automaticamente le entrate in categorie significative per far capire al cliente da dove proviene la liquidita:
-- Incassi da fatture / pagamenti clienti
-- Prestiti e finanziamenti
-- Trasferimenti e versamenti propri (top-up, bonifici interni)
-- Versamenti in contanti
-- Rimborsi
-- Altre entrate non categorizzabili
+## Root Cause
 
-Il risultato sara mostrato sia graficamente (grafico a torta/donut) che numericamente (lista con percentuali e importi).
+The issue is in `src/hooks/use-toast.ts` on line 6:
 
-## Come funziona la classificazione
-
-L'algoritmo analizzera il campo `description` di ogni transazione positiva (incasso) e classifichera in base a pattern testuali:
-
-```text
-Categoria                  | Pattern riconosciuti
----------------------------|--------------------------------------------
-Incassi Fatture            | "fattura", "pagamento", "invoice", "payment from" (quando non e rimborso)
-Prestiti/Finanziamenti     | "prestito", "finanziamento", "loan", "mutuo"
-Trasferimenti/Versamenti   | "top-up", "trasferimento", "bonifico", "transfer"
-Versamenti Contanti        | "cash", "contanti", "deposito"
-Rimborsi                   | "rimborso", "refund", "reso"
-Altro                      | Tutto cio che non rientra nelle categorie sopra
+```
+const TOAST_REMOVE_DELAY = 1000000;  // ~16.6 MINUTES!
 ```
 
-## Modifiche tecniche
+When a toast is dismissed (e.g., after "Sincronizzazione completata"), the Radix UI `ToastProvider` sets `pointer-events: none` on a wrapper element while the toast animates out and waits to be fully removed from the DOM. With a remove delay of **1,000,000 milliseconds (~16 minutes)**, the dismissed toast sits in the DOM in a "closed" state for that entire time, and the `pointer-events: none` style **blocks all user interaction** with the page -- making it appear frozen/white.
 
-### 1. Nuovo hook: `useCashFlowComposition` (in `useCashFlowData.ts`)
-- Query delle transazioni positive (`amount > 0`) nel periodo selezionato
-- Classificazione di ogni transazione in base alla `description`
-- Calcolo totale per categoria, percentuale, e importo
-- Restituisce un array di oggetti `{ name, value, percentage, color }`
+This is confirmed by the session replay which shows `pointer-events` being set to `none` on a container element right after toast notifications are closed.
 
-### 2. Nuovo componente: `CashFlowCompositionChart.tsx`
-- Grafico a torta (PieChart di Recharts) che mostra la distribuzione degli incassi
-- Legenda con ogni categoria, importo e percentuale
-- Stile coerente con i chart esistenti (glass card, stessi colori del tema)
+## Fix
 
-### 3. Aggiornamento pagina `FlussiCassa.tsx`
-- Aggiungere la nuova sezione sotto i grafici esistenti (tra i chart e la tabella mensile)
-- Layout: grafico donut a sinistra, dettaglio numerico (lista categorie con barra di progresso, importo e %) a destra
+Change `TOAST_REMOVE_DELAY` from `1000000` to a reasonable value (e.g., `1000` ms = 1 second), which gives the close animation enough time to complete before the toast is removed from the DOM.
 
-### 4. Aggiornamento realtime (`useRealtimeSync.ts`)
-- Aggiungere il query key `cashflow-composition` alle invalidazioni della tabella `bank_transactions`
+### File: `src/hooks/use-toast.ts`
 
-## Layout visuale
-
-```text
-+----------------------------------+----------------------------------+
-|                                  |                                  |
-|      [Grafico Donut]             |   Incassi Fatture    €12.500 45% |
-|                                  |   ██████████░░░░░░               |
-|        Composizione              |   Rimborsi           €8.200  30% |
-|        Incassi                   |   ██████████░░░░░░               |
-|                                  |   Prestiti           €4.000  15% |
-|        Totale: €27.400           |   ██████░░░░░░░░░░               |
-|                                  |   Trasferimenti      €1.700   6% |
-|                                  |   ███░░░░░░░░░░░░░               |
-|                                  |   Altro              €1.000   4% |
-|                                  |   ██░░░░░░░░░░░░░░░              |
-+----------------------------------+----------------------------------+
+**Line 6** -- Change:
+```typescript
+const TOAST_REMOVE_DELAY = 1000000;
+```
+To:
+```typescript
+const TOAST_REMOVE_DELAY = 1000;
 ```
 
-## File coinvolti
-1. **`src/hooks/useCashFlowData.ts`** - Aggiunta hook `useCashFlowComposition`
-2. **`src/components/flussi-cassa/CashFlowCompositionChart.tsx`** - Nuovo componente (grafico + dettaglio)
-3. **`src/pages/FlussiCassa.tsx`** - Integrazione della nuova sezione
-4. **`src/hooks/useRealtimeSync.ts`** - Aggiunta query key per invalidazione realtime
+This single-line change will fix the freeze across the entire application, since every toast notification (sync confirmations, error messages, success alerts) flows through this hook.
+
+## Technical Details
+
+- The Radix `ToastProvider` component manages a "swipe away" region that uses `pointer-events: none` during transitions
+- When `DISMISS_TOAST` fires, the toast is marked `open: false` but stays in the toast array until `REMOVE_TOAST` fires after `TOAST_REMOVE_DELAY`
+- During this window, the provider's internal state blocks pointer events on the page
+- Reducing the delay to 1 second allows the exit animation to complete normally and then immediately cleans up the DOM element, restoring pointer events
