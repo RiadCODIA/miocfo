@@ -8,6 +8,7 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts";
+import { useDateRange } from "@/contexts/DateRangeContext";
 
 interface CashFlowChartProps {
   data: {
@@ -19,6 +20,7 @@ interface CashFlowChartProps {
 }
 
 export function CashFlowChart({ data }: CashFlowChartProps) {
+  const { activeLabel } = useDateRange();
   const formatCurrency = (value: number) => `€${value.toLocaleString("it-IT")}`;
 
   return (
@@ -27,7 +29,7 @@ export function CashFlowChart({ data }: CashFlowChartProps) {
         Andamento Flussi di Cassa
       </h3>
       <p className="text-sm text-muted-foreground mb-4">
-        Incassi, pagamenti e cashflow netto degli ultimi 6 mesi
+        Incassi, pagamenti e cashflow netto — {activeLabel.toLowerCase()}
       </p>
 
       <div className="h-[300px]">
@@ -94,6 +96,15 @@ export function CashFlowChart({ data }: CashFlowChartProps) {
               strokeWidth={2}
               fillOpacity={1}
               fill="url(#colorPagamenti)"
+            />
+            <Area
+              type="monotone"
+              dataKey="cashflow"
+              stroke="hsl(var(--primary))"
+              strokeWidth={2}
+              fillOpacity={0}
+              fill="none"
+              strokeDasharray="5 5"
             />
           </AreaChart>
         </ResponsiveContainer>
