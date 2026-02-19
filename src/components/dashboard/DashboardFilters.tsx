@@ -9,7 +9,7 @@ import {
 
 export function DashboardFilters() {
   return (
-    <div className="flex flex-wrap gap-3 mb-6 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
+    <div className="flex flex-wrap gap-3 mb-6">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" className="gap-2 bg-card border-border hover:bg-secondary">

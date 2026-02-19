@@ -95,7 +95,7 @@ export default function KPIReport() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="opacity-0 animate-fade-in">
+      <div>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-foreground">KPI & Report</h1>
@@ -118,13 +118,13 @@ export default function KPIReport() {
 
       {/* AI Report */}
       {aiReport && (
-        <div className="opacity-0 animate-fade-in" style={{ animationDelay: "50ms" }}>
+        <div>
           <AIReportSection report={aiReport} />
         </div>
       )}
 
       {/* KPI Grid */}
-      <div className="opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
+      <div>
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold text-foreground">Indicatori Chiave</h3>
           <div className="flex gap-2">
@@ -141,11 +141,10 @@ export default function KPIReport() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {kpis.map((kpi, index) => (
+            {kpis.map((kpi) => (
               <div
                 key={kpi.id}
-                className="glass rounded-xl p-5 opacity-0 animate-fade-in"
-                style={{ animationDelay: `${150 + index * 50}ms` }}
+                className="glass rounded-xl p-5"
               >
                 <div className="flex items-start justify-between mb-3">
                   <div className="flex items-center gap-2">
@@ -182,7 +181,7 @@ export default function KPIReport() {
       </div>
 
       {/* Export */}
-      <div className="glass rounded-xl p-5 opacity-0 animate-fade-in flex items-center justify-between" style={{ animationDelay: "400ms" }}>
+      <div className="glass rounded-xl p-5 flex items-center justify-between">
         <div>
           <h3 className="text-lg font-semibold text-foreground">Esporta Report</h3>
           <p className="text-sm text-muted-foreground">Scarica i KPI attuali in formato CSV</p>

@@ -38,7 +38,6 @@ export default function FlussiCassa() {
     return `€${Math.abs(value).toLocaleString("it-IT")}`;
   };
 
-  // Prepare chart data (reversed for chronological order)
   const chartData = [...monthlyData].map(row => ({
     mese: row.meseShort,
     incassi: row.incassi,
@@ -49,7 +48,7 @@ export default function FlussiCassa() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="opacity-0 animate-fade-in">
+      <div>
         <h1 className="text-2xl font-bold text-foreground">Flussi di Cassa</h1>
         <p className="text-muted-foreground mt-1">
           Analizza la liquidità totale della tua attività e le sue componenti
@@ -72,7 +71,6 @@ export default function FlussiCassa() {
               value={formatCurrency(kpis?.cashflowCumulativo ?? 0)}
               icon={<Wallet className="h-5 w-5" />}
               variant={(kpis?.cashflowCumulativo ?? 0) >= 0 ? "success" : "destructive"}
-              delay={0}
             />
             <KPICard
               title="Margine Operativo"
@@ -81,7 +79,6 @@ export default function FlussiCassa() {
               changeLabel="vs trimestre prec."
               icon={<TrendingUp className="h-5 w-5" />}
               variant={(kpis?.margineOperativo ?? 0) >= 20 ? "success" : "warning"}
-              delay={50}
             />
             <KPICard
               title="Incidenza Costi"
@@ -90,21 +87,19 @@ export default function FlussiCassa() {
               changeLabel="vs trimestre prec."
               icon={<Percent className="h-5 w-5" />}
               variant={(kpis?.incidenzaCosti ?? 0) <= 80 ? "default" : "warning"}
-              delay={100}
             />
             <KPICard
               title="Costi Operativi"
               value={formatCurrency(kpis?.breakEvenPoint ?? 0)}
               icon={<Target className="h-5 w-5" />}
               variant="default"
-              delay={150}
             />
           </>
         )}
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 opacity-0 animate-fade-in" style={{ animationDelay: "200ms" }}>
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {isLoadingData ? (
           <>
             <Skeleton className="h-[380px]" />
@@ -119,7 +114,7 @@ export default function FlussiCassa() {
       </div>
 
       {/* Liquidity Projection */}
-      <div className="opacity-0 animate-fade-in" style={{ animationDelay: "300ms" }}>
+      <div>
         {isLoadingForecast ? (
           <Skeleton className="h-[280px]" />
         ) : (
@@ -132,12 +127,12 @@ export default function FlussiCassa() {
       </div>
 
       {/* Cash Flow Composition */}
-      <div className="opacity-0 animate-fade-in" style={{ animationDelay: "350ms" }}>
+      <div>
         <CashFlowCompositionChart data={compositionData} isLoading={isLoadingComposition} />
       </div>
 
       {/* Monthly Table */}
-      <div className="glass rounded-xl overflow-hidden opacity-0 animate-fade-in" style={{ animationDelay: "450ms" }}>
+      <div className="glass rounded-xl overflow-hidden">
         <div className="p-5 border-b border-border">
           <h3 className="text-lg font-semibold text-foreground">Riepilogo Mensile</h3>
           <p className="text-sm text-muted-foreground">Logica di cassa - Aggregazione mensile ultimi 6 mesi</p>
@@ -175,15 +170,14 @@ export default function FlussiCassa() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {monthlyData.map((row, index) => {
+              {monthlyData.map((row) => {
                 const marginPercent = row.incassi > 0 
                   ? ((row.utile / row.incassi) * 100).toFixed(1) 
                   : "0.0";
                 return (
                   <TableRow
                     key={row.mese}
-                    className="border-border hover:bg-secondary/50 opacity-0 animate-fade-in"
-                    style={{ animationDelay: `${500 + index * 50}ms` }}
+                    className="border-border hover:bg-secondary/50"
                   >
                     <TableCell className="font-medium capitalize">{row.mese}</TableCell>
                     <TableCell className="text-right text-success font-medium">

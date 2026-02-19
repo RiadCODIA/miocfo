@@ -61,7 +61,7 @@ export default function BudgetPrevisioni() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-start justify-between opacity-0 animate-fade-in">
+      <div className="flex items-start justify-between">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Budget & Previsioni</h1>
           <p className="text-muted-foreground mt-1">
@@ -89,7 +89,7 @@ export default function BudgetPrevisioni() {
       </div>
 
       {/* Editable Budget Table */}
-      <div className="glass rounded-xl overflow-hidden opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
+      <div className="glass rounded-xl overflow-hidden">
         <div className="p-5 border-b border-border">
           <h3 className="text-lg font-semibold text-foreground">Budget Previsionale</h3>
           <p className="text-sm text-muted-foreground">Clicca sulle celle per modificare i valori</p>
@@ -130,8 +130,7 @@ export default function BudgetPrevisioni() {
                 return (
                   <TableRow
                     key={row.id}
-                    className="border-border hover:bg-secondary/50 opacity-0 animate-fade-in"
-                    style={{ animationDelay: `${200 + index * 50}ms` }}
+                    className="border-border hover:bg-secondary/50"
                   >
                     <TableCell className="font-medium">{row.name}</TableCell>
                     <TableCell className="text-right">
@@ -158,7 +157,7 @@ export default function BudgetPrevisioni() {
       </div>
 
       {/* Comparison Chart */}
-      <div className="glass rounded-xl p-5 opacity-0 animate-fade-in" style={{ animationDelay: "300ms" }}>
+      <div className="glass rounded-xl p-5">
         <div className="mb-4">
           <h3 className="text-lg font-semibold text-foreground">Consuntivo vs Previsionale</h3>
           <p className="text-sm text-muted-foreground">Scostamenti budget ultimi 6 mesi</p>
@@ -214,7 +213,7 @@ export default function BudgetPrevisioni() {
       </div>
 
       {/* Variance Summary */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 opacity-0 animate-fade-in" style={{ animationDelay: "400ms" }}>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2">
             <TrendingDown className="h-5 w-5 text-destructive" />

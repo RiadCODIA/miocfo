@@ -55,29 +55,24 @@ export default function Transazioni() {
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   
-  // Advanced filters - temporary state (inside popover)
   const [tempMinAmount, setTempMinAmount] = useState<string>("");
   const [tempMaxAmount, setTempMaxAmount] = useState<string>("");
   const [tempTransactionType, setTempTransactionType] = useState<"all" | "income" | "expense">("all");
   const [tempStartDate, setTempStartDate] = useState<string>("");
   const [tempEndDate, setTempEndDate] = useState<string>("");
 
-  // Applied filters - used for actual query
   const [minAmount, setMinAmount] = useState<string>("");
   const [maxAmount, setMaxAmount] = useState<string>("");
   const [transactionType, setTransactionType] = useState<"all" | "income" | "expense">("all");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
-  // When true, use custom local dates; when false, use global TopBar dates
   const [useLocalDates, setUseLocalDates] = useState(false);
 
   const queryClient = useQueryClient();
 
-  // Global context dates from TopBar
   const contextStartDate = formatDate(dateRange.from, "yyyy-MM-dd");
   const contextEndDate = formatDate(dateRange.to, "yyyy-MM-dd");
 
-  // Determine effective dates: local override > global TopBar
   const effectiveStartDate = useLocalDates ? (startDate || undefined) : contextStartDate;
   const effectiveEndDate = useLocalDates ? (endDate || undefined) : contextEndDate;
 
@@ -131,7 +126,6 @@ export default function Transazioni() {
   const { data: accounts } = useBankAccounts();
   const { isLoading: isCategorizing } = useCategorizeTransactions();
 
-  // Fetch cost categories for mapping
   const { data: costCategories } = useQuery({
     queryKey: ["cost-categories"],
     queryFn: async () => {
@@ -144,25 +138,19 @@ export default function Transazioni() {
     },
   });
 
-  // Map category IDs to names
   const getCategoryName = (categoryId?: string) => {
     if (!categoryId || !costCategories) return null;
     const cat = costCategories.find((c) => c.id === categoryId);
     return cat?.name || null;
   };
 
-  // Count uncategorized transactions
   const uncategorizedCount = transactions?.filter(
     (tx) => !tx.aiCategoryId && !tx.categoryConfirmed
   ).length || 0;
 
-
-  // Users can manually categorize via the edit button on each row
-
   const handleCategorizeOne = (transaction: any) => {
     setSelectedTransaction(transaction);
     
-    // If already has AI category, pre-fill the suggestion
     if (transaction.aiCategoryId) {
       setAiSuggestion({
         transaction_id: transaction.id,
@@ -188,7 +176,7 @@ export default function Transazioni() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="opacity-0 animate-fade-in">
+      <div>
         <h1 className="text-2xl font-bold text-foreground">Transazioni</h1>
         <p className="text-muted-foreground mt-1">
           Analisi dettagliata dei movimenti bancari
@@ -196,7 +184,7 @@ export default function Transazioni() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
+      <div className="flex flex-wrap gap-3">
         <div className="relative flex-1 min-w-[200px] max-w-sm">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -206,9 +194,6 @@ export default function Transazioni() {
             className="pl-9 bg-card border-border"
           />
         </div>
-
-
-
 
         <Select value={accountId} onValueChange={setAccountId}>
           <SelectTrigger className="w-[180px] bg-card border-border">
@@ -253,7 +238,6 @@ export default function Transazioni() {
 
         <Popover open={filtersOpen} onOpenChange={(open) => {
           if (open) {
-            // Sync temp state with applied state when opening
             setTempMinAmount(minAmount);
             setTempMaxAmount(maxAmount);
             setTempTransactionType(transactionType);
@@ -285,7 +269,6 @@ export default function Transazioni() {
                 )}
               </div>
               
-              {/* Transaction Type */}
               <div className="space-y-2">
                 <Label className="text-sm text-muted-foreground">Tipo transazione</Label>
                 <Select value={tempTransactionType} onValueChange={(v) => setTempTransactionType(v as typeof tempTransactionType)}>
@@ -300,7 +283,6 @@ export default function Transazioni() {
                 </Select>
               </div>
               
-              {/* Amount Range */}
               <div className="space-y-2">
                 <Label className="text-sm text-muted-foreground">Importo (€)</Label>
                 <div className="flex gap-2">
@@ -321,7 +303,6 @@ export default function Transazioni() {
                 </div>
               </div>
               
-              {/* Date Range */}
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <Label className="text-sm text-muted-foreground">Intervallo date</Label>
@@ -364,7 +345,6 @@ export default function Transazioni() {
           </PopoverContent>
         </Popover>
 
-        {/* Auto-categorization status indicator */}
         {isCategorizing && (
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -378,7 +358,6 @@ export default function Transazioni() {
           </div>
         )}
 
-        {/* AI Spending Analysis Button */}
         <Button
           variant="outline"
           className="gap-2 bg-card border-border hover:bg-secondary"
@@ -395,7 +374,7 @@ export default function Transazioni() {
       </div>
 
       {/* Table */}
-      <div className="glass rounded-xl overflow-hidden opacity-0 animate-fade-in" style={{ animationDelay: "200ms" }}>
+      <div className="glass rounded-xl overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
@@ -442,7 +421,7 @@ export default function Transazioni() {
                 </TableCell>
               </TableRow>
             ) : (
-              transactions?.map((tx, index) => (
+              transactions?.map((tx) => (
                 <TableRow
                   key={tx.id}
                   className="border-border hover:bg-secondary/50"
@@ -451,29 +430,31 @@ export default function Transazioni() {
                     {format(new Date(tx.date), "dd/MM/yyyy", { locale: it })}
                   </TableCell>
                   <TableCell className="max-w-[300px] truncate">
-                    {tx.merchantName || tx.description || "—"}
+                    {tx.description || tx.merchantName || "—"}
                   </TableCell>
                   <TableCell className={cn(
-                    "text-right font-semibold",
-                    tx.amount > 0 ? "text-success" : "text-destructive"
+                    "text-right font-semibold whitespace-nowrap",
+                    tx.amount >= 0 ? "text-success" : "text-destructive"
                   )}>
-                    {tx.amount > 0 ? "+" : ""}€{Math.abs(tx.amount).toLocaleString("it-IT")}
+                    {tx.amount >= 0 ? "+" : ""}€{Math.abs(tx.amount).toLocaleString("it-IT", { minimumFractionDigits: 2 })}
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{tx.bankName}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {tx.bankName || "—"}
+                  </TableCell>
                   <TableCell>
                     <CategoryBadge
                       categoryName={getCategoryName(tx.aiCategoryId)}
-                      confidence={null}
                       confirmed={tx.categoryConfirmed}
-                      onClick={() => handleCategorizeOne(tx)}
                     />
                   </TableCell>
-                  <TableCell>{getStatoBadge(false)}</TableCell>
                   <TableCell>
-                    <Button 
-                      variant="ghost" 
-                      size="icon" 
-                      className="h-8 w-8 hover:bg-secondary"
+                    {getStatoBadge(!tx.categoryConfirmed && !tx.aiCategoryId)}
+                  </TableCell>
+                  <TableCell>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-8 w-8 hover:bg-primary/10"
                       onClick={() => handleCategorizeOne(tx)}
                     >
                       <Edit2 className="h-4 w-4 text-muted-foreground" />
@@ -486,7 +467,7 @@ export default function Transazioni() {
         </Table>
       </div>
 
-      {/* Category Modal */}
+      {/* Modals */}
       <CategoryModal
         open={categoryModalOpen}
         onOpenChange={(open) => {
@@ -494,13 +475,13 @@ export default function Transazioni() {
           if (!open) {
             setSelectedTransaction(null);
             setAiSuggestion(null);
+            queryClient.invalidateQueries({ queryKey: ["transactions"] });
           }
         }}
         transaction={selectedTransaction}
         aiSuggestion={aiSuggestion}
       />
 
-      {/* Spending Report Modal */}
       <SpendingReportModal
         open={reportModalOpen}
         onOpenChange={setReportModalOpen}

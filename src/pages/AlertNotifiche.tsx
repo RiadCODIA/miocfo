@@ -103,7 +103,7 @@ export default function AlertNotifiche() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="opacity-0 animate-fade-in">
+      <div>
         <h1 className="text-2xl font-bold text-foreground">Alert & Notifiche</h1>
         <p className="text-muted-foreground mt-1">
           Monitoraggio situazioni critiche
@@ -111,7 +111,7 @@ export default function AlertNotifiche() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-3">
             <div className="p-2.5 rounded-lg bg-destructive/10">
@@ -148,7 +148,7 @@ export default function AlertNotifiche() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap gap-3 opacity-0 animate-fade-in" style={{ animationDelay: "150ms" }}>
+      <div className="flex flex-wrap gap-3">
         <Select value={typeFilter} onValueChange={setTypeFilter}>
           <SelectTrigger className="w-[160px] bg-card border-border">
             <SelectValue placeholder="Tipo" />
@@ -187,7 +187,7 @@ export default function AlertNotifiche() {
       </div>
 
       {/* Alerts Table */}
-      <div className="glass rounded-xl overflow-hidden opacity-0 animate-fade-in" style={{ animationDelay: "200ms" }}>
+      <div className="glass rounded-xl overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="border-border hover:bg-transparent">
@@ -226,8 +226,7 @@ export default function AlertNotifiche() {
                 return (
                   <TableRow
                     key={alert.id}
-                    className="border-border hover:bg-secondary/50 opacity-0 animate-fade-in"
-                    style={{ animationDelay: `${300 + index * 50}ms` }}
+                    className="border-border hover:bg-secondary/50"
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">

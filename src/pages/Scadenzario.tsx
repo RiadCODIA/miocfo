@@ -35,7 +35,7 @@ export default function Scadenzario() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4 opacity-0 animate-fade-in">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h1 className="text-2xl font-bold text-foreground">Scadenzario</h1>
@@ -66,7 +66,7 @@ export default function Scadenzario() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-2">
             <ArrowDownLeft className="h-5 w-5 text-success" />
@@ -115,7 +115,7 @@ export default function Scadenzario() {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Deadline List */}
-        <div className="glass rounded-xl p-5 opacity-0 animate-fade-in" style={{ animationDelay: "200ms" }}>
+        <div className="glass rounded-xl p-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
             <h3 className="text-lg font-semibold text-foreground">Scadenze</h3>
             <DeadlineFilters filters={filters} onFiltersChange={setFilters} />
@@ -128,7 +128,7 @@ export default function Scadenzario() {
         </div>
 
         {/* Liquidity Forecast Chart */}
-        <div className="glass rounded-xl p-5 opacity-0 animate-fade-in" style={{ animationDelay: "300ms" }}>
+        <div className="glass rounded-xl p-5">
           <div className="mb-4">
             <h3 className="text-lg font-semibold text-foreground">Previsione Liquidità</h3>
             <p className="text-sm text-muted-foreground">Saldo previsto nei prossimi 30 giorni</p>
