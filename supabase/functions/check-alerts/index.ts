@@ -23,14 +23,16 @@ async function createAlert(
   userId: string,
   data: { type: string; title: string; message: string; severity: string; action_url?: string }
 ): Promise<string | null> {
-  // Check for duplicate unread alert
+  // Check for duplicate alert (read or unread) created in the last 24 hours
+  const oneDayAgo = new Date();
+  oneDayAgo.setHours(oneDayAgo.getHours() - 24);
   const { data: existing } = await supabase
     .from("alerts")
     .select("id")
     .eq("type", data.type)
-    .eq("is_read", false)
     .eq("title", data.title)
     .eq("user_id", userId)
+    .gte("created_at", oneDayAgo.toISOString())
     .maybeSingle();
 
   if (existing) {
