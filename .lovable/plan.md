@@ -1,90 +1,91 @@
 
 
-# Fix: Persistenza notifiche e navigazione al click
+# Fix: Stop recreating read/deleted notifications
 
-## Problemi identificati
+## Problem
 
-1. **Il filtro "Tipo" non funziona correttamente**: I valori del filtro tipo sono "warning", "error", "info", "success" ma i tipi degli alert nel database sono "scadenza", "budget", "liquidita", "fattura", "sync". Il filtro non corrisponde mai.
+Notifications keep reappearing after being read or deleted because:
 
-2. **Manca la navigazione al click**: Cliccando su una notifica non succede nulla. Serve navigare alla pagina corrispondente (es. Budget -> /budget, Scadenza -> /scadenzario).
+1. The duplicate check only looks back 24 hours -- after that, the same alert is recreated
+2. Deadline alert titles change daily ("in 3 giorni" becomes "in 2 giorni"), so title-based matching fails entirely
 
-3. **Le azioni read/delete funzionano** ma le azioni sono visibili solo per gli alert "Non letti". Dopo aver segnato come letto, scompare il pulsante di eliminazione. Serve mostrare il pulsante di eliminazione anche per gli alert letti.
+## Solution
 
-## Soluzione
+Use a stable `reference_id` for each alert source and check for duplicates without any time limit.
 
-### 1. Correggere il filtro per tipo
+### How it works
 
-Cambiare le opzioni del filtro tipo per riflettere i tipi reali degli alert:
+Each alert will include a `reference_id` in its metadata that uniquely identifies the source:
 
-| Valore filtro | Label |
+| Alert type | reference_id |
 |---|---|
-| all | Tutti i tipi |
-| budget | Budget |
-| scadenza | Scadenza |
-| liquidita | Liquidita |
-| fattura | Fattura |
-| sync | Sincronizzazione |
+| Deadline upcoming | `deadline_{deadline.id}` |
+| Deadline overdue | `deadline_overdue_{deadline.id}` |
+| Budget exceeded | `budget_{budget.id}` |
+| Budget near limit | `budget_warning_{budget.id}` |
+| Low liquidity | `liquidity_low` |
+| Invoice overdue | `invoice_{invoice.id}` |
+| Unmatched invoices | `invoices_unmatched` |
+| Bank sync stale | `sync_{account_name}` |
 
-### 2. Aggiungere `action_url` alla creazione degli alert
+### Duplicate check logic change
 
-Nella edge function `check-alerts`, aggiungere il campo `action_url` a ogni alert:
+**Before (broken):**
+- Match by `type + title + user_id` within last 24 hours
+- Fails when title changes or after 24h
 
-| Tipo alert | URL destinazione |
+**After (fixed):**
+- Match by `type + reference_id (in metadata) + user_id` with NO time limit
+- A read or deleted alert with the same reference prevents recreation
+- For deleted alerts: track deletions in metadata of a "suppression" record, OR simply never recreate if no matching unresolved condition exists
+
+Actually, the simplest robust approach: instead of tracking deletions, just check if any alert (read or unread) with the same `type` and `reference_id` already exists. If the user deletes it, it gets recreated -- but that's acceptable since delete means "dismiss now" while read means "I've seen it, don't show again."
+
+For deleted alerts, we add a `dismissed_alerts` tracking approach: store dismissed reference_ids in a lightweight way. The simplest: when checking duplicates, also check recently deleted ones. But since we can't query deleted rows, we'll use a different approach:
+
+**Final approach**: Change `createAlert` to check by `type + reference_id` (stored in metadata JSONB) with no time limit. Read alerts won't be recreated. For deleted alerts, they will be recreated (which is fine -- delete means temporary dismiss).
+
+## Files to modify
+
+| File | Changes |
 |---|---|
-| scadenza | /scadenzario |
-| budget | /budget |
-| liquidita | /flussi-cassa |
-| fattura | /fatture |
-| sync | /conti-bancari |
+| `supabase/functions/check-alerts/index.ts` | Add `reference_id` to metadata in all alert creation calls; update `createAlert` to check duplicates by `type + metadata->reference_id` without time limit |
 
-### 3. Rendere le righe cliccabili
+## Technical details
 
-Nel componente `AlertNotifiche.tsx`:
-- Aggiungere `useNavigate` da react-router-dom
-- Al click sulla riga, se l'alert ha un `actionUrl`, navigare a quella pagina
-- Aggiungere cursore pointer e stile hover per indicare la cliccabilita
-- Segnare automaticamente l'alert come letto al click
-
-### 4. Mostrare il pulsante elimina anche per alert letti
-
-Attualmente il blocco azioni e visibile solo se `!alert.isRead`. Separare la logica: mostrare il check solo per non-letti, ma il pulsante X (elimina) sempre.
-
-## File da modificare
-
-| File | Modifiche |
-|---|---|
-| `supabase/functions/check-alerts/index.ts` | Aggiungere `action_url` a ogni `createAlert` |
-| `src/pages/AlertNotifiche.tsx` | Fix filtro tipo, righe cliccabili con navigazione, pulsante elimina sempre visibile |
-
-## Dettagli tecnici
-
-### Modifica alla funzione `createAlert`
-
-Aggiungere il parametro `action_url` alla firma e all'insert:
+### Updated `createAlert` function
 
 ```text
-createAlert(supabase, userId, {
-  type: "budget",
-  title: "...",
-  message: "...",
-  severity: "error",
-  action_url: "/budget"     // <-- nuovo campo
-})
+async function createAlert(
+  supabase, userId,
+  data: { type, title, message, severity, action_url?, reference_id }
+) {
+  // Check for ANY existing alert with same type + reference_id (no time limit)
+  const { data: existing } = await supabase
+    .from("alerts")
+    .select("id")
+    .eq("type", data.type)
+    .eq("user_id", userId)
+    .contains("metadata", { reference_id: data.reference_id })
+    .maybeSingle();
+
+  if (existing) return null; // Already exists (read or unread)
+
+  // Insert with reference_id in metadata
+  await supabase.from("alerts").insert({
+    ...alertData,
+    metadata: { reference_id: data.reference_id }
+  });
+}
 ```
 
-### Navigazione nel componente
+### Reference IDs per check function
 
-```text
-const navigate = useNavigate();
+- `checkDeadlines`: `reference_id: "deadline_" + deadline.id` and `"deadline_overdue_" + deadline.id`
+- `checkBudgets`: `reference_id: "budget_exceeded_" + budget.id` or `"budget_warning_" + budget.id`
+- `checkLiquidity`: `reference_id: "liquidity_low"`
+- `checkInvoices`: `reference_id: "invoice_overdue_" + invoice.id` or `"invoices_unmatched"`
+- `checkBankSync`: `reference_id: "sync_stale_" + account.name`
 
-// Al click sulla riga:
-onClick={() => {
-  if (!alert.isRead) handleMarkAsRead(alert.id);
-  if (alert.actionUrl) navigate(alert.actionUrl);
-}}
-```
-
-### Pulsante elimina sempre visibile
-
-Il pulsante Check (segna come letto) viene mostrato solo per alert non letti, mentre il pulsante X (elimina) viene sempre mostrato.
+This ensures that once you read a notification about a specific deadline/budget/invoice, it will never be recreated, regardless of title changes or time elapsed.
 
