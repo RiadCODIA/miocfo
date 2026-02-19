@@ -41,16 +41,22 @@ export function useAlerts(options: UseAlertsOptions = {}) {
 
       if (error) throw error;
 
-      return (data || []).map((alert) => ({
-        id: alert.id,
-        type: alert.type,
-        title: alert.title,
-        message: alert.message,
-        severity: alert.severity ?? 'info',
-        isRead: alert.is_read ?? false,
-        actionUrl: alert.action_url,
-        createdAt: alert.created_at,
-      }));
+      // Filter out dismissed alerts (soft-deleted via metadata flag)
+      return (data || [])
+        .filter((alert) => {
+          const meta = alert.metadata as Record<string, unknown> | null;
+          return !meta?.dismissed;
+        })
+        .map((alert) => ({
+          id: alert.id,
+          type: alert.type,
+          title: alert.title,
+          message: alert.message,
+          severity: alert.severity ?? 'info',
+          isRead: alert.is_read ?? false,
+          actionUrl: alert.action_url,
+          createdAt: alert.created_at,
+        }));
     },
   });
 }
@@ -59,17 +65,23 @@ export function useActiveAlertsCount() {
   return useQuery({
     queryKey: ["alerts-count"],
     queryFn: async () => {
-      const { data, error, count } = await supabase
+      const { data, error } = await supabase
         .from("alerts")
-        .select("id, severity", { count: "exact" })
+        .select("id, severity, metadata")
         .eq("is_read", false);
 
       if (error) throw error;
 
-      const highPriority = data?.filter(a => a.severity === "error").length || 0;
+      // Filter out dismissed alerts
+      const active = (data || []).filter((a) => {
+        const meta = a.metadata as Record<string, unknown> | null;
+        return !meta?.dismissed;
+      });
+
+      const highPriority = active.filter(a => a.severity === "error").length;
 
       return {
-        total: count || 0,
+        total: active.length,
         highPriority,
       };
     },
@@ -100,10 +112,22 @@ export function useDeleteAlert() {
 
   return useMutation({
     mutationFn: async (alertId: string) => {
-      // Soft-delete: mark as read so the row stays for dedup checks
+      // First get the current metadata to preserve reference_id
+      const { data: current } = await supabase
+        .from("alerts")
+        .select("metadata")
+        .eq("id", alertId)
+        .maybeSingle();
+
+      const existingMeta = (current?.metadata as Record<string, unknown>) || {};
+
+      // Soft-delete: mark as read + dismissed so dedup still works but it's hidden from UI
       const { error } = await supabase
         .from("alerts")
-        .update({ is_read: true })
+        .update({
+          is_read: true,
+          metadata: { ...existingMeta, dismissed: true },
+        })
         .eq("id", alertId);
 
       if (error) throw error;
