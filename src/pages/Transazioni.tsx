@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { Search, Filter, Download, Edit2, BarChart3, Loader2, X, Sparkles } from "lucide-react";
-import { useDateRange } from "@/contexts/DateRangeContext";
-import { format as formatDate } from "date-fns";
+
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -46,7 +45,6 @@ interface CostCategory {
 
 export default function Transazioni() {
   const [searchTerm, setSearchTerm] = useState("");
-  const { dateRange } = useDateRange();
   const [accountId, setAccountId] = useState("all");
   const [category, setCategory] = useState("all");
   const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
@@ -55,17 +53,22 @@ export default function Transazioni() {
   const [reportModalOpen, setReportModalOpen] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   
-  // Advanced filters
+  // Advanced filters - temporary state (inside popover)
+  const [tempMinAmount, setTempMinAmount] = useState<string>("");
+  const [tempMaxAmount, setTempMaxAmount] = useState<string>("");
+  const [tempTransactionType, setTempTransactionType] = useState<"all" | "income" | "expense">("all");
+  const [tempStartDate, setTempStartDate] = useState<string>("");
+  const [tempEndDate, setTempEndDate] = useState<string>("");
+
+  // Applied filters - used for actual query
   const [minAmount, setMinAmount] = useState<string>("");
   const [maxAmount, setMaxAmount] = useState<string>("");
   const [transactionType, setTransactionType] = useState<"all" | "income" | "expense">("all");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
+  const [showAllDates, setShowAllDates] = useState(true);
 
   const queryClient = useQueryClient();
-
-  const contextStartDate = formatDate(dateRange.from, "yyyy-MM-dd");
-  const contextEndDate = formatDate(dateRange.to, "yyyy-MM-dd");
 
   const { data: transactions, isLoading, refetch } = useTransactions({
     searchTerm,
@@ -75,8 +78,8 @@ export default function Transazioni() {
     minAmount: minAmount ? parseFloat(minAmount) : undefined,
     maxAmount: maxAmount ? parseFloat(maxAmount) : undefined,
     transactionType,
-    startDate: startDate || contextStartDate,
-    endDate: endDate || contextEndDate,
+    startDate: showAllDates ? undefined : (startDate || undefined),
+    endDate: showAllDates ? undefined : (endDate || undefined),
   });
   
   const activeFiltersCount = [
@@ -87,12 +90,30 @@ export default function Transazioni() {
     endDate,
   ].filter(Boolean).length;
   
+  const applyAdvancedFilters = () => {
+    setMinAmount(tempMinAmount);
+    setMaxAmount(tempMaxAmount);
+    setTransactionType(tempTransactionType);
+    setStartDate(tempStartDate);
+    setEndDate(tempEndDate);
+    if (tempStartDate || tempEndDate) {
+      setShowAllDates(false);
+    }
+    setFiltersOpen(false);
+  };
+
   const clearAdvancedFilters = () => {
+    setTempMinAmount("");
+    setTempMaxAmount("");
+    setTempTransactionType("all");
+    setTempStartDate("");
+    setTempEndDate("");
     setMinAmount("");
     setMaxAmount("");
     setTransactionType("all");
     setStartDate("");
     setEndDate("");
+    setShowAllDates(true);
     setFiltersOpen(false);
   };
 
@@ -252,7 +273,25 @@ export default function Transazioni() {
           </SelectContent>
         </Select>
 
-        <Popover open={filtersOpen} onOpenChange={setFiltersOpen}>
+        {/* "Tutte le date" badge */}
+        {showAllDates && !startDate && !endDate && (
+          <Badge variant="secondary" className="gap-1 py-1.5 px-3">
+            Tutte le date
+            <X className="h-3 w-3 cursor-pointer" onClick={() => setShowAllDates(false)} />
+          </Badge>
+        )}
+
+        <Popover open={filtersOpen} onOpenChange={(open) => {
+          if (open) {
+            // Sync temp state with applied state when opening
+            setTempMinAmount(minAmount);
+            setTempMaxAmount(maxAmount);
+            setTempTransactionType(transactionType);
+            setTempStartDate(startDate);
+            setTempEndDate(endDate);
+          }
+          setFiltersOpen(open);
+        }}>
           <PopoverTrigger asChild>
             <Button variant="outline" className="gap-2 bg-card border-border hover:bg-secondary relative">
               <Filter className="h-4 w-4" />
@@ -279,7 +318,7 @@ export default function Transazioni() {
               {/* Transaction Type */}
               <div className="space-y-2">
                 <Label className="text-sm text-muted-foreground">Tipo transazione</Label>
-                <Select value={transactionType} onValueChange={(v) => setTransactionType(v as typeof transactionType)}>
+                <Select value={tempTransactionType} onValueChange={(v) => setTempTransactionType(v as typeof tempTransactionType)}>
                   <SelectTrigger className="bg-background border-border">
                     <SelectValue />
                   </SelectTrigger>
@@ -298,15 +337,15 @@ export default function Transazioni() {
                   <Input
                     type="number"
                     placeholder="Min"
-                    value={minAmount}
-                    onChange={(e) => setMinAmount(e.target.value)}
+                    value={tempMinAmount}
+                    onChange={(e) => setTempMinAmount(e.target.value)}
                     className="bg-background border-border"
                   />
                   <Input
                     type="number"
                     placeholder="Max"
-                    value={maxAmount}
-                    onChange={(e) => setMaxAmount(e.target.value)}
+                    value={tempMaxAmount}
+                    onChange={(e) => setTempMaxAmount(e.target.value)}
                     className="bg-background border-border"
                   />
                 </div>
@@ -314,18 +353,38 @@ export default function Transazioni() {
               
               {/* Date Range */}
               <div className="space-y-2">
-                <Label className="text-sm text-muted-foreground">Intervallo date</Label>
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm text-muted-foreground">Intervallo date</Label>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 text-xs text-primary"
+                    onClick={() => {
+                      setTempStartDate("");
+                      setTempEndDate("");
+                      setShowAllDates(true);
+                    }}
+                  >
+                    Tutte le date
+                  </Button>
+                </div>
                 <div className="flex gap-2">
                   <Input
                     type="date"
-                    value={startDate}
-                    onChange={(e) => setStartDate(e.target.value)}
+                    value={tempStartDate}
+                    onChange={(e) => {
+                      setTempStartDate(e.target.value);
+                      setShowAllDates(false);
+                    }}
                     className="bg-background border-border text-sm"
                   />
                   <Input
                     type="date"
-                    value={endDate}
-                    onChange={(e) => setEndDate(e.target.value)}
+                    value={tempEndDate}
+                    onChange={(e) => {
+                      setTempEndDate(e.target.value);
+                      setShowAllDates(false);
+                    }}
                     className="bg-background border-border text-sm"
                   />
                 </div>
@@ -334,7 +393,7 @@ export default function Transazioni() {
               <Button 
                 className="w-full" 
                 size="sm"
-                onClick={() => setFiltersOpen(false)}
+                onClick={applyAdvancedFilters}
               >
                 Applica filtri
               </Button>
