@@ -6,6 +6,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
@@ -44,15 +45,16 @@ export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps
   const [budgetAmount, setBudgetAmount] = useState("");
 
   const handleSubmit = async () => {
-    const amount = parseFloat(budgetAmount.replace(/[€.,\s]/g, "")) || 0;
+    const cleanedValue = budgetAmount.replace(/[€.\s]/g, "").replace(",", ".");
+    const amount = parseFloat(cleanedValue) || 0;
 
     if (!budgetName.trim()) {
       toast.error("Inserisci un nome per il budget");
       return;
     }
 
-    if (amount <= 0) {
-      toast.error("Inserisci un importo valido");
+    if (amount === 0) {
+      toast.error("Inserisci un importo valido (positivo per ricavi, negativo per costi)");
       return;
     }
 
@@ -75,9 +77,11 @@ export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps
   };
 
   const formatInputCurrency = (value: string) => {
-    const num = parseFloat(value.replace(/[€.,\s]/g, "")) || 0;
+    const cleaned = value.replace(/[€.\s]/g, "").replace(",", ".");
+    const num = parseFloat(cleaned) || 0;
     if (num === 0) return "";
-    return `€${num.toLocaleString("it-IT")}`;
+    const sign = num < 0 ? "-" : "";
+    return `${sign}€${Math.abs(num).toLocaleString("it-IT")}`;
   };
 
   return (
@@ -88,6 +92,9 @@ export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps
             <CalendarDays className="h-5 w-5 text-primary" />
             Nuovo Budget
           </DialogTitle>
+          <DialogDescription>
+            Inserisci l'importo della spesa (con segno meno) o del ricavo (con segno più) che hai previsto per il tuo budget. In questo modo potrai pianificare i costi fissi o i ricavi futuri per monitorarne l'andamento mese per mese.
+          </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">

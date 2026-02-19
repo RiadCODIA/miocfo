@@ -121,7 +121,18 @@ export function useBudgetVarianceSummary() {
         .select("amount")
         .eq("is_active", true);
 
-      const totalBudget = budgets?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
+      if (!budgets || budgets.length === 0) {
+        return {
+          positiveVariance: 0,
+          negativeVariance: 0,
+          netVariance: 0,
+          positiveMonths: 0,
+          negativeMonths: 0,
+          variancePercent: 0,
+        };
+      }
+
+      const totalBudget = budgets.reduce((sum, b) => sum + Number(b.amount), 0);
       const totalActual = transactions?.reduce((sum, tx) => sum + Number(tx.amount), 0) || 0;
 
       const netVariance = totalActual - totalBudget;

@@ -3,6 +3,7 @@ import { Plus, Save, TrendingUp, TrendingDown } from "lucide-react";
 import { CreateBudgetModal } from "@/components/budget/CreateBudgetModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -12,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 import { cn } from "@/lib/utils";
 import { useBudgets, useBudgetComparison, useBudgetVarianceSummary, useUpdateBudget } from "@/hooks/useBudgets";
 import { toast } from "sonner";
@@ -65,18 +66,27 @@ export default function BudgetPrevisioni() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Budget & Previsioni</h1>
           <p className="text-muted-foreground mt-1">
-            Pianificazione finanziaria futura
+            Pianifica un budget di costi e ricavi e verifica gli scostamenti sul consuntivo
           </p>
         </div>
         <div className="flex gap-2">
-          <Button 
-            variant="outline" 
-            className="gap-2 bg-card border-border hover:bg-secondary"
-            onClick={() => setCreateModalOpen(true)}
-          >
-            <Plus className="h-4 w-4" />
-            Inserisci Budget
-          </Button>
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button 
+                  variant="outline" 
+                  className="gap-2 bg-card border-border hover:bg-secondary"
+                  onClick={() => setCreateModalOpen(true)}
+                >
+                  <Plus className="h-4 w-4" />
+                  Inserisci Budget
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs text-center">
+                <p>Inserisci l'importo della spesa (con segno meno) o del ricavo (con segno più) che hai previsto per il tuo budget.</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
           <Button 
             className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
             disabled={!hasChanges || updateBudget.isPending}
@@ -188,7 +198,7 @@ export default function BudgetPrevisioni() {
                   axisLine={false}
                   tickFormatter={(value) => `€${(value / 1000).toFixed(0)}k`}
                 />
-                <Tooltip
+                <RechartsTooltip
                   contentStyle={{
                     backgroundColor: "hsl(222 47% 14%)",
                     border: "1px solid hsl(222 47% 22%)",
