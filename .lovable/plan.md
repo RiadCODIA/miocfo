@@ -1,53 +1,41 @@
 
 
-# Fix Fatture - Invoice Processing Speed and Matching Crash
+# Fatture Page - Subtitle Fix and Supplier Summary Repositioning
 
-## Issue 1: Manual Matching Crashes with "Unable to save match"
+## Change 1: Update Subtitle
 
-**Root cause**: In `handleConfirmMatch` (line 223) and `handleAutoMatch` (line 276), the code updates a column called `match_status` -- but this column does NOT exist in the `invoices` table. The correct column is `payment_status`.
+The current subtitle at line 502 reads "Carica e gestisci le fatture ricevute" (only received invoices). It will be changed to cover both received and issued invoices:
 
+**"Carica e gestisci le fatture ricevute ed emesse"**
+
+**File**: `src/pages/Fatture.tsx` (line 502)
+
+---
+
+## Change 2: Move Supplier Summary to Bottom + Add Filter
+
+Currently the "Riepilogo per Fornitore" card sits between the stats cards and the upload zone (lines 624-653). It needs to:
+
+1. **Move to the bottom** of the page, after the Invoice Table
+2. **Rename** to "Riepilogo per Fornitore / Cliente" since it covers both invoice types
+3. **Add a filter dropdown** allowing the user to choose between:
+   - "Tutti" (all suppliers/customers)
+   - Individual supplier/customer names from the invoice data
+4. **Show all entries** (remove the `.slice(0, 5)` limit), filtered by the selected value
+
+The summary will dynamically group by `vendor_name` for expense invoices and `client_name` for income invoices (already stored in the `supplier` field of the transformed invoice).
+
+### New Layout Order
+
+```text
+1. Header + subtitle
+2. Upload progress bar (when active)
+3. Stats cards (4 KPIs)
+4. Upload Zone
+5. Invoice Table
+6. Supplier/Customer Summary (with filter) <-- moved here
+7. Modals
 ```
-// Current (BROKEN):
-.update({ match_status: 'matched', matched_transaction_id: transactionId })
-
-// Fix:
-.update({ payment_status: 'matched', matched_transaction_id: transactionId })
-```
-
-Same fix needed in `handleAutoMatch` at line 276.
-
-**File**: `src/pages/Fatture.tsx` (lines 223-224 and 276-277)
-
-## Issue 2: Invoices Stuck as "Pending" - Slow Processing for Bulk Uploads
-
-**Root cause**: The upload flow processes files **sequentially** in a `for` loop (line 106). For 100-200 invoices, each file triggers an individual AI extraction call, making the total time extremely long (potentially minutes or timeouts).
-
-**Fix**: Process files in **parallel batches** of 5 at a time. This keeps things fast without overwhelming the AI gateway with too many simultaneous requests.
-
-**File**: `src/pages/Fatture.tsx` (lines 106-146)
-
-Current sequential loop:
-```
-for (const file of files) {
-  // upload + process one at a time
-}
-```
-
-Replace with parallel batch processing:
-```
-const BATCH_SIZE = 5;
-for (let i = 0; i < files.length; i += BATCH_SIZE) {
-  const batch = files.slice(i, i + BATCH_SIZE);
-  const batchResults = await Promise.allSettled(
-    batch.map(async (file) => {
-      // upload + process
-    })
-  );
-  // collect results, continue with next batch
-}
-```
-
-Also add a progress indicator showing "Processing X of Y files..." so users know the system is working.
 
 ---
 
@@ -55,23 +43,12 @@ Also add a progress indicator showing "Processing X of Y files..." so users know
 
 | File | Changes |
 |------|---------|
-| `src/pages/Fatture.tsx` | Fix `match_status` to `payment_status` in two places; add parallel batch upload processing with progress feedback |
+| `src/pages/Fatture.tsx` | Update subtitle text; move Supplier Summary card after InvoiceTable; add a `Select` dropdown to filter by specific supplier/customer; remove 5-item limit; rename section title |
 
 ## Technical Details
 
-### Matching fix (two locations)
-
-**handleConfirmMatch** (line 223):
-- Change `match_status: 'matched'` to `payment_status: 'matched'`
-
-**handleAutoMatch** (line 276):
-- Change `match_status: 'matched'` to `payment_status: 'matched'`
-
-### Batch upload processing
-
-- Split files into batches of 5
-- Use `Promise.allSettled` for each batch so one failure doesn't stop the rest
-- Add a progress state variable to show "Elaborazione 15 di 200 fatture..."
-- Show a toast with progress updates during processing
-- Collect errors and report them at the end ("195 processed, 5 failed")
+- Add state: `const [supplierFilter, setSupplierFilter] = useState<string>("all")`
+- Build full supplier list from `supplierSummary` keys for the dropdown options
+- Filter `topSuppliers` by selected value (or show all if "all")
+- The dropdown will be placed inline next to the section title
 
