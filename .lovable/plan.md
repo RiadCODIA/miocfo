@@ -1,122 +1,81 @@
 
+# Fix Budget & Previsioni - 4 Issues
 
-# Fix Area Economica - Income Statement & Invoice Intelligence
+## Issue 1: Wrong Subtitle
+**File**: `src/pages/BudgetPrevisioni.tsx` (line 68-69)
 
-## Problems Found
+Current: "Pianificazione finanziaria futura"
+Replace with: "Pianifica un budget di costi e ricavi e verifica gli scostamenti sul consuntivo"
 
-### 1. Income statement shows zero data (critical bug)
-The `useContoEconomico` hook queries invoices with `invoice_type = "emessa"` (issued) and `invoice_type = "ricevuta"` (received), but ALL invoices in the database are stored as `"passive"`. This means the income statement table always shows empty/zero values.
+## Issue 2: Page Crash on Budget Entry
 
-### 2. Bank transactions should NOT be in the income statement
-The hook currently fetches `bank_transactions` and mixes them into revenue and costs. The user explicitly wants the income statement to be based ONLY on invoices.
+Two problems found:
 
-### 3. VAT and taxable amounts are always 0
-The AI extraction prompt in `process-invoice` only extracts the total amount. It does not extract the taxable base (imponibile) and VAT amount separately, so `vat_amount` is always 0 in the database.
+**A) DialogFooter ref warning** (`src/components/ui/dialog.tsx` line 59-61): `DialogFooter` is a plain function component, but Radix Dialog tries to pass a ref to it. This triggers a React warning that can cascade into rendering issues with the ErrorBoundary.
 
-### 4. AI cannot distinguish issued vs received invoices
-The current extraction prompt only asks for supplier name and amount. It does not analyze sender vs recipient headers to determine if the invoice was issued (emessa/active) or received (ricevuta/passive). Currently everything is hardcoded as `"passive"`.
+Fix: Wrap `DialogFooter` with `React.forwardRef`.
 
-### 5. Scadenzario and Previsioni tabs are duplicates
-The user confirms these are copies of the Scadenzario and Budget & Previsioni pages already accessible from the sidebar. They should be removed from Area Economica.
+**B) Negative amounts rejected** (`src/components/budget/CreateBudgetModal.tsx` line 54): The validation `amount <= 0` blocks negative values, so users cannot enter costs (which should use a minus sign per the user's requirement). Also, the `formatInputCurrency` function strips the minus sign.
 
----
+Fix: Allow negative amounts in validation (check `amount === 0` instead) and preserve the minus sign in formatting.
 
-## Solution
+**C) Missing DialogDescription** (console warning): The modal has no `DialogDescription`, causing Radix to throw an accessibility warning that may contribute to instability.
 
-### Phase 1: Upgrade AI Invoice Extraction (`supabase/functions/process-invoice/index.ts`)
+Fix: Add a `DialogDescription` with the tutorial text (solves issue 3 simultaneously).
 
-Enhance the AI prompt to extract:
-- **Invoice direction**: Determine if the logged-in user/company is the SENDER or RECIPIENT (emessa vs ricevuta)
-- **Taxable amount** (imponibile): The base amount before VAT
-- **VAT amount**: The actual VAT amount on the invoice
-- **VAT rate**: The percentage applied (4%, 10%, 22%, exempt, etc.)
-- **Invoice subject/category**: What the invoice is for (goods, services, consulting, transport, maintenance, insurance, etc.)
-- **Sender and recipient names**: Both parties on the invoice
+## Issue 3: Tutorial Text for "Inserisci Budget"
 
-Update the database insert to populate:
-- `invoice_type`: `"emessa"` or `"ricevuta"` (instead of always `"passive"`)
-- `vat_amount`: Actual extracted VAT
-- `amount`: Taxable base (imponibile)
-- `total_amount`: Grand total including VAT
-- `vendor_name`: The supplier (if ricevuta) or blank
-- `client_name`: The client (if emessa) or blank
-- `extracted_data`: Store full breakdown including VAT rate, subject, sender/recipient
+Add the tutorial text in two places:
+- **Tooltip on the button** (hover): Short summary of the functionality
+- **DialogDescription in the modal**: Full text: "Enter the expense amount (with a minus sign) or revenue amount (with a plus sign) you've forecasted for your budget. This way, you can plan your fixed costs or future revenues to monitor their performance from month to month." (translated to Italian for UI consistency)
 
-### Phase 2: Fix Income Statement Hook (`src/hooks/useContoEconomico.ts`)
+## Issue 4: Variance Numbers Without Budget
 
-- Query invoices with `invoice_type = "emessa"` for revenue and `invoice_type = "ricevuta"` for costs (these will now match after the AI extraction fix)
-- **Remove** all bank transaction fetching and aggregation
-- Remove `ricaviMovimenti`, `costiMovimentiPerCategoria`, `costiMovimentiTotali`, `movimentiCategoryNames` from the returned data
-- Use `amount` (taxable/imponibile) for income statement rows
-- Use `vat_amount` for the IVA section
+**File**: `src/hooks/useBudgets.ts`
 
-### Phase 3: Simplify Income Statement UI (`src/components/area-economica/ContoEconomicoTab.tsx`)
+The `useBudgetVarianceSummary` and `useBudgetComparison` hooks fetch `bank_transactions` regardless of whether any budgets exist. When `totalBudget = 0`, the variance becomes the raw transaction total, which is meaningless.
 
-- Remove all "Ricavi da movimenti bancari" and "Costi da movimenti bancari" rows
-- Remove the `hasMovimenti` logic
-- Update description text: "Analisi economica mensile basata su fatture emesse e ricevute"
-- Keep revenue from issued invoices, costs from received invoices, personnel costs, IVA section
+Fix: If no active budgets exist, return zeroed-out variance data instead of comparing transactions against nothing. The comparison chart already handles this correctly (shows "Nessun dato di confronto" when empty), but the variance summary cards need the same guard.
 
-### Phase 4: Remove duplicate tabs (`src/pages/AreaEconomica.tsx`)
+## Files to Modify
 
-- Remove the "Scadenzario Clienti/Fornitori" tab
-- Remove the "Previsioni" tab
-- Area Economica will only contain the "Conto Economico" tab (can remove the tab wrapper entirely and just render ContoEconomicoTab directly)
-- Delete imports for `ScadenzarioTab` and `PrevisioniTab`
-
----
+| File | Changes |
+|------|---------|
+| `src/pages/BudgetPrevisioni.tsx` | Update subtitle; add Tooltip around "Inserisci Budget" button |
+| `src/components/budget/CreateBudgetModal.tsx` | Fix negative amount validation; add DialogDescription with tutorial text; fix formatInputCurrency for negative values |
+| `src/components/ui/dialog.tsx` | Wrap DialogFooter with React.forwardRef to fix ref warning |
+| `src/hooks/useBudgets.ts` | Guard variance summary to return zeros when no budgets exist |
 
 ## Technical Details
 
-### Updated AI Prompt (process-invoice)
-
-The new prompt will instruct the AI to return:
-
+### DialogFooter fix (dialog.tsx)
 ```text
-{
-  "invoice_number": "...",
-  "invoice_date": "YYYY-MM-DD",
-  "sender_name": "Company that ISSUED the invoice",
-  "recipient_name": "Company that RECEIVED the invoice",
-  "invoice_direction": "emessa" or "ricevuta",
-  "subject": "goods/services/consulting/transport/etc.",
-  "taxable_amount": 1000.00,
-  "vat_rate": 22,
-  "vat_amount": 220.00,
-  "total_amount": 1220.00
-}
+// Before:
+const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (...)
+
+// After:
+const DialogFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
+  ({ className, ...props }, ref) => (
+    <div ref={ref} className={...} {...props} />
+  )
+);
+DialogFooter.displayName = "DialogFooter";
 ```
 
-Since the system cannot know who the logged-in user's company is at extraction time, the default will remain `"ricevuta"` (received invoice), as most uploaded invoices are from suppliers. Users can manually change the type in the Fatture page if needed.
+### Amount validation fix (CreateBudgetModal.tsx)
+```text
+// Before: rejects negative (costs)
+if (amount <= 0) { toast.error("Inserisci un importo valido"); return; }
 
-However, the prompt will be enhanced to detect patterns:
-- If the invoice has "FATTURA DI VENDITA", "Fattura emessa", or the user's company appears as sender, mark as `"emessa"`
-- Otherwise default to `"ricevuta"`
+// After: only rejects zero
+if (amount === 0) { toast.error("Inserisci un importo valido (positivo per ricavi, negativo per costi)"); return; }
+```
 
-### Database field mapping
-
-| Extracted Field | DB Column | Notes |
-|---|---|---|
-| taxable_amount | amount | Was previously total, now imponibile |
-| vat_amount | vat_amount | Was always 0, now actual VAT |
-| total_amount | total_amount | Grand total with VAT |
-| invoice_direction | invoice_type | "emessa" or "ricevuta" instead of "passive" |
-| sender_name | vendor_name (if ricevuta) or client_name (if emessa) | Contextual mapping |
-| subject | extracted_data.subject | Stored in JSONB for categorization |
-
-### Files to modify
-
-| File | Change |
-|---|---|
-| `supabase/functions/process-invoice/index.ts` | Enhanced AI prompt with VAT, direction, subject extraction; updated DB insert logic |
-| `src/hooks/useContoEconomico.ts` | Remove bank transactions; keep invoice-only aggregation |
-| `src/components/area-economica/ContoEconomicoTab.tsx` | Remove bank transaction rows; simplify UI |
-| `src/pages/AreaEconomica.tsx` | Remove Scadenzario and Previsioni tabs; render ContoEconomicoTab directly |
-
-### Impact on existing data
-
-The 7 existing invoices all have `invoice_type = "passive"` and `vat_amount = 0`. After the fix:
-- New uploads will have correct `invoice_type` and `vat_amount`
-- Existing invoices can be reprocessed using the existing "Riprocessa" button in the Fatture page, which will re-run AI extraction with the updated prompt
-- Until reprocessed, existing invoices won't appear in the income statement (since they have `invoice_type = "passive"`, not `"emessa"` or `"ricevuta"`)
-
+### Variance guard (useBudgets.ts)
+```text
+// Early return if no budgets
+const totalBudget = budgets?.reduce(...) || 0;
+if (!budgets || budgets.length === 0) {
+  return { positiveVariance: 0, negativeVariance: 0, netVariance: 0, positiveMonths: 0, negativeMonths: 0, variancePercent: 0 };
+}
+```
