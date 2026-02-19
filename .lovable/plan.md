@@ -1,33 +1,29 @@
 
 
-# Replace all remaining "Finexa" references with "mioCFO"
+# Flussi di Cassa -- Semplificare i KPI
 
-## Overview
+## Cosa cambia
 
-There are still 4 frontend files and 1 edge function containing "Finexa" references. The migration file is historical and won't be changed.
+Rimuovere le card KPI "Costi Operativi" e "Incidenza Costi" (che appartengono all'area economica) e sostituirle con "Totale Incassi" e "Totale Pagamenti" del periodo. La riga KPI diventa:
 
-## Changes
+1. **Flusso di Cassa** -- saldo totale conti bancari (rimane com'e)
+2. **Totale Incassi** -- somma incassi nel periodo selezionato
+3. **Totale Pagamenti** -- somma pagamenti nel periodo selezionato
+4. **Margine Operativo** -- percentuale margine (rimane com'e)
 
-### 1. `src/pages/DashboardSuperAdmin.tsx`
-- "Panoramica globale della piattaforma Finexa" -> "Panoramica globale della piattaforma mioCFO"
+## Dettaglio tecnico
 
-### 2. `src/components/landing/SocialProofSection.tsx`
-- Two testimonials mentioning "Finexa" -> replace with "mioCFO"
+### `src/pages/FlussiCassa.tsx`
+- Rimuovere la card "Incidenza Costi" (riga 83-89)
+- Rimuovere la card "Costi Operativi" (riga 90-96)
+- Aggiungere card "Totale Incassi" con icona ArrowUpRight, variante success, valore da `kpis.totaleIncassi`
+- Aggiungere card "Totale Pagamenti" con icona ArrowDownRight, variante destructive, valore da `kpis.totalePagamenti`
 
-### 3. `src/components/landing/HowItWorks.tsx`
-- "Configurare Finexa e veloce..." -> "Configurare mioCFO e veloce..."
+### `src/hooks/useCashFlowData.ts`
+- Rimuovere `breakEvenPoint` e `incidenzaCosti` dall'interfaccia `CashFlowKPIs`
+- Aggiungere `totaleIncassi` e `totalePagamenti` all'interfaccia
+- Nella funzione `useCashFlowKPIs`, restituire `currentIncassi` e `currentPagamenti` direttamente
 
-### 4. `src/components/landing/FeaturesSection.tsx`
-- "Finexa integra tutti gli strumenti..." -> "mioCFO integra tutti gli strumenti..."
-
-### 5. `supabase/functions/send-alert-email/index.ts`
-- Email sender: `Finexa <alerts@finexa.app>` -> `mioCFO <alerts@finexa.app>` (domain stays as-is since it's the actual email domain)
-- Email header: "Finexa Alert" -> "mioCFO Alert"
-- Link URL: `finexa.app/alert` -> `miocfo.lovable.app/alert`
-- Footer: "Finexa - Gestione Finanziaria Intelligente" -> "mioCFO - Gestione Finanziaria Intelligente"
-
-### Not changed
-- `supabase/migrations/` -- historical SQL migration, already applied, changing it has no effect
-
-## Total: 5 files, simple text replacements
+### Layout KPI (3 colonne anziche 4)
+- Cambiare la griglia da `lg:grid-cols-4` a `lg:grid-cols-3` se si decide di avere solo 3 card, oppure mantenere 4 con Margine Operativo
 
