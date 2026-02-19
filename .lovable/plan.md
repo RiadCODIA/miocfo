@@ -1,106 +1,88 @@
 
 
-# KPI & Report - Revisione Completa
+# Fix: Pagina Notifiche vuota - Generazione e visualizzazione alert
 
-## Panoramica delle modifiche
+## Problema identificato
 
-La pagina KPI & Report necessita di tre modifiche principali: target KPI personalizzabili dall'utente, sostituzione del ROI con il ROS basato su fatture, e sostituzione dell'export CSV con un sommario AI inline + download PDF.
+La pagina "Notifiche" e sempre vuota per tre motivi principali:
 
----
+1. **Colonne sbagliate nella edge function**: La funzione `check-alerts` usa nomi di colonne che non esistono nella tabella `alerts` (es. `alert_type`, `description`, `priority`, `status` invece di `type`, `message`, `severity`, `is_read`). Ogni insert fallisce silenziosamente.
 
-## Cambiamento 1: Target KPI personalizzabili dall'utente
+2. **Mancanza di `user_id`**: La funzione non imposta il `user_id` sugli alert creati. Anche se l'insert riuscisse, la policy RLS (`auth.uid() = user_id`) impedirebbe all'utente di vederli.
 
-Attualmente i target sono valori fissi nel codice (es. ROI 15%, DSO 45 giorni, ecc.). L'utente deve poterli modificare.
-
-### Approccio
-- Creare una nuova tabella `kpi_targets` in Supabase con colonne: `id`, `user_id`, `kpi_id` (text), `target_value` (numeric), `created_at`, `updated_at`
-- Abilitare RLS per user_id
-- Aggiungere un pulsante "Modifica Target" nella pagina che apre un modal/dialog
-- Nel dialog, ogni KPI mostra il suo target attuale con un campo input editabile
-- Al salvataggio, i valori vengono scritti in `kpi_targets`
-- Il hook `useKPIData` legge i target dal database anziche usare valori hardcoded
-
-### Nuova tabella (migrazione SQL)
-```
-kpi_targets:
-  - id: uuid PK
-  - user_id: uuid (auth.uid())
-  - kpi_id: text (es. "ros", "dso", "current_ratio", ecc.)
-  - target_value: numeric
-  - created_at, updated_at: timestamptz
-  - UNIQUE(user_id, kpi_id)
-```
+3. **Nessun trigger automatico**: La funzione non viene mai invocata -- non c'e cron, ne chiamata dal frontend. Gli alert non vengono mai generati.
 
 ---
 
-## Cambiamento 2: Sostituire ROI con ROS (Return on Sales)
+## Soluzione
 
-### Formula ROS
-`ROS = EBITDA / Ricavi Totali x 100`
+### 1. Correggere la edge function `check-alerts`
 
-Dove:
-- **Ricavi Totali** = somma degli `amount` delle fatture emesse (`invoice_type = 'emessa'`) nel periodo
-- **EBITDA** = Ricavi Totali - Costi Totali (somma `amount` fatture ricevute `invoice_type = 'ricevuta'`)
+Allineare i nomi delle colonne con lo schema reale della tabella `alerts`:
 
-Questo corrisponde esattamente al calcolo gia presente nel Conto Economico (`useContoEconomico`), quindi utilizzeremo lo stesso approccio ma nel hook `useKPIData`.
+| Usato nella function | Colonna reale |
+|---|---|
+| `alert_type` | `type` |
+| `description` | `message` |
+| `priority` | `severity` (con mapping: high->error, medium->warning, low->info) |
+| `status: "active"` | `is_read: false` |
 
-### Modifiche nel hook `useKPIData`
-- Rimuovere il calcolo ROI basato su transazioni bancarie
-- Aggiungere query per fatture emesse e ricevute del mese corrente e precedente
-- Calcolare EBITDA = Ricavi (fatture emesse) - Costi (fatture ricevute)
-- Calcolare ROS = (EBITDA / Ricavi) x 100
-- Il KPI si chiamera "ROS (Return on Sales)" con valore in percentuale
-- Target di default: 10% (modificabile dall'utente tramite la nuova tabella)
+Aggiungere il parametro `user_id` a ogni insert.
 
----
+Modificare la funzione per accettare un `userId` nel body della request e usarlo per:
+- Filtrare deadlines/budgets/bank_accounts di quell'utente
+- Inserire gli alert con quel `user_id`
 
-## Cambiamento 3: Sommario AI inline + Download PDF (al posto del CSV)
+### 2. Aggiungere generazione automatica al caricamento della pagina
 
-### Nuovo flusso
-1. Sotto le card dei KPI, viene mostrato automaticamente un breve **sommario testuale** generato dall'AI (2-3 frasi) che riassume lo stato dei KPI
-2. Il pulsante "Analisi AI" resta e apre il report dettagliato completo (come adesso)
-3. Il blocco "Esporta Report" in basso viene sostituito: invece di scaricare un CSV, il pulsante diventa **"Scarica PDF"** e genera un PDF della schermata dell'analisi AI con header mioCFO (logo)
-4. Il pulsante "Scarica PDF" e disponibile solo dopo aver generato l'analisi AI
+Nel hook `useAlerts`, aggiungere una chiamata automatica alla edge function `check-alerts` quando la pagina viene caricata. Questo garantisce che gli alert vengano generati/aggiornati ogni volta che l'utente visita la pagina Notifiche.
 
-### Implementazione sommario AI
-- Quando i KPI sono caricati, viene fatta una chiamata alla edge function `analyze-kpi` con un parametro `mode: "summary"` che restituisce solo 2-3 frasi di sommario
-- Il sommario viene mostrato in un box sotto le card KPI
-- L'edge function `analyze-kpi` verra aggiornata per supportare il parametro `mode`
+Usare una mutation con `useEffect` che:
+- Invia il `userId` dell'utente loggato
+- Invalida la query degli alert dopo il completamento
+- Non blocca il rendering della pagina (eseguita in background)
 
-### Implementazione PDF
-- Utilizzare l'API nativa del browser `window.print()` con un'area stampabile dedicata, oppure una libreria leggera
-- L'approccio piu semplice e robusto: creare una funzione che apre una finestra di stampa con il contenuto dell'analisi AI formattato, includendo l'header con il logo mioCFO
-- L'utente puo scegliere "Salva come PDF" dal dialog di stampa del browser
-- Il contenuto stampabile include: logo mioCFO, data, tutti i KPI con target, e il report AI completo
+### 3. Correggere il controllo duplicati
+
+Anche la query di verifica duplicati usa colonne sbagliate. Allinearla con le colonne reali (`type`, `is_read`, `title`).
 
 ---
 
-## Riepilogo file da modificare
+## File da modificare
 
 | File | Modifiche |
-|------|-----------|
-| `src/hooks/useKPIData.ts` | Sostituire ROI con ROS basato su fatture; leggere target da tabella `kpi_targets`; aggiungere hook `useKPITargets` e `useUpdateKPITarget` |
-| `src/pages/KPIReport.tsx` | Aggiungere modal modifica target; sommario AI inline sotto i KPI; sostituire export CSV con "Scarica PDF"; funzione di generazione PDF con header mioCFO |
-| `supabase/functions/analyze-kpi/index.ts` | Aggiungere supporto `mode: "summary"` per generare solo 2-3 frasi di sommario |
-| Migrazione SQL | Creare tabella `kpi_targets` con RLS |
+|---|---|
+| `supabase/functions/check-alerts/index.ts` | Correggere nomi colonne, aggiungere user_id, filtrare dati per utente |
+| `src/hooks/useAlerts.ts` | Aggiungere hook `useGenerateAlerts` che chiama la edge function al mount |
+| `src/pages/AlertNotifiche.tsx` | Integrare `useGenerateAlerts` per trigger automatico |
 
 ---
 
 ## Dettagli tecnici
 
-### Struttura KPI aggiornata
+### Mapping colonne nella edge function
+
 ```text
-1. ROS (Return on Sales) - basato su fatture emesse/ricevute
-2. DSO (Days Sales Outstanding) - invariato
-3. Current Ratio - invariato
-4. Margine Operativo - invariato
-5. Burn Rate Mensile - invariato
-6. Crescita Ricavi - invariato
+Insert attuale (SBAGLIATO):
+  { type, alert_type, title, description, priority, status }
+
+Insert corretto:
+  { type, title, message, severity, is_read: false, user_id }
+
+severity mapping:
+  "high"   -> "error"
+  "medium" -> "warning"  
+  "low"    -> "info"
 ```
 
-### PDF Generation (approccio window.print)
-- Creare un div nascosto con id `printable-report`
-- Al click su "Scarica PDF": popolare il div con header (logo + data), KPI cards, e analisi AI
-- Chiamare `window.print()` con media query CSS `@media print` che mostra solo quel div
-- Il risultato e un PDF pulito con branding mioCFO
+### Hook useGenerateAlerts
+
+Nuova funzione nel file `useAlerts.ts` che:
+- Chiama `supabase.functions.invoke("check-alerts", { body: { userId } })`
+- Viene eseguita una volta al mount della pagina AlertNotifiche
+- Al completamento invalida le query `["alerts"]` e `["alerts-count"]`
+
+### Filtri per utente nella edge function
+
+Ogni query nella edge function (deadlines, budgets, bank_accounts) verra filtrata con `.eq("user_id", userId)` per generare alert specifici per quell'utente.
 
