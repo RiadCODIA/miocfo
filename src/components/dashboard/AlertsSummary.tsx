@@ -23,7 +23,7 @@ export function AlertsSummary() {
   const displayAlerts = alerts?.slice(0, 3) || [];
 
   return (
-    <div className="glass rounded-xl p-5 opacity-0 animate-fade-in" style={{ animationDelay: "400ms" }}>
+    <div className="glass rounded-xl p-5">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="text-lg font-semibold text-foreground">Alert Attivi</h3>
@@ -55,13 +55,13 @@ export function AlertsSummary() {
               <div
                 key={alert.id}
                 className={cn(
-                  "flex items-start gap-3 p-3 rounded-lg border transition-all hover:bg-secondary/50 cursor-pointer opacity-0 animate-slide-in",
+                  "flex items-start gap-3 p-3 rounded-lg border transition-all hover:bg-secondary/50 cursor-pointer",
                   alert.type === "warning" && "border-warning/20 bg-warning/5",
                   alert.type === "info" && "border-primary/20 bg-primary/5",
                   alert.type === "success" && "border-success/20 bg-success/5",
                   alert.type === "error" && "border-destructive/20 bg-destructive/5"
                 )}
-                style={{ animationDelay: `${500 + index * 100}ms` }}
+                
               >
                 <Icon
                   className={cn(

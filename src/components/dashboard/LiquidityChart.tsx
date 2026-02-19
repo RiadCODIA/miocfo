@@ -8,7 +8,7 @@ export function LiquidityChart() {
   const hasData = data && data.length > 0 && data.some(d => d.saldo > 0);
 
   return (
-    <div className="glass rounded-xl p-5 opacity-0 animate-fade-in" style={{ animationDelay: "200ms" }}>
+    <div className="glass rounded-xl p-5">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-foreground">Andamento Liquidità</h3>
         <p className="text-sm text-muted-foreground">Saldi giornalieri del periodo</p>

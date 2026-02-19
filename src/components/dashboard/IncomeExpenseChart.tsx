@@ -8,7 +8,7 @@ export function IncomeExpenseChart() {
   const hasData = data && data.length > 0 && data.some(d => d.incassi > 0 || d.pagamenti > 0);
 
   return (
-    <div className="glass rounded-xl p-5 opacity-0 animate-fade-in" style={{ animationDelay: "300ms" }}>
+    <div className="glass rounded-xl p-5">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-foreground">Incassi vs Pagamenti</h3>
         <p className="text-sm text-muted-foreground">Confronto mensile ultimi 6 mesi</p>

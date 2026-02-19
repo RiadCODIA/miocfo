@@ -9,7 +9,7 @@ export default function Configurazione() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="opacity-0 animate-fade-in">
+      <div>
         <h1 className="text-2xl font-bold text-foreground">Configurazione Aziendale</h1>
         <p className="text-muted-foreground mt-1">
           Gestisci categorie, aliquote IVA, centri di incasso e dipendenti
@@ -17,7 +17,7 @@ export default function Configurazione() {
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="revenue-centers" className="opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
+      <Tabs defaultValue="revenue-centers">
         <TabsList className="grid w-full grid-cols-4 bg-secondary/50">
           <TabsTrigger value="revenue-centers" className="gap-2 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">
             <Building2 className="h-4 w-4" />

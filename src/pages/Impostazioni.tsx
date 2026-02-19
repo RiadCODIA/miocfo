@@ -108,7 +108,7 @@ export default function Impostazioni() {
   return (
     <div className="space-y-6 max-w-3xl">
       {/* Header */}
-      <div className="opacity-0 animate-fade-in">
+      <div>
         <h1 className="text-2xl font-bold text-foreground">Impostazioni Personali</h1>
         <p className="text-muted-foreground mt-1">
           Personalizzazione esperienza utente
@@ -116,7 +116,7 @@ export default function Impostazioni() {
       </div>
 
       {/* Profile Section */}
-      <div className="glass rounded-xl p-6 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
+      <div className="glass rounded-xl p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 rounded-lg bg-primary/10">
             <User className="h-5 w-5 text-primary" />
@@ -200,7 +200,7 @@ export default function Impostazioni() {
       </div>
 
       {/* Preferences Section */}
-      <div className="glass rounded-xl p-6 opacity-0 animate-fade-in" style={{ animationDelay: "200ms" }}>
+      <div className="glass rounded-xl p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 rounded-lg bg-primary/10">
             <Globe className="h-5 w-5 text-primary" />
@@ -244,7 +244,7 @@ export default function Impostazioni() {
       </div>
 
       {/* Notifications Section */}
-      <div className="glass rounded-xl p-6 opacity-0 animate-fade-in" style={{ animationDelay: "300ms" }}>
+      <div className="glass rounded-xl p-6">
         <div className="flex items-center gap-3 mb-6">
           <div className="p-2 rounded-lg bg-primary/10">
             <Bell className="h-5 w-5 text-primary" />
@@ -370,7 +370,7 @@ export default function Impostazioni() {
       </div>
 
       {/* Save Button */}
-      <div className="flex justify-end opacity-0 animate-fade-in" style={{ animationDelay: "400ms" }}>
+      <div className="flex justify-end">
         <Button 
           className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
           onClick={handleSave}
