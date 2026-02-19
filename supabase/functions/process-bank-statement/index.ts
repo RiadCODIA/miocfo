@@ -302,7 +302,14 @@ async function extractStatementWithAI(
     throw new Error("LOVABLE_API_KEY non configurato");
   }
 
-  const base64Data = btoa(String.fromCharCode(...fileData));
+  // Convert in chunks to avoid "Maximum call stack size exceeded"
+  let binary = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < fileData.length; i += chunkSize) {
+    const chunk = fileData.subarray(i, i + chunkSize);
+    binary += String.fromCharCode(...chunk);
+  }
+  const base64Data = btoa(binary);
 
   const systemPrompt = `Sei un esperto nell'analisi di estratti conto bancari. Analizza il documento fornito ed estrai tutte le informazioni in formato JSON strutturato.
 
