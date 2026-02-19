@@ -10,8 +10,14 @@ const corsHeaders = {
 interface ExtractedInvoice {
   invoice_number: string;
   invoice_date: string;
-  supplier_name: string;
-  amount: number;
+  sender_name: string;
+  recipient_name: string;
+  invoice_direction: "emessa" | "ricevuta";
+  subject: string;
+  taxable_amount: number;
+  vat_rate: number;
+  vat_amount: number;
+  total_amount: number;
   currency: string;
   raw_data?: Record<string, unknown>;
 }
@@ -25,14 +31,17 @@ function parseCSV(content: string): ExtractedInvoice[] {
 
   const header = lines[0].toLowerCase().split(',').map(h => h.trim());
   
-  // Map common header names
   const colMap: Record<string, number> = {};
   header.forEach((h, i) => {
     if (h.includes('numero') || h.includes('invoice') || h.includes('fattura')) colMap.invoice_number = i;
     if (h.includes('data') || h.includes('date')) colMap.date = i;
     if (h.includes('fornitore') || h.includes('supplier') || h.includes('vendor')) colMap.supplier = i;
+    if (h.includes('cliente') || h.includes('client') || h.includes('customer')) colMap.client = i;
     if (h.includes('importo') || h.includes('amount') || h.includes('totale') || h.includes('total')) colMap.amount = i;
+    if (h.includes('imponibile') || h.includes('taxable')) colMap.taxable = i;
+    if (h.includes('iva') || h.includes('vat')) colMap.vat = i;
     if (h.includes('valuta') || h.includes('currency')) colMap.currency = i;
+    if (h.includes('tipo') || h.includes('type') || h.includes('direzione')) colMap.type = i;
   });
 
   const invoices: ExtractedInvoice[] = [];
@@ -44,16 +53,33 @@ function parseCSV(content: string): ExtractedInvoice[] {
     const values = line.split(',').map(v => v.trim().replace(/^["']|["']$/g, ''));
     
     try {
+      const totalAmount = parseFloat(values[colMap.amount]?.replace(/[^\d.,\-]/g, '').replace(',', '.')) || 0;
+      const taxableAmount = colMap.taxable !== undefined 
+        ? parseFloat(values[colMap.taxable]?.replace(/[^\d.,\-]/g, '').replace(',', '.')) || totalAmount
+        : totalAmount;
+      const vatAmount = colMap.vat !== undefined
+        ? parseFloat(values[colMap.vat]?.replace(/[^\d.,\-]/g, '').replace(',', '.')) || 0
+        : 0;
+
+      const typeVal = colMap.type !== undefined ? values[colMap.type]?.toLowerCase() : '';
+      const isEmessa = typeVal.includes('emess') || typeVal.includes('vendita') || typeVal.includes('attiv');
+
       const invoice: ExtractedInvoice = {
         invoice_number: values[colMap.invoice_number] || `INV-${Date.now()}-${i}`,
         invoice_date: values[colMap.date] || new Date().toISOString().split('T')[0],
-        supplier_name: values[colMap.supplier] || 'Fornitore Sconosciuto',
-        amount: parseFloat(values[colMap.amount]?.replace(/[^\d.,\-]/g, '').replace(',', '.')) || 0,
+        sender_name: isEmessa ? '' : (values[colMap.supplier] || 'Fornitore Sconosciuto'),
+        recipient_name: isEmessa ? (values[colMap.client] || '') : '',
+        invoice_direction: isEmessa ? 'emessa' : 'ricevuta',
+        subject: '',
+        taxable_amount: taxableAmount,
+        vat_rate: taxableAmount > 0 ? Math.round((vatAmount / taxableAmount) * 100) : 0,
+        vat_amount: vatAmount,
+        total_amount: totalAmount,
         currency: values[colMap.currency] || 'EUR',
         raw_data: { csv_row: i, original_values: values }
       };
 
-      if (invoice.amount > 0) {
+      if (invoice.total_amount > 0) {
         invoices.push(invoice);
       }
     } catch (e: unknown) {
@@ -66,7 +92,7 @@ function parseCSV(content: string): ExtractedInvoice[] {
 }
 
 // Extract invoice data using Lovable AI Gateway (Google Gemini)
-async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string): Promise<ExtractedInvoice> {
+async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, userCompanyName?: string): Promise<ExtractedInvoice> {
   const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
   
   if (!lovableApiKey) {
@@ -74,24 +100,32 @@ async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string): Pro
     return {
       invoice_number: `PDF-${Date.now()}`,
       invoice_date: new Date().toISOString().split('T')[0],
-      supplier_name: 'Fornitore Sconosciuto',
-      amount: 0,
+      sender_name: 'Fornitore Sconosciuto',
+      recipient_name: '',
+      invoice_direction: 'ricevuta',
+      subject: '',
+      taxable_amount: 0,
+      vat_rate: 0,
+      vat_amount: 0,
+      total_amount: 0,
       currency: 'EUR',
       raw_data: { note: 'Estrazione AI non disponibile - chiave API mancante', file_name: fileName }
     };
   }
 
   try {
-    // Convert file to base64
     const base64Data = btoa(String.fromCharCode(...fileData));
     
-    // Determine MIME type
     const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
     const mimeType = isImage 
       ? `image/${fileName.split('.').pop()?.toLowerCase().replace('jpg', 'jpeg')}`
       : 'application/pdf';
     
     console.log(`Calling Lovable AI Gateway for: ${fileName} (${mimeType})`);
+
+    const companyContext = userCompanyName 
+      ? `\nL'azienda dell'utente si chiama: "${userCompanyName}". Se questa azienda appare come MITTENTE/EMITTENTE della fattura, allora la fattura è "emessa". Se appare come DESTINATARIO/CLIENTE, allora è "ricevuta".`
+      : '';
 
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
@@ -106,21 +140,35 @@ async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string): Pro
           content: [
             {
               type: 'text',
-              text: `Sei un esperto di contabilità italiana. Analizza questa fattura ed estrai i seguenti dati in formato JSON:
+              text: `Sei un ESPERTO CONTABILE italiano. Analizza questa fattura come farebbe un commercialista esperto ed estrai TUTTI i seguenti dati in formato JSON:
 
 {
-  "invoice_number": "numero fattura completo (es. 94/2025, FA-123, etc.)",
-  "supplier_name": "ragione sociale completa del fornitore che EMETTE la fattura",
-  "amount": importo totale documento IVA INCLUSA (solo numero decimale, es. 1250.50),
-  "invoice_date": "data fattura in formato YYYY-MM-DD"
+  "invoice_number": "numero fattura completo (es. 94/2025, FA-123)",
+  "invoice_date": "data fattura in formato YYYY-MM-DD",
+  "sender_name": "ragione sociale completa di chi EMETTE la fattura (mittente, in alto nel documento)",
+  "recipient_name": "ragione sociale completa di chi RICEVE la fattura (destinatario, spesso dopo 'Spett.le', 'Destinatario', 'Cliente')",
+  "invoice_direction": "emessa" oppure "ricevuta" (vedi istruzioni sotto),
+  "subject": "categoria merceologica della fattura: goods, services, consulting, transport, maintenance, insurance, fees, utilities, rent, other",
+  "taxable_amount": importo IMPONIBILE (base imponibile PRIMA dell'IVA, solo numero decimale),
+  "vat_rate": aliquota IVA applicata (es. 22, 10, 4, 0 per esente),
+  "vat_amount": importo IVA in euro (solo numero decimale),
+  "total_amount": TOTALE DOCUMENTO IVA inclusa (solo numero decimale)
 }
 
-ISTRUZIONI CRITICHE:
-1. Il FORNITORE è chi EMETTE la fattura (cerca "Da:", intestazione, logo azienda in alto)
-2. L'IMPORTO deve essere il TOTALE DOCUMENTO o TOTALE FATTURA (inclusa IVA), NON l'imponibile
-3. Se vedi "Totale documento", "Totale fattura", "Importo totale" usa quello
-4. La DATA è la data di emissione della fattura
-5. Rispondi SOLO con il JSON valido, nessun altro testo o spiegazione`
+ISTRUZIONI CRITICHE PER UN CONTABILE ESPERTO:
+
+1. INTESTAZIONE MITTENTE: Chi emette la fattura è tipicamente in alto a sinistra o in alto nel documento, con logo, P.IVA, indirizzo.
+2. INTESTAZIONE DESTINATARIO: Chi riceve la fattura è dopo "Spett.le", "Destinatario", "Cliente", "Fattura a", solitamente più in basso o a destra.
+3. DIREZIONE FATTURA:
+   - Se trovi "FATTURA DI VENDITA", "Fattura emessa", "Nota di credito emessa" → "emessa"
+   - Se trovi "FATTURA DI ACQUISTO", "Fattura ricevuta" → "ricevuta"  
+   - Di DEFAULT, se non riesci a determinare la direzione, usa "ricevuta" (fattura passiva/di acquisto)
+   ${companyContext}
+4. IMPONIBILE vs TOTALE: Distingui SEMPRE tra imponibile (base imponibile) e totale documento. Se c'è un solo importo senza distinzione IVA, metti lo stesso valore sia in taxable_amount che total_amount e vat_amount=0.
+5. ALIQUOTA IVA: Identifica la percentuale IVA (4%, 10%, 22%, esente, ecc.). Se ci sono più aliquote, usa quella predominante.
+6. OGGETTO: Determina la categoria della fattura dal contenuto (descrizione righe, oggetto).
+
+Rispondi SOLO con il JSON valido, nessun altro testo o spiegazione.`
             },
             {
               type: 'image_url',
@@ -149,7 +197,7 @@ ISTRUZIONI CRITICHE:
     
     console.log('Lovable AI raw response:', content);
     
-    // Parse JSON from response (handle markdown code blocks)
+    // Parse JSON from response
     let jsonStr = content.trim();
     if (jsonStr.startsWith('```json')) {
       jsonStr = jsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '');
@@ -157,7 +205,6 @@ ISTRUZIONI CRITICHE:
       jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
     }
     
-    // Try to extract JSON from response if it contains other text
     const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       jsonStr = jsonMatch[0];
@@ -167,38 +214,52 @@ ISTRUZIONI CRITICHE:
     
     console.log('Extracted data:', JSON.stringify(extracted));
 
-    // Validate and clean extracted data
-    const invoiceNumber = extracted.invoice_number || `PDF-${Date.now()}`;
-    const supplierName = extracted.supplier_name || 'Fornitore Sconosciuto';
-    let amount = 0;
-    
-    if (typeof extracted.amount === 'number') {
-      amount = extracted.amount;
-    } else if (typeof extracted.amount === 'string') {
-      // Handle Italian number format (1.234,56)
-      amount = parseFloat(extracted.amount.replace(/\./g, '').replace(',', '.')) || 0;
-    }
-    
-    const invoiceDate = extracted.invoice_date || new Date().toISOString().split('T')[0];
+    // Parse numbers safely
+    const parseNum = (val: unknown): number => {
+      if (typeof val === 'number') return val;
+      if (typeof val === 'string') return parseFloat(val.replace(/\./g, '').replace(',', '.')) || 0;
+      return 0;
+    };
 
-    console.log(`Successfully extracted: ${supplierName}, €${amount}, ${invoiceNumber}, ${invoiceDate}`);
+    const taxableAmount = parseNum(extracted.taxable_amount);
+    const vatAmount = parseNum(extracted.vat_amount);
+    const totalAmount = parseNum(extracted.total_amount);
+    const vatRate = parseNum(extracted.vat_rate);
 
-    return {
-      invoice_number: invoiceNumber,
-      invoice_date: invoiceDate,
-      supplier_name: supplierName,
-      amount: amount,
+    const direction = (extracted.invoice_direction === 'emessa') ? 'emessa' : 'ricevuta';
+
+    const result_invoice: ExtractedInvoice = {
+      invoice_number: extracted.invoice_number || `PDF-${Date.now()}`,
+      invoice_date: extracted.invoice_date || new Date().toISOString().split('T')[0],
+      sender_name: extracted.sender_name || 'Sconosciuto',
+      recipient_name: extracted.recipient_name || '',
+      invoice_direction: direction,
+      subject: extracted.subject || 'other',
+      taxable_amount: taxableAmount,
+      vat_rate: vatRate,
+      vat_amount: vatAmount,
+      total_amount: totalAmount || (taxableAmount + vatAmount),
       currency: 'EUR',
       raw_data: { ai_extracted: true, original_filename: fileName, ai_response: extracted }
     };
+
+    console.log(`Successfully extracted: direction=${direction}, sender=${result_invoice.sender_name}, recipient=${result_invoice.recipient_name}, taxable=€${taxableAmount}, VAT=€${vatAmount} (${vatRate}%), total=€${result_invoice.total_amount}`);
+
+    return result_invoice;
 
   } catch (error) {
     console.error('AI extraction error:', error);
     return {
       invoice_number: `PDF-${Date.now()}`,
       invoice_date: new Date().toISOString().split('T')[0],
-      supplier_name: 'Fornitore Sconosciuto',
-      amount: 0,
+      sender_name: 'Fornitore Sconosciuto',
+      recipient_name: '',
+      invoice_direction: 'ricevuta',
+      subject: 'other',
+      taxable_amount: 0,
+      vat_rate: 0,
+      vat_amount: 0,
+      total_amount: 0,
       currency: 'EUR',
       raw_data: { 
         error: error instanceof Error ? error.message : 'Unknown error', 
@@ -210,7 +271,6 @@ ISTRUZIONI CRITICHE:
 }
 
 serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -220,13 +280,11 @@ serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY')!;
 
-    // Create admin client for operations
     const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Try to get user from auth header (optional)
     const authHeader = req.headers.get('Authorization');
-    // UUID valido per utenti demo (non autenticati)
     let userId = '00000000-0000-0000-0000-000000000000';
+    let userCompanyName: string | undefined;
 
     if (authHeader) {
       const supabaseUser = createClient(supabaseUrl, supabaseAnonKey, {
@@ -235,6 +293,15 @@ serve(async (req) => {
       const { data: { user } } = await supabaseUser.auth.getUser();
       if (user) {
         userId = user.id;
+        // Try to get user's company name for better direction detection
+        const { data: profile } = await supabaseAdmin
+          .from('profiles')
+          .select('company_name')
+          .eq('id', user.id)
+          .single();
+        if (profile?.company_name) {
+          userCompanyName = profile.company_name;
+        }
       }
     }
 
@@ -248,11 +315,10 @@ serve(async (req) => {
     if (contentType.includes('application/json')) {
       const body = await req.json();
       
-      // REPROCESS MODE: riprocessa una fattura esistente
+      // REPROCESS MODE
       if (body.reprocessInvoiceId) {
         console.log(`Reprocessing invoice: ${body.reprocessInvoiceId}`);
         
-        // Fetch existing invoice from database
         const { data: existingInvoice, error: fetchError } = await supabaseAdmin
           .from('invoices')
           .select('*')
@@ -267,8 +333,17 @@ serve(async (req) => {
         fileName = existingInvoice.file_name;
         fileType = existingInvoice.file_type || fileName.split('.').pop()?.toLowerCase() || '';
         userId = existingInvoice.user_id;
+
+        // Get user company name for reprocessing
+        const { data: profile } = await supabaseAdmin
+          .from('profiles')
+          .select('company_name')
+          .eq('id', userId)
+          .single();
+        if (profile?.company_name) {
+          userCompanyName = profile.company_name;
+        }
         
-        // Download file from storage
         const { data: downloadData, error: downloadError } = await supabaseAdmin.storage
           .from('invoices')
           .download(storagePath);
@@ -279,20 +354,28 @@ serve(async (req) => {
 
         fileData = new Uint8Array(await downloadData.arrayBuffer());
         
-        // Process with AI
         console.log(`Reprocessing file: ${fileName}`);
-        const extracted = await extractInvoiceWithAI(fileData, fileName);
+        const extracted = await extractInvoiceWithAI(fileData, fileName, userCompanyName);
         
-        // Update the existing invoice record
+        // Update the existing invoice record with full data
         const { error: updateError } = await supabaseAdmin
           .from('invoices')
           .update({
             invoice_number: extracted.invoice_number,
             invoice_date: extracted.invoice_date,
-            vendor_name: extracted.supplier_name,
-            amount: extracted.amount,
-            total_amount: extracted.amount,
-            extracted_data: extracted.raw_data as Record<string, unknown> ?? {},
+            vendor_name: extracted.invoice_direction === 'ricevuta' ? extracted.sender_name : null,
+            client_name: extracted.invoice_direction === 'emessa' ? extracted.recipient_name : null,
+            amount: extracted.taxable_amount,
+            vat_amount: extracted.vat_amount,
+            total_amount: extracted.total_amount,
+            invoice_type: extracted.invoice_direction,
+            extracted_data: {
+              ...(extracted.raw_data as Record<string, unknown> ?? {}),
+              sender_name: extracted.sender_name,
+              recipient_name: extracted.recipient_name,
+              subject: extracted.subject,
+              vat_rate: extracted.vat_rate,
+            },
             updated_at: new Date().toISOString()
           })
           .eq('id', body.reprocessInvoiceId);
@@ -301,7 +384,7 @@ serve(async (req) => {
           throw new Error(`Errore aggiornamento: ${updateError.message}`);
         }
         
-        console.log(`Reprocessed: ${extracted.supplier_name}, €${extracted.amount}`);
+        console.log(`Reprocessed: direction=${extracted.invoice_direction}, taxable=€${extracted.taxable_amount}, VAT=€${extracted.vat_amount}`);
         
         return new Response(
           JSON.stringify({
@@ -313,7 +396,7 @@ serve(async (req) => {
         );
       }
       
-      // NEW UPLOAD flow: file already uploaded to storage
+      // NEW UPLOAD flow
       storagePath = body.storagePath;
       fileName = body.fileName;
       fileType = body.fileType || fileName.split('.').pop()?.toLowerCase() || '';
@@ -321,7 +404,6 @@ serve(async (req) => {
 
       console.log(`Processing file from storage: ${storagePath}`);
 
-      // Download file from storage
       const { data: downloadData, error: downloadError } = await supabaseAdmin.storage
         .from('invoices')
         .download(storagePath);
@@ -333,7 +415,6 @@ serve(async (req) => {
       fileData = new Uint8Array(await downloadData.arrayBuffer());
 
     } else if (contentType.includes('multipart/form-data')) {
-      // Legacy flow: file sent via FormData
       const formData = await req.formData();
       const files = formData.getAll('files') as File[];
 
@@ -347,7 +428,6 @@ serve(async (req) => {
       const fileBuffer = await file.arrayBuffer();
       fileData = new Uint8Array(fileBuffer);
 
-      // Upload file to storage
       storagePath = `${userId}/${Date.now()}-${fileName}`;
       const { error: uploadError } = await supabaseAdmin.storage
         .from('invoices')
@@ -368,41 +448,41 @@ serve(async (req) => {
     let extractedInvoices: ExtractedInvoice[] = [];
 
     if (fileType === 'text/csv' || fileName.endsWith('.csv')) {
-      // CSV file
       const content = new TextDecoder().decode(fileData);
       extractedInvoices = parseCSV(content);
       console.log(`Extracted ${extractedInvoices.length} invoices from CSV`);
 
     } else if (fileType === 'application/zip' || fileName.endsWith('.zip')) {
-      // ZIP file - process as container (AI extraction not available for ZIP)
       extractedInvoices = [{
         invoice_number: `ZIP-${Date.now()}`,
         invoice_date: new Date().toISOString().split('T')[0],
-        supplier_name: fileName.replace('.zip', '').replace(/[_-]/g, ' '),
-        amount: 0,
+        sender_name: fileName.replace('.zip', '').replace(/[_-]/g, ' '),
+        recipient_name: '',
+        invoice_direction: 'ricevuta',
+        subject: 'other',
+        taxable_amount: 0,
+        vat_rate: 0,
+        vat_amount: 0,
+        total_amount: 0,
         currency: 'EUR',
         raw_data: { note: 'Archivio ZIP caricato - estrazione automatica non disponibile', file_size: fileData.length }
       }];
-      console.log('ZIP file detected - basic processing');
 
     } else if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
-      // PDF file - use AI extraction
       console.log('Using AI extraction for PDF');
-      const invoice = await extractInvoiceWithAI(fileData, fileName);
+      const invoice = await extractInvoiceWithAI(fileData, fileName, userCompanyName);
       extractedInvoices = [invoice];
-      console.log(`AI extracted: ${invoice.supplier_name}, €${invoice.amount}`);
 
     } else if (fileType?.startsWith('image/') || /\.(jpg|jpeg|png|gif)$/i.test(fileName)) {
-      // Image file - use AI extraction
       console.log('Using AI extraction for image');
-      const invoice = await extractInvoiceWithAI(fileData, fileName);
+      const invoice = await extractInvoiceWithAI(fileData, fileName, userCompanyName);
       extractedInvoices = [invoice];
 
     } else {
       throw new Error(`Tipo file non supportato: ${fileType}`);
     }
 
-    // Insert invoices into database
+    // Insert invoices into database with full extracted data
     for (const invoice of extractedInvoices) {
       const { error: insertError } = await supabaseAdmin
         .from('invoices')
@@ -410,13 +490,21 @@ serve(async (req) => {
           user_id: userId,
           invoice_number: invoice.invoice_number,
           invoice_date: invoice.invoice_date,
-          vendor_name: invoice.supplier_name,
-          amount: invoice.amount,
-          total_amount: invoice.amount,
-          invoice_type: 'passive',
+          vendor_name: invoice.invoice_direction === 'ricevuta' ? invoice.sender_name : null,
+          client_name: invoice.invoice_direction === 'emessa' ? invoice.recipient_name : null,
+          amount: invoice.taxable_amount,
+          vat_amount: invoice.vat_amount,
+          total_amount: invoice.total_amount,
+          invoice_type: invoice.invoice_direction,
           file_name: fileName,
           file_path: storagePath,
-          extracted_data: invoice.raw_data as Record<string, unknown> ?? {},
+          extracted_data: {
+            ...(invoice.raw_data as Record<string, unknown> ?? {}),
+            sender_name: invoice.sender_name,
+            recipient_name: invoice.recipient_name,
+            subject: invoice.subject,
+            vat_rate: invoice.vat_rate,
+          },
           payment_status: 'pending'
         });
 

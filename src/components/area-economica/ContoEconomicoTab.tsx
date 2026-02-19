@@ -67,13 +67,9 @@ export function ContoEconomicoTab() {
       const primoMargine: MonthlyData = {};
       const personnelTotal: MonthlyData = {};
       const ebitda: MonthlyData = {};
-      const ricaviTotaliMensili: MonthlyData = {};
-      const costiTotaliMensili: MonthlyData = {};
 
       for (let m = 0; m < 12; m++) {
-        ricaviTotaliMensili[m] = (data.ricavi[m] || 0) + (data.ricaviMovimenti[m] || 0);
-        costiTotaliMensili[m] = (data.costiTotali[m] || 0) + (data.costiMovimentiTotali[m] || 0);
-        primoMargine[m] = ricaviTotaliMensili[m] - costiTotaliMensili[m];
+        primoMargine[m] = (data.ricavi[m] || 0) - (data.costiTotali[m] || 0);
         personnelTotal[m] = (personnel.salari[m] || 0) + (personnel.amministratore[m] || 0);
         ebitda[m] = primoMargine[m] - personnelTotal[m];
       }
@@ -82,17 +78,14 @@ export function ContoEconomicoTab() {
         year,
         data: {
           ricaviFatture: data.ricavi,
-          ricaviMovimenti: data.ricaviMovimenti,
-          ricaviTotali: ricaviTotaliMensili,
+          ricaviTotali: data.ricavi,
           costiFatture: data.costiTotali,
-          costiMovimenti: data.costiMovimentiTotali,
-          costiTotali: costiTotaliMensili,
+          costiTotali: data.costiTotali,
           costiPerCategoria: data.costiPerCategoria,
-          costiMovimentiPerCategoria: data.costiMovimentiPerCategoria,
           primoMargine,
           costiPersonale: personnelTotal,
           ebitda,
-          mesi: ["GEN", "FEB", "MAR", "APR", "MAG", "GIU", "LUG", "AGO", "SET", "OTT", "NOV", "DIC"],
+          mesi: MONTHS,
         },
       };
 
@@ -121,24 +114,19 @@ export function ContoEconomicoTab() {
 
   if (!data) return null;
 
-  const { ricavi, costiPerCategoria, costiTotali, ivaRicavi, ivaCosti, categoryNames, ricaviMovimenti, costiMovimentiPerCategoria, costiMovimentiTotali, movimentiCategoryNames } = data;
+  const { ricavi, costiPerCategoria, costiTotali, ivaRicavi, ivaCosti, categoryNames } = data;
 
-  // Compute combined totals
-  const ricaviTotaliCombinati: MonthlyData = {};
-  const costiTotaliCombinati: MonthlyData = {};
   const primoMargine: MonthlyData = {};
   const personnelTotal: MonthlyData = {};
   const ebitda: MonthlyData = {};
 
   for (let m = 0; m < 12; m++) {
-    ricaviTotaliCombinati[m] = (ricavi[m] || 0) + (ricaviMovimenti[m] || 0);
-    costiTotaliCombinati[m] = (costiTotali[m] || 0) + (costiMovimentiTotali[m] || 0);
-    primoMargine[m] = ricaviTotaliCombinati[m] - costiTotaliCombinati[m];
+    primoMargine[m] = (ricavi[m] || 0) - (costiTotali[m] || 0);
     personnelTotal[m] = (personnel.salari[m] || 0) + (personnel.amministratore[m] || 0);
     ebitda[m] = primoMargine[m] - personnelTotal[m];
   }
 
-  const totalRicavi = sumMonthly(ricaviTotaliCombinati);
+  const totalRicavi = sumMonthly(ricavi);
 
   const renderValueCell = (value: number, isTotal = false, isNegative = false) => (
     <td className={cn(
@@ -179,7 +167,7 @@ export function ContoEconomicoTab() {
       <td className="py-1 px-3 text-[10px] text-muted-foreground italic sticky left-0 bg-card z-10">{label}</td>
       {Array.from({ length: 12 }).map((_, m) => (
         <td key={m} className="py-1 px-2 text-right text-[10px] text-muted-foreground italic">
-          {fmtPerc(((monthlyData[m] || 0) / (ricaviTotaliCombinati[m] || 1)) * 100)}
+          {fmtPerc(((monthlyData[m] || 0) / (ricavi[m] || 1)) * 100)}
         </td>
       ))}
       <td className="py-1 px-2 text-right text-[10px] text-muted-foreground italic">
@@ -208,13 +196,11 @@ export function ContoEconomicoTab() {
     </tr>
   );
 
-  const hasMovimenti = sumMonthly(ricaviMovimenti) > 0 || sumMonthly(costiMovimentiTotali) > 0;
-
   return (
     <div className="space-y-6">
       {/* Year selector + AI button */}
       <div className="flex items-center justify-between flex-wrap gap-3">
-        <p className="text-sm text-muted-foreground">Analisi economica mensile basata su fatture e movimenti bancari</p>
+        <p className="text-sm text-muted-foreground">Analisi economica mensile basata su fatture emesse e ricevute</p>
         <div className="flex items-center gap-3">
           <Button
             variant="outline"
@@ -256,33 +242,18 @@ export function ContoEconomicoTab() {
               </tr>
             </thead>
             <tbody>
-              {/* RICAVI DA FATTURE */}
+              {/* RICAVI */}
               {renderRow("Ricavi da fatture emesse", ricavi, { bold: false })}
+              {renderRow("TOTALE RICAVI", ricavi, { bold: true, highlight: true })}
 
-              {/* RICAVI DA MOVIMENTI */}
-              {hasMovimenti && renderRow("Ricavi da movimenti bancari", ricaviMovimenti, { bold: false })}
-
-              {/* TOTALE RICAVI */}
-              {renderRow("TOTALE RICAVI", ricaviTotaliCombinati, { bold: true, highlight: true })}
-
-              {/* COSTI DA FATTURE header */}
+              {/* COSTI */}
               <tr className="bg-muted/20">
-                <td colSpan={14} className="py-1.5 px-3 text-xs font-bold text-muted-foreground uppercase">Costi da fatture</td>
+                <td colSpan={14} className="py-1.5 px-3 text-xs font-bold text-muted-foreground uppercase">Costi da fatture ricevute</td>
               </tr>
               {categoryNames.map((cat) => renderRow(cat, costiPerCategoria[cat] || {}, { indent: true }))}
 
-              {/* COSTI DA MOVIMENTI */}
-              {hasMovimenti && movimentiCategoryNames.length > 0 && (
-                <>
-                  <tr className="bg-muted/20">
-                    <td colSpan={14} className="py-1.5 px-3 text-xs font-bold text-muted-foreground uppercase">Costi da movimenti bancari</td>
-                  </tr>
-                  {movimentiCategoryNames.map((cat) => renderRow(cat, costiMovimentiPerCategoria[cat] || {}, { indent: true }))}
-                </>
-              )}
-
               {/* TOTALE COSTI */}
-              {renderRow("TOTALE COSTI", costiTotaliCombinati, { bold: true, highlight: true })}
+              {renderRow("TOTALE COSTI", costiTotali, { bold: true, highlight: true })}
 
               {/* PRIMO MARGINE */}
               {renderRow("PRIMO MARGINE", primoMargine, { bold: true, highlight: true, negative: true })}

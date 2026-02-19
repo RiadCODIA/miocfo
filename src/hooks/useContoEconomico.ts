@@ -30,11 +30,6 @@ export interface ContoEconomicoData {
   ivaRicavi: MonthlyData;
   ivaCosti: MonthlyData;
   categoryNames: string[];
-  // Bank transactions data
-  ricaviMovimenti: MonthlyData;
-  costiMovimentiPerCategoria: Record<string, MonthlyData>;
-  costiMovimentiTotali: MonthlyData;
-  movimentiCategoryNames: string[];
 }
 
 export function useContoEconomico(year: number) {
@@ -44,7 +39,7 @@ export function useContoEconomico(year: number) {
       const startDate = `${year}-01-01`;
       const endDate = `${year}-12-31`;
 
-      const [emesseRes, ricevuteRes, categoriesRes, transactionsRes] = await Promise.all([
+      const [emesseRes, ricevuteRes, categoriesRes] = await Promise.all([
         supabase
           .from("invoices")
           .select("amount, vat_amount, invoice_date")
@@ -62,23 +57,17 @@ export function useContoEconomico(year: number) {
           .select("id, name")
           .eq("is_active", true)
           .order("sort_order"),
-        supabase
-          .from("bank_transactions")
-          .select("amount, date, ai_category_id")
-          .gte("date", startDate)
-          .lte("date", endDate),
       ]);
 
       if (emesseRes.error) throw emesseRes.error;
       if (ricevuteRes.error) throw ricevuteRes.error;
-      if (transactionsRes.error) throw transactionsRes.error;
 
       const categoryMap: Record<string, string> = {};
       categoriesRes.data?.forEach((c) => {
         categoryMap[c.id] = c.name;
       });
 
-      // Aggregate ricavi by month (invoices)
+      // Aggregate ricavi by month (issued invoices only)
       const ricavi: MonthlyData = {};
       const ivaRicavi: MonthlyData = {};
       emesseRes.data?.forEach((inv) => {
@@ -88,7 +77,7 @@ export function useContoEconomico(year: number) {
         ivaRicavi[month] = (ivaRicavi[month] || 0) + Number(inv.vat_amount || 0);
       });
 
-      // Aggregate costi by category and month (invoices)
+      // Aggregate costi by category and month (received invoices only)
       const costiPerCategoria: Record<string, MonthlyData> = {};
       const ivaCosti: MonthlyData = {};
       
@@ -112,7 +101,7 @@ export function useContoEconomico(year: number) {
         ivaCosti[month] = (ivaCosti[month] || 0) + Number(inv.vat_amount || 0);
       });
 
-      // Calculate totali costi (invoices)
+      // Calculate totali costi
       const costiTotali: MonthlyData = {};
       for (let m = 0; m < 12; m++) {
         let total = 0;
@@ -122,30 +111,6 @@ export function useContoEconomico(year: number) {
         if (total > 0) costiTotali[m] = total;
       }
 
-      // Aggregate bank transactions
-      const ricaviMovimenti: MonthlyData = {};
-      const costiMovimentiPerCategoria: Record<string, MonthlyData> = {};
-      const costiMovimentiTotali: MonthlyData = {};
-      const movCatSet = new Set<string>();
-
-      transactionsRes.data?.forEach((tx) => {
-        if (!tx.date) return;
-        const month = new Date(tx.date).getMonth();
-        const amount = Number(tx.amount);
-
-        if (amount > 0) {
-          ricaviMovimenti[month] = (ricaviMovimenti[month] || 0) + amount;
-        } else {
-          const catName = tx.ai_category_id ? (categoryMap[tx.ai_category_id] || "Non categorizzato") : "Non categorizzato";
-          movCatSet.add(catName);
-          if (!costiMovimentiPerCategoria[catName]) {
-            costiMovimentiPerCategoria[catName] = {};
-          }
-          costiMovimentiPerCategoria[catName][month] = (costiMovimentiPerCategoria[catName][month] || 0) + Math.abs(amount);
-          costiMovimentiTotali[month] = (costiMovimentiTotali[month] || 0) + Math.abs(amount);
-        }
-      });
-
       return {
         ricavi,
         costiPerCategoria,
@@ -153,10 +118,6 @@ export function useContoEconomico(year: number) {
         ivaRicavi,
         ivaCosti,
         categoryNames: COST_CATEGORIES_LABELS,
-        ricaviMovimenti,
-        costiMovimentiPerCategoria,
-        costiMovimentiTotali,
-        movimentiCategoryNames: Array.from(movCatSet).sort(),
       };
     },
   });
