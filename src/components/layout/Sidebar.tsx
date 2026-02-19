@@ -75,7 +75,7 @@ const userNavGroups: NavGroup[] = [
         label: "Area finanziaria",
         items: [
           { id: "flussi_cassa", label: "Flussi di Cassa", icon: TrendingUp, path: "/flussi-cassa" },
-          { id: "transazioni", label: "Movimenti", icon: ArrowLeftRight, path: "/transazioni" },
+          { id: "transazioni", label: "Transazioni", icon: ArrowLeftRight, path: "/transazioni" },
           { id: "conti_bancari", label: "Conti correnti", icon: Landmark, path: "/conti-bancari" },
         ],
       },
