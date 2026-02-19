@@ -176,7 +176,7 @@ export function CostCategoriesManager() {
           </div>
           <div>
             <h3 className="font-semibold text-foreground">Categorie Costi</h3>
-            <p className="text-sm text-muted-foreground">Gestisci categorie costi fissi e variabili</p>
+            <p className="text-sm text-muted-foreground">Voci di spesa per categorizzare transazioni e analisi</p>
           </div>
         </div>
 

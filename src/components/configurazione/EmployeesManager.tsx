@@ -212,7 +212,7 @@ export function EmployeesManager() {
             </div>
             <div>
               <h3 className="font-semibold text-foreground">Gestione Dipendenti</h3>
-              <p className="text-sm text-muted-foreground">Costo azienda annuo → calcolo mensile automatico</p>
+              <p className="text-sm text-muted-foreground">Costo aziendale per conto economico e previsioni di cassa</p>
             </div>
           </div>
 
