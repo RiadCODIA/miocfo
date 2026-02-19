@@ -310,6 +310,19 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`[CheckAlerts] Starting alert check for user ${userId}...`);
 
+    // Clean up legacy alerts without metadata (they lack reference_id for dedup)
+    const { error: cleanupError } = await supabase
+      .from("alerts")
+      .delete()
+      .eq("user_id", userId)
+      .is("metadata", null);
+
+    if (cleanupError) {
+      console.error("[CheckAlerts] Error cleaning up legacy alerts:", cleanupError);
+    } else {
+      console.log("[CheckAlerts] Cleaned up legacy alerts without metadata");
+    }
+
     const [deadlineAlerts, budgetAlerts, liquidityAlerts, invoiceAlerts, syncAlerts] = await Promise.all([
       checkDeadlines(supabase, userId),
       checkBudgets(supabase, userId),

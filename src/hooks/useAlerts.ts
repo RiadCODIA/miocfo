@@ -100,9 +100,10 @@ export function useDeleteAlert() {
 
   return useMutation({
     mutationFn: async (alertId: string) => {
+      // Soft-delete: mark as read so the row stays for dedup checks
       const { error } = await supabase
         .from("alerts")
-        .delete()
+        .update({ is_read: true })
         .eq("id", alertId);
 
       if (error) throw error;
