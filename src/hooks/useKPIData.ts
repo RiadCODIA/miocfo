@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
 
@@ -11,6 +11,8 @@ interface KPIData {
   trend: string;
   categoria: "standard" | "personalizzato";
   progressValue: number;
+  rawValue: number;
+  rawTarget: number;
 }
 
 interface ReportData {
@@ -21,10 +23,66 @@ interface ReportData {
   stato: "completato" | "in elaborazione" | "programmato";
 }
 
-export function useKPIData() {
+const DEFAULT_TARGETS: Record<string, number> = {
+  ros: 10,
+  dso: 45,
+  current_ratio: 1.5,
+  margine_operativo: 28,
+  burn_rate: 60000,
+  revenue_growth: 10,
+};
+
+export function useKPITargets() {
   return useQuery({
-    queryKey: ["kpi-data"],
+    queryKey: ["kpi-targets"],
     queryFn: async () => {
+      const { data } = await supabase
+        .from("kpi_targets")
+        .select("kpi_id, target_value");
+      const map: Record<string, number> = { ...DEFAULT_TARGETS };
+      data?.forEach((row: any) => {
+        map[row.kpi_id] = Number(row.target_value);
+      });
+      return map;
+    },
+  });
+}
+
+export function useUpdateKPITargets() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (targets: Record<string, number>) => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Non autenticato");
+      
+      const rows = Object.entries(targets).map(([kpi_id, target_value]) => ({
+        user_id: user.id,
+        kpi_id,
+        target_value,
+      }));
+
+      for (const row of rows) {
+        const { error } = await supabase
+          .from("kpi_targets")
+          .upsert(row, { onConflict: "user_id,kpi_id" });
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["kpi-targets"] });
+      qc.invalidateQueries({ queryKey: ["kpi-data"] });
+    },
+  });
+}
+
+export function useKPIData() {
+  const { data: targets } = useKPITargets();
+
+  return useQuery({
+    queryKey: ["kpi-data", targets],
+    enabled: !!targets,
+    queryFn: async () => {
+      const t = targets || DEFAULT_TARGETS;
       const now = new Date();
       const currentMonthStart = startOfMonth(now);
       const currentMonthEnd = endOfMonth(now);
@@ -45,7 +103,7 @@ export function useKPIData() {
         .select("balance")
         .eq("is_connected", true);
 
-      // Get invoices for DSO calculation
+      // Get invoices for ROS and DSO
       const { data: invoices } = await supabase
         .from("invoices")
         .select("*")
@@ -60,7 +118,7 @@ export function useKPIData() {
 
       const currentBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0) || 0;
 
-      // Current month calculations
+      // Current month transactions
       const currentMonthTx = transactions?.filter(tx => {
         const txDate = new Date(tx.date);
         return txDate >= currentMonthStart && txDate <= currentMonthEnd;
@@ -70,7 +128,7 @@ export function useKPIData() {
       const currentMonthExpenses = Math.abs(currentMonthTx.filter(tx => tx.amount < 0).reduce((sum, tx) => sum + tx.amount, 0));
       const currentMonthProfit = currentMonthIncome - currentMonthExpenses;
 
-      // Last month calculations
+      // Last month transactions
       const lastMonthTx = transactions?.filter(tx => {
         const txDate = new Date(tx.date);
         return txDate >= lastMonthStart && txDate <= lastMonthEnd;
@@ -80,49 +138,76 @@ export function useKPIData() {
       const lastMonthExpenses = Math.abs(lastMonthTx.filter(tx => tx.amount < 0).reduce((sum, tx) => sum + tx.amount, 0));
       const lastMonthProfit = lastMonthIncome - lastMonthExpenses;
 
-      // Calculate ROI (simplified: profit / total assets * 100)
-      const roi = currentBalance > 0 ? ((currentMonthProfit / currentBalance) * 100) : 0;
-      const lastRoi = currentBalance > 0 ? ((lastMonthProfit / currentBalance) * 100) : 0;
-      const roiTarget = 15;
-      const roiTrend = roi - lastRoi;
+      // ---- ROS (Return on Sales) from invoices ----
+      const currentMonthInvoices = invoices?.filter(inv => {
+        const d = new Date(inv.invoice_date || "");
+        return d >= currentMonthStart && d <= currentMonthEnd;
+      }) || [];
 
-      // Calculate DSO (Days Sales Outstanding)
+      const lastMonthInvoices = invoices?.filter(inv => {
+        const d = new Date(inv.invoice_date || "");
+        return d >= lastMonthStart && d <= lastMonthEnd;
+      }) || [];
+
+      const ricaviCurrent = currentMonthInvoices
+        .filter(inv => inv.invoice_type === "emessa" || inv.invoice_type === "income")
+        .reduce((s, inv) => s + Number(inv.amount), 0);
+      const costiCurrent = currentMonthInvoices
+        .filter(inv => inv.invoice_type === "ricevuta" || inv.invoice_type === "expense")
+        .reduce((s, inv) => s + Number(inv.amount), 0);
+      const ebitdaCurrent = ricaviCurrent - costiCurrent;
+      const ros = ricaviCurrent > 0 ? (ebitdaCurrent / ricaviCurrent) * 100 : 0;
+
+      const ricaviLast = lastMonthInvoices
+        .filter(inv => inv.invoice_type === "emessa" || inv.invoice_type === "income")
+        .reduce((s, inv) => s + Number(inv.amount), 0);
+      const costiLast = lastMonthInvoices
+        .filter(inv => inv.invoice_type === "ricevuta" || inv.invoice_type === "expense")
+        .reduce((s, inv) => s + Number(inv.amount), 0);
+      const ebitdaLast = ricaviLast - costiLast;
+      const rosLast = ricaviLast > 0 ? (ebitdaLast / ricaviLast) * 100 : 0;
+      const rosTrend = ros - rosLast;
+      const rosTarget = t.ros;
+
+      // DSO
       const pendingReceivables = deadlines?.reduce((sum, d) => sum + Number(d.amount), 0) || 0;
       const avgDailyRevenue = currentMonthIncome / 30 || 1;
       const dso = Math.round(pendingReceivables / avgDailyRevenue);
-      const dsoTarget = 45;
+      const dsoTarget = t.dso;
 
-      // Calculate Current Ratio (current assets / current liabilities)
+      // Current Ratio
       const currentLiabilities = currentMonthExpenses || 1;
       const currentRatio = currentBalance / currentLiabilities;
-      const currentRatioTarget = 1.5;
+      const currentRatioTarget = t.current_ratio;
 
-      // Calculate Operating Margin
+      // Operating Margin
       const operatingMargin = currentMonthIncome > 0 ? ((currentMonthProfit / currentMonthIncome) * 100) : 0;
       const lastOperatingMargin = lastMonthIncome > 0 ? ((lastMonthProfit / lastMonthIncome) * 100) : 0;
-      const operatingMarginTarget = 28;
+      const operatingMarginTarget = t.margine_operativo;
       const operatingMarginTrend = operatingMargin - lastOperatingMargin;
 
-      // Calculate Burn Rate (monthly expenses)
+      // Burn Rate
       const burnRate = currentMonthExpenses;
       const lastBurnRate = lastMonthExpenses;
-      const burnRateTarget = 60000;
+      const burnRateTarget = t.burn_rate;
       const burnRateTrend = burnRate - lastBurnRate;
 
-      // Calculate Revenue Growth
+      // Revenue Growth
       const revenueGrowth = lastMonthIncome > 0 ? ((currentMonthIncome - lastMonthIncome) / lastMonthIncome * 100) : 0;
-      const revenueGrowthTarget = 10;
+      const revenueGrowthTarget = t.revenue_growth;
 
       const kpis: KPIData[] = [
         {
-          id: "roi",
-          nome: "ROI",
-          valore: `${roi.toFixed(1)}%`,
-          target: `${roiTarget}%`,
-          raggiunto: roi >= roiTarget,
-          trend: `${roiTrend >= 0 ? "+" : ""}${roiTrend.toFixed(1)}%`,
+          id: "ros",
+          nome: "ROS (Return on Sales)",
+          valore: `${ros.toFixed(1)}%`,
+          target: `${rosTarget}%`,
+          raggiunto: ros >= rosTarget,
+          trend: `${rosTrend >= 0 ? "+" : ""}${rosTrend.toFixed(1)}%`,
           categoria: "standard",
-          progressValue: Math.min((roi / roiTarget) * 100, 100),
+          progressValue: Math.min((ros / (rosTarget || 1)) * 100, 100),
+          rawValue: ros,
+          rawTarget: rosTarget,
         },
         {
           id: "dso",
@@ -133,6 +218,8 @@ export function useKPIData() {
           trend: `${dso <= dsoTarget ? "-" : "+"}${Math.abs(dso - dsoTarget)} giorni`,
           categoria: "standard",
           progressValue: dso <= dsoTarget ? 100 : Math.max(0, 100 - ((dso - dsoTarget) / dsoTarget) * 100),
+          rawValue: dso,
+          rawTarget: dsoTarget,
         },
         {
           id: "current_ratio",
@@ -143,6 +230,8 @@ export function useKPIData() {
           trend: `${currentRatio >= currentRatioTarget ? "+" : ""}${(currentRatio - currentRatioTarget).toFixed(1)}`,
           categoria: "standard",
           progressValue: Math.min((currentRatio / currentRatioTarget) * 100, 100),
+          rawValue: currentRatio,
+          rawTarget: currentRatioTarget,
         },
         {
           id: "margine_operativo",
@@ -153,6 +242,8 @@ export function useKPIData() {
           trend: `${operatingMarginTrend >= 0 ? "+" : ""}${operatingMarginTrend.toFixed(1)}%`,
           categoria: "standard",
           progressValue: Math.min((operatingMargin / operatingMarginTarget) * 100, 100),
+          rawValue: operatingMargin,
+          rawTarget: operatingMarginTarget,
         },
         {
           id: "burn_rate",
@@ -163,6 +254,8 @@ export function useKPIData() {
           trend: `${burnRateTrend <= 0 ? "" : "+"}${burnRateTrend.toLocaleString("it-IT", { maximumFractionDigits: 0 })}`,
           categoria: "personalizzato",
           progressValue: burnRate <= burnRateTarget ? 100 : Math.max(0, 100 - ((burnRate - burnRateTarget) / burnRateTarget) * 100),
+          rawValue: burnRate,
+          rawTarget: burnRateTarget,
         },
         {
           id: "revenue_growth",
@@ -173,13 +266,13 @@ export function useKPIData() {
           trend: `${revenueGrowth >= 0 ? "+" : ""}${revenueGrowth.toFixed(1)}%`,
           categoria: "personalizzato",
           progressValue: Math.min((revenueGrowth / revenueGrowthTarget) * 100, 100),
+          rawValue: revenueGrowth,
+          rawTarget: revenueGrowthTarget,
         },
       ];
 
-      // Generate dynamic reports based on actual data
+      // Generate dynamic reports
       const reports: ReportData[] = [];
-      
-      // Current month report (in progress)
       reports.push({
         id: `report-${format(now, "yyyy-MM")}`,
         nome: `Report Mensile ${format(now, "MMMM yyyy")}`,
@@ -187,8 +280,6 @@ export function useKPIData() {
         dataCreazione: format(currentMonthStart, "dd/MM/yyyy"),
         stato: "in elaborazione",
       });
-
-      // Last month report (completed)
       reports.push({
         id: `report-${format(subMonths(now, 1), "yyyy-MM")}`,
         nome: `Report Mensile ${format(subMonths(now, 1), "MMMM yyyy")}`,
@@ -196,8 +287,6 @@ export function useKPIData() {
         dataCreazione: format(lastMonthStart, "dd/MM/yyyy"),
         stato: "completato",
       });
-
-      // Two months ago (completed)
       reports.push({
         id: `report-${format(subMonths(now, 2), "yyyy-MM")}`,
         nome: `Report Mensile ${format(subMonths(now, 2), "MMMM yyyy")}`,
@@ -205,8 +294,6 @@ export function useKPIData() {
         dataCreazione: format(startOfMonth(subMonths(now, 2)), "dd/MM/yyyy"),
         stato: "completato",
       });
-
-      // Quarterly report
       const quarter = Math.floor(now.getMonth() / 3) + 1;
       reports.push({
         id: `report-q${quarter}-${now.getFullYear()}`,

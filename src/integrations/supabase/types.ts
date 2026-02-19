@@ -843,6 +843,33 @@ export type Database = {
         }
         Relationships: []
       }
+      kpi_targets: {
+        Row: {
+          created_at: string
+          id: string
+          kpi_id: string
+          target_value: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          kpi_id: string
+          target_value: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          kpi_id?: string
+          target_value?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       notification_preferences: {
         Row: {
           budget_alerts: boolean | null

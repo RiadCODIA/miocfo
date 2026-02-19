@@ -9,11 +9,26 @@ serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { kpis } = await req.json();
+    const { kpis, mode } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
     const kpiSummary = kpis.map((k: any) => `${k.nome}: ${k.valore} (target: ${k.target}, ${k.raggiunto ? "raggiunto" : "non raggiunto"}, trend: ${k.trend})`).join("\n");
+
+    const isSummaryMode = mode === "summary";
+
+    const systemPrompt = isSummaryMode
+      ? `Sei un CFO virtuale esperto. Analizza i KPI finanziari forniti e genera un brevissimo sommario in italiano (2-3 frasi max). Rispondi SOLO con JSON valido (senza markdown): {"summary": "testo del sommario"}`
+      : `Sei un CFO virtuale esperto. Analizza i KPI finanziari forniti e genera un report in italiano. Rispondi SOLO con JSON valido (senza markdown) con questa struttura:
+{
+  "healthScore": number (0-100),
+  "healthLabel": string ("Ottimo"|"Buono"|"Sufficiente"|"Critico"),
+  "summary": string (2-3 frasi di analisi),
+  "marginTrend": string ("positivo"|"negativo"|"stabile"),
+  "criticalAreas": [{"area": string, "description": string, "severity": "alta"|"media"|"bassa"}],
+  "suggestions": [{"title": string, "description": string, "priority": "alta"|"media"|"bassa", "timeline": string}],
+  "forecasts": string (previsione 1-2 frasi)
+}`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -24,22 +39,10 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          {
-            role: "system",
-            content: `Sei un CFO virtuale esperto. Analizza i KPI finanziari forniti e genera un report in italiano. Rispondi SOLO con JSON valido (senza markdown) con questa struttura:
-{
-  "healthScore": number (0-100),
-  "healthLabel": string ("Ottimo"|"Buono"|"Sufficiente"|"Critico"),
-  "summary": string (2-3 frasi di analisi),
-  "marginTrend": string ("positivo"|"negativo"|"stabile"),
-  "criticalAreas": [{"area": string, "description": string, "severity": "alta"|"media"|"bassa"}],
-  "suggestions": [{"title": string, "description": string, "priority": "alta"|"media"|"bassa", "timeline": string}],
-  "forecasts": string (previsione 1-2 frasi)
-}`
-          },
+          { role: "system", content: systemPrompt },
           {
             role: "user",
-            content: `Ecco i KPI attuali della mia azienda:\n\n${kpiSummary}\n\nAnalizza questi dati e genera il report.`
+            content: `Ecco i KPI attuali della mia azienda:\n\n${kpiSummary}\n\nAnalizza questi dati e genera ${isSummaryMode ? "il sommario" : "il report"}.`
           }
         ],
       }),
@@ -64,7 +67,6 @@ serve(async (req) => {
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content;
     
-    // Parse the AI response, stripping markdown code fences if present
     let cleaned = content?.trim() || "{}";
     if (cleaned.startsWith("```")) {
       cleaned = cleaned.replace(/^```(?:json)?\s*/, "").replace(/\s*```$/, "");
