@@ -1,88 +1,90 @@
 
 
-# Fix: Pagina Notifiche vuota - Generazione e visualizzazione alert
+# Fix: Persistenza notifiche e navigazione al click
 
-## Problema identificato
+## Problemi identificati
 
-La pagina "Notifiche" e sempre vuota per tre motivi principali:
+1. **Il filtro "Tipo" non funziona correttamente**: I valori del filtro tipo sono "warning", "error", "info", "success" ma i tipi degli alert nel database sono "scadenza", "budget", "liquidita", "fattura", "sync". Il filtro non corrisponde mai.
 
-1. **Colonne sbagliate nella edge function**: La funzione `check-alerts` usa nomi di colonne che non esistono nella tabella `alerts` (es. `alert_type`, `description`, `priority`, `status` invece di `type`, `message`, `severity`, `is_read`). Ogni insert fallisce silenziosamente.
+2. **Manca la navigazione al click**: Cliccando su una notifica non succede nulla. Serve navigare alla pagina corrispondente (es. Budget -> /budget, Scadenza -> /scadenzario).
 
-2. **Mancanza di `user_id`**: La funzione non imposta il `user_id` sugli alert creati. Anche se l'insert riuscisse, la policy RLS (`auth.uid() = user_id`) impedirebbe all'utente di vederli.
-
-3. **Nessun trigger automatico**: La funzione non viene mai invocata -- non c'e cron, ne chiamata dal frontend. Gli alert non vengono mai generati.
-
----
+3. **Le azioni read/delete funzionano** ma le azioni sono visibili solo per gli alert "Non letti". Dopo aver segnato come letto, scompare il pulsante di eliminazione. Serve mostrare il pulsante di eliminazione anche per gli alert letti.
 
 ## Soluzione
 
-### 1. Correggere la edge function `check-alerts`
+### 1. Correggere il filtro per tipo
 
-Allineare i nomi delle colonne con lo schema reale della tabella `alerts`:
+Cambiare le opzioni del filtro tipo per riflettere i tipi reali degli alert:
 
-| Usato nella function | Colonna reale |
+| Valore filtro | Label |
 |---|---|
-| `alert_type` | `type` |
-| `description` | `message` |
-| `priority` | `severity` (con mapping: high->error, medium->warning, low->info) |
-| `status: "active"` | `is_read: false` |
+| all | Tutti i tipi |
+| budget | Budget |
+| scadenza | Scadenza |
+| liquidita | Liquidita |
+| fattura | Fattura |
+| sync | Sincronizzazione |
 
-Aggiungere il parametro `user_id` a ogni insert.
+### 2. Aggiungere `action_url` alla creazione degli alert
 
-Modificare la funzione per accettare un `userId` nel body della request e usarlo per:
-- Filtrare deadlines/budgets/bank_accounts di quell'utente
-- Inserire gli alert con quel `user_id`
+Nella edge function `check-alerts`, aggiungere il campo `action_url` a ogni alert:
 
-### 2. Aggiungere generazione automatica al caricamento della pagina
+| Tipo alert | URL destinazione |
+|---|---|
+| scadenza | /scadenzario |
+| budget | /budget |
+| liquidita | /flussi-cassa |
+| fattura | /fatture |
+| sync | /conti-bancari |
 
-Nel hook `useAlerts`, aggiungere una chiamata automatica alla edge function `check-alerts` quando la pagina viene caricata. Questo garantisce che gli alert vengano generati/aggiornati ogni volta che l'utente visita la pagina Notifiche.
+### 3. Rendere le righe cliccabili
 
-Usare una mutation con `useEffect` che:
-- Invia il `userId` dell'utente loggato
-- Invalida la query degli alert dopo il completamento
-- Non blocca il rendering della pagina (eseguita in background)
+Nel componente `AlertNotifiche.tsx`:
+- Aggiungere `useNavigate` da react-router-dom
+- Al click sulla riga, se l'alert ha un `actionUrl`, navigare a quella pagina
+- Aggiungere cursore pointer e stile hover per indicare la cliccabilita
+- Segnare automaticamente l'alert come letto al click
 
-### 3. Correggere il controllo duplicati
+### 4. Mostrare il pulsante elimina anche per alert letti
 
-Anche la query di verifica duplicati usa colonne sbagliate. Allinearla con le colonne reali (`type`, `is_read`, `title`).
-
----
+Attualmente il blocco azioni e visibile solo se `!alert.isRead`. Separare la logica: mostrare il check solo per non-letti, ma il pulsante X (elimina) sempre.
 
 ## File da modificare
 
 | File | Modifiche |
 |---|---|
-| `supabase/functions/check-alerts/index.ts` | Correggere nomi colonne, aggiungere user_id, filtrare dati per utente |
-| `src/hooks/useAlerts.ts` | Aggiungere hook `useGenerateAlerts` che chiama la edge function al mount |
-| `src/pages/AlertNotifiche.tsx` | Integrare `useGenerateAlerts` per trigger automatico |
-
----
+| `supabase/functions/check-alerts/index.ts` | Aggiungere `action_url` a ogni `createAlert` |
+| `src/pages/AlertNotifiche.tsx` | Fix filtro tipo, righe cliccabili con navigazione, pulsante elimina sempre visibile |
 
 ## Dettagli tecnici
 
-### Mapping colonne nella edge function
+### Modifica alla funzione `createAlert`
+
+Aggiungere il parametro `action_url` alla firma e all'insert:
 
 ```text
-Insert attuale (SBAGLIATO):
-  { type, alert_type, title, description, priority, status }
-
-Insert corretto:
-  { type, title, message, severity, is_read: false, user_id }
-
-severity mapping:
-  "high"   -> "error"
-  "medium" -> "warning"  
-  "low"    -> "info"
+createAlert(supabase, userId, {
+  type: "budget",
+  title: "...",
+  message: "...",
+  severity: "error",
+  action_url: "/budget"     // <-- nuovo campo
+})
 ```
 
-### Hook useGenerateAlerts
+### Navigazione nel componente
 
-Nuova funzione nel file `useAlerts.ts` che:
-- Chiama `supabase.functions.invoke("check-alerts", { body: { userId } })`
-- Viene eseguita una volta al mount della pagina AlertNotifiche
-- Al completamento invalida le query `["alerts"]` e `["alerts-count"]`
+```text
+const navigate = useNavigate();
 
-### Filtri per utente nella edge function
+// Al click sulla riga:
+onClick={() => {
+  if (!alert.isRead) handleMarkAsRead(alert.id);
+  if (alert.actionUrl) navigate(alert.actionUrl);
+}}
+```
 
-Ogni query nella edge function (deadlines, budgets, bank_accounts) verra filtrata con `.eq("user_id", userId)` per generare alert specifici per quell'utente.
+### Pulsante elimina sempre visibile
+
+Il pulsante Check (segna come letto) viene mostrato solo per alert non letti, mentre il pulsante X (elimina) viene sempre mostrato.
 
