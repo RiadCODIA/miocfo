@@ -1,81 +1,77 @@
 
-# Fix Budget & Previsioni - 4 Issues
 
-## Issue 1: Wrong Subtitle
-**File**: `src/pages/BudgetPrevisioni.tsx` (line 68-69)
+# Fix Fatture - Invoice Processing Speed and Matching Crash
 
-Current: "Pianificazione finanziaria futura"
-Replace with: "Pianifica un budget di costi e ricavi e verifica gli scostamenti sul consuntivo"
+## Issue 1: Manual Matching Crashes with "Unable to save match"
 
-## Issue 2: Page Crash on Budget Entry
+**Root cause**: In `handleConfirmMatch` (line 223) and `handleAutoMatch` (line 276), the code updates a column called `match_status` -- but this column does NOT exist in the `invoices` table. The correct column is `payment_status`.
 
-Two problems found:
+```
+// Current (BROKEN):
+.update({ match_status: 'matched', matched_transaction_id: transactionId })
 
-**A) DialogFooter ref warning** (`src/components/ui/dialog.tsx` line 59-61): `DialogFooter` is a plain function component, but Radix Dialog tries to pass a ref to it. This triggers a React warning that can cascade into rendering issues with the ErrorBoundary.
+// Fix:
+.update({ payment_status: 'matched', matched_transaction_id: transactionId })
+```
 
-Fix: Wrap `DialogFooter` with `React.forwardRef`.
+Same fix needed in `handleAutoMatch` at line 276.
 
-**B) Negative amounts rejected** (`src/components/budget/CreateBudgetModal.tsx` line 54): The validation `amount <= 0` blocks negative values, so users cannot enter costs (which should use a minus sign per the user's requirement). Also, the `formatInputCurrency` function strips the minus sign.
+**File**: `src/pages/Fatture.tsx` (lines 223-224 and 276-277)
 
-Fix: Allow negative amounts in validation (check `amount === 0` instead) and preserve the minus sign in formatting.
+## Issue 2: Invoices Stuck as "Pending" - Slow Processing for Bulk Uploads
 
-**C) Missing DialogDescription** (console warning): The modal has no `DialogDescription`, causing Radix to throw an accessibility warning that may contribute to instability.
+**Root cause**: The upload flow processes files **sequentially** in a `for` loop (line 106). For 100-200 invoices, each file triggers an individual AI extraction call, making the total time extremely long (potentially minutes or timeouts).
 
-Fix: Add a `DialogDescription` with the tutorial text (solves issue 3 simultaneously).
+**Fix**: Process files in **parallel batches** of 5 at a time. This keeps things fast without overwhelming the AI gateway with too many simultaneous requests.
 
-## Issue 3: Tutorial Text for "Inserisci Budget"
+**File**: `src/pages/Fatture.tsx` (lines 106-146)
 
-Add the tutorial text in two places:
-- **Tooltip on the button** (hover): Short summary of the functionality
-- **DialogDescription in the modal**: Full text: "Enter the expense amount (with a minus sign) or revenue amount (with a plus sign) you've forecasted for your budget. This way, you can plan your fixed costs or future revenues to monitor their performance from month to month." (translated to Italian for UI consistency)
+Current sequential loop:
+```
+for (const file of files) {
+  // upload + process one at a time
+}
+```
 
-## Issue 4: Variance Numbers Without Budget
+Replace with parallel batch processing:
+```
+const BATCH_SIZE = 5;
+for (let i = 0; i < files.length; i += BATCH_SIZE) {
+  const batch = files.slice(i, i + BATCH_SIZE);
+  const batchResults = await Promise.allSettled(
+    batch.map(async (file) => {
+      // upload + process
+    })
+  );
+  // collect results, continue with next batch
+}
+```
 
-**File**: `src/hooks/useBudgets.ts`
+Also add a progress indicator showing "Processing X of Y files..." so users know the system is working.
 
-The `useBudgetVarianceSummary` and `useBudgetComparison` hooks fetch `bank_transactions` regardless of whether any budgets exist. When `totalBudget = 0`, the variance becomes the raw transaction total, which is meaningless.
-
-Fix: If no active budgets exist, return zeroed-out variance data instead of comparing transactions against nothing. The comparison chart already handles this correctly (shows "Nessun dato di confronto" when empty), but the variance summary cards need the same guard.
+---
 
 ## Files to Modify
 
 | File | Changes |
 |------|---------|
-| `src/pages/BudgetPrevisioni.tsx` | Update subtitle; add Tooltip around "Inserisci Budget" button |
-| `src/components/budget/CreateBudgetModal.tsx` | Fix negative amount validation; add DialogDescription with tutorial text; fix formatInputCurrency for negative values |
-| `src/components/ui/dialog.tsx` | Wrap DialogFooter with React.forwardRef to fix ref warning |
-| `src/hooks/useBudgets.ts` | Guard variance summary to return zeros when no budgets exist |
+| `src/pages/Fatture.tsx` | Fix `match_status` to `payment_status` in two places; add parallel batch upload processing with progress feedback |
 
 ## Technical Details
 
-### DialogFooter fix (dialog.tsx)
-```text
-// Before:
-const DialogFooter = ({ className, ...props }: React.HTMLAttributes<HTMLDivElement>) => (...)
+### Matching fix (two locations)
 
-// After:
-const DialogFooter = React.forwardRef<HTMLDivElement, React.HTMLAttributes<HTMLDivElement>>(
-  ({ className, ...props }, ref) => (
-    <div ref={ref} className={...} {...props} />
-  )
-);
-DialogFooter.displayName = "DialogFooter";
-```
+**handleConfirmMatch** (line 223):
+- Change `match_status: 'matched'` to `payment_status: 'matched'`
 
-### Amount validation fix (CreateBudgetModal.tsx)
-```text
-// Before: rejects negative (costs)
-if (amount <= 0) { toast.error("Inserisci un importo valido"); return; }
+**handleAutoMatch** (line 276):
+- Change `match_status: 'matched'` to `payment_status: 'matched'`
 
-// After: only rejects zero
-if (amount === 0) { toast.error("Inserisci un importo valido (positivo per ricavi, negativo per costi)"); return; }
-```
+### Batch upload processing
 
-### Variance guard (useBudgets.ts)
-```text
-// Early return if no budgets
-const totalBudget = budgets?.reduce(...) || 0;
-if (!budgets || budgets.length === 0) {
-  return { positiveVariance: 0, negativeVariance: 0, netVariance: 0, positiveMonths: 0, negativeMonths: 0, variancePercent: 0 };
-}
-```
+- Split files into batches of 5
+- Use `Promise.allSettled` for each batch so one failure doesn't stop the rest
+- Add a progress state variable to show "Elaborazione 15 di 200 fatture..."
+- Show a toast with progress updates during processing
+- Collect errors and report them at the end ("195 processed, 5 failed")
+
