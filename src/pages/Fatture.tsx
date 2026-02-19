@@ -75,6 +75,7 @@ export default function Fatture() {
   const [reprocessingId, setReprocessingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [isCassettoModalOpen, setIsCassettoModalOpen] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [connectedFiscalId, setConnectedFiscalId] = useState<string | null>(null);
   const [isFetchingCassetto, setIsFetchingCassetto] = useState(false);
   const { toast } = useToast();
@@ -103,59 +104,86 @@ export default function Fatture() {
       
       const uploadResults = [];
       
-      for (const file of files) {
-        // 1. Upload diretto a Supabase Storage
-        const storagePath = `${userId}/${Date.now()}-${file.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from('invoices')
-          .upload(storagePath, file, {
-            contentType: file.type || 'application/octet-stream'
-          });
+      const BATCH_SIZE = 5;
+      let processedCount = 0;
+      let failedCount = 0;
+      
+      setUploadProgress({ current: 0, total: files.length });
 
-        if (uploadError) {
-          throw new Error(`Errore upload ${file.name}: ${uploadError.message}`);
-        }
+      for (let i = 0; i < files.length; i += BATCH_SIZE) {
+        const batch = files.slice(i, i + BATCH_SIZE);
+        
+        const batchResults = await Promise.allSettled(
+          batch.map(async (file) => {
+            // 1. Upload diretto a Supabase Storage
+            const storagePath = `${userId}/${Date.now()}-${file.name}`;
+            const { error: uploadError } = await supabase.storage
+              .from('invoices')
+              .upload(storagePath, file, {
+                contentType: file.type || 'application/octet-stream'
+              });
 
-        // 2. Chiama edge function per processare il file già caricato
-        const response = await fetch(
-          'https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/process-invoice',
-          {
-            method: 'POST',
-            headers: {
-              'Content-Type': 'application/json',
-              ...(session?.access_token 
-                ? { 'Authorization': `Bearer ${session.access_token}` }
-                : {}),
-            },
-            body: JSON.stringify({
-              storagePath,
-              fileName: file.name,
-              fileType: file.type,
-              userId
-            }),
-          }
+            if (uploadError) {
+              throw new Error(`Errore upload ${file.name}: ${uploadError.message}`);
+            }
+
+            // 2. Chiama edge function per processare il file già caricato
+            const response = await fetch(
+              'https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/process-invoice',
+              {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(session?.access_token 
+                    ? { 'Authorization': `Bearer ${session.access_token}` }
+                    : {}),
+                },
+                body: JSON.stringify({
+                  storagePath,
+                  fileName: file.name,
+                  fileType: file.type,
+                  userId
+                }),
+              }
+            );
+
+            if (!response.ok) {
+              const errorData = await response.json();
+              throw new Error(errorData.error || 'Errore durante l\'elaborazione');
+            }
+
+            return await response.json();
+          })
         );
 
-        if (!response.ok) {
-          const errorData = await response.json();
-          throw new Error(errorData.error || 'Errore durante l\'elaborazione');
+        for (const result of batchResults) {
+          if (result.status === 'fulfilled') {
+            uploadResults.push(result.value);
+            processedCount++;
+          } else {
+            failedCount++;
+            console.error('Errore elaborazione fattura:', result.reason);
+          }
         }
 
-        const result = await response.json();
-        uploadResults.push(result);
+        setUploadProgress({ current: processedCount + failedCount, total: files.length });
       }
 
+      setUploadProgress(null);
+
       return {
-        processed: uploadResults.length,
+        processed: processedCount,
+        failed: failedCount,
         total_invoices: uploadResults.reduce((sum, r) => sum + (r.invoices_count || 1), 0),
         results: uploadResults
       };
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      const failedMsg = data.failed > 0 ? ` (${data.failed} non elaborate)` : '';
       toast({
         title: "Fatture elaborate",
-        description: `${data.total_invoices} fatture estratte da ${data.processed} file.`,
+        description: `${data.total_invoices} fatture estratte da ${data.processed} file.${failedMsg}`,
       });
     },
     onError: (error: Error) => {
@@ -221,7 +249,7 @@ export default function Fatture() {
       const { error } = await supabase
         .from('invoices')
         .update({ 
-          match_status: 'matched',
+          payment_status: 'matched',
           matched_transaction_id: transactionId 
         })
         .eq('id', invoiceId);
@@ -273,7 +301,7 @@ export default function Fatture() {
           const { error } = await supabase
             .from('invoices')
             .update({ 
-              match_status: 'matched',
+              payment_status: 'matched',
               matched_transaction_id: matchingTx.id 
             })
             .eq('id', invoice.id);
@@ -498,6 +526,26 @@ export default function Fatture() {
           </Button>
         </div>
       </div>
+
+      {/* Upload Progress */}
+      {uploadProgress && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="p-4 flex items-center gap-3">
+            <Loader2 className="h-5 w-5 text-primary animate-spin" />
+            <div className="flex-1">
+              <p className="text-sm font-medium text-foreground">
+                Elaborazione {uploadProgress.current} di {uploadProgress.total} fatture...
+              </p>
+              <div className="w-full bg-muted rounded-full h-2 mt-2">
+                <div 
+                  className="bg-primary h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${(uploadProgress.current / uploadProgress.total) * 100}%` }}
+                />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
