@@ -102,7 +102,7 @@ export function BankAccountCard({ account, onSync, onTest, onRemove, onDebug }: 
     disconnected: { label: "Disconnesso", variant: "destructive" as const, className: "bg-muted text-muted-foreground" },
   };
 
-  const status = statusConfig[account.status];
+  const status = statusConfig[account.status] || statusConfig.active;
 
   const isManual = account.source === "manual";
   const providerLabel = account.source === "acube" ? "Enable Banking" : account.source === "enable_banking" ? "Enable Banking" : account.source === "powens" ? "Powens" : "Manuale";
