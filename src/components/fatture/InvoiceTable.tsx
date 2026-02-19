@@ -29,6 +29,7 @@ export interface Invoice {
   amount: number;
   matchStatus: "matched" | "pending" | "discrepancy";
   matchedTransactionId?: string;
+  invoiceType: "income" | "expense";
   fileName: string;
   filePath: string;
   fileType?: string | null;

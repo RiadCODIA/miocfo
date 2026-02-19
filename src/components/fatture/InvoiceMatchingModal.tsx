@@ -8,11 +8,46 @@ import {
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CheckCircle2, Calendar, Hash, Building2, Euro, ArrowRight, AlertCircle } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
+import { CheckCircle2, Calendar, Hash, Building2, Euro, ArrowRight, AlertCircle, Tag } from "lucide-react";
 import { Invoice } from "./InvoiceTable";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+
+// Fixed category lists per the FD specification
+const REVENUE_CATEGORIES = [
+  "Ricavi da vendite",
+  "Ricavi da servizi",
+  "Altri ricavi",
+  "Oneri bancari",
+  "Oneri diversi",
+];
+
+const COST_CATEGORIES = [
+  "Acquisto materie prime",
+  "Energia e carburanti",
+  "Lavorazioni di terzi",
+  "Provvigioni",
+  "Carburanti",
+  "Manutenzione",
+  "Assicurazioni",
+  "Formazione e ricerca",
+  "Marketing e pubblicità",
+  "Beni di terzi",
+  "Canoni Leasing",
+  "Consulenze",
+  "Altre spese",
+  "Oneri bancari",
+  "Oneri diversi",
+];
 
 interface Transaction {
   id: string;
@@ -26,7 +61,7 @@ interface InvoiceMatchingModalProps {
   invoice: Invoice | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onMatch: (invoiceId: string, transactionId: string) => void;
+  onMatch: (invoiceId: string, transactionId: string, categoryId?: string) => void;
 }
 
 export function InvoiceMatchingModal({
@@ -36,15 +71,41 @@ export function InvoiceMatchingModal({
   onMatch,
 }: InvoiceMatchingModalProps) {
   const [selectedTransaction, setSelectedTransaction] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [categoryMap, setCategoryMap] = useState<Record<string, string>>({});
+
+  // Determine category list based on invoice type
+  const isRevenue = invoice?.invoiceType === "income";
+  const categoryList = isRevenue ? REVENUE_CATEGORIES : COST_CATEGORIES;
+
+  // Fetch cost_categories to map names to IDs
+  useEffect(() => {
+    if (!open) return;
+    
+    const fetchCategories = async () => {
+      const { data } = await supabase
+        .from('cost_categories')
+        .select('id, name')
+        .eq('is_active', true);
+      
+      if (data) {
+        const map: Record<string, string> = {};
+        data.forEach(cat => { map[cat.name] = cat.id; });
+        setCategoryMap(map);
+      }
+    };
+    fetchCategories();
+  }, [open]);
 
   // Fetch and calculate matching transactions when modal opens
   useEffect(() => {
     if (!open || !invoice) {
       setTransactions([]);
       setSelectedTransaction(null);
+      setSelectedCategory(null);
       return;
     }
 
@@ -53,18 +114,15 @@ export function InvoiceMatchingModal({
       setError(null);
       
       try {
-        // Calculate date range: invoice date ± 60 days
         const invoiceDate = new Date(invoice.date);
         const dateFrom = new Date(invoiceDate);
         dateFrom.setDate(dateFrom.getDate() - 60);
         const dateTo = new Date(invoiceDate);
         dateTo.setDate(dateTo.getDate() + 60);
         
-        // Calculate amount range: ±30% of invoice amount
         const minAmount = invoice.amount * 0.7;
         const maxAmount = invoice.amount * 1.3;
         
-        // Query with server-side filters for better performance
         const { data, error: fetchError } = await supabase
           .from('bank_transactions')
           .select('*')
@@ -81,18 +139,11 @@ export function InvoiceMatchingModal({
           return;
         }
         
-        // Filter by amount client-side (absolute values need client-side handling)
         const filteredByAmount = data.filter(tx => {
           const txAmount = Math.abs(Number(tx.amount));
           return txAmount >= minAmount && txAmount <= maxAmount;
         });
-        
-        console.log('InvoiceMatching - Transazioni caricate:', data.length);
-        console.log('InvoiceMatching - Dopo filtro importo:', filteredByAmount.length);
-        console.log('InvoiceMatching - Range importo:', minAmount.toFixed(2), '-', maxAmount.toFixed(2));
-        console.log('InvoiceMatching - Primi 5 importi:', data.slice(0, 5).map(t => t.amount));
 
-        // Calculate match score for each transaction (use filtered data if available, else all)
         const transactionsToScore = filteredByAmount.length > 0 ? filteredByAmount : data;
         
         const scoredTransactions: Transaction[] = transactionsToScore.map(tx => {
@@ -100,7 +151,6 @@ export function InvoiceMatchingModal({
           const txAmount = Math.abs(Number(tx.amount));
           const invAmount = invoice.amount;
 
-          // Amount matching (0-60 points) - more granular scoring
           const amountDiff = Math.abs(txAmount - invAmount);
           const amountPercentDiff = (amountDiff / invAmount) * 100;
           if (amountPercentDiff === 0) score += 60;
@@ -112,7 +162,6 @@ export function InvoiceMatchingModal({
           else if (amountPercentDiff <= 20) score += 10;
           else if (amountPercentDiff <= 30) score += 5;
 
-          // Date matching (0-30 points) - more granular
           const txDate = new Date(tx.date);
           const invDate = invoice.date;
           const daysDiff = Math.abs((txDate.getTime() - invDate.getTime()) / (1000 * 60 * 60 * 24));
@@ -123,7 +172,6 @@ export function InvoiceMatchingModal({
           else if (daysDiff <= 30) score += 10;
           else if (daysDiff <= 60) score += 5;
 
-          // Name/description matching (0-10 points) - improved fuzzy matching
           const txDesc = (tx.description || '').toLowerCase() + ' ' + (tx.merchant_name || '').toLowerCase();
           const supplierWords = invoice.supplier.toLowerCase().split(/\s+/).filter(w => w.length > 2);
           const matchedWords = supplierWords.filter(word => txDesc.includes(word));
@@ -139,9 +187,8 @@ export function InvoiceMatchingModal({
           };
         });
 
-        // Sort by score and take top 10
         const sortedTransactions = scoredTransactions
-          .filter(t => t.matchScore >= 15) // Only show reasonable matches
+          .filter(t => t.matchScore >= 15)
           .sort((a, b) => b.matchScore - a.matchScore)
           .slice(0, 10);
 
@@ -165,8 +212,11 @@ export function InvoiceMatchingModal({
 
   const handleMatch = () => {
     if (selectedTransaction) {
-      onMatch(invoice.id, selectedTransaction);
+      // Resolve category name to ID if available
+      const categoryId = selectedCategory ? categoryMap[selectedCategory] || undefined : undefined;
+      onMatch(invoice.id, selectedTransaction, categoryId);
       setSelectedTransaction(null);
+      setSelectedCategory(null);
       onOpenChange(false);
     }
   };
@@ -177,7 +227,7 @@ export function InvoiceMatchingModal({
         <DialogHeader>
           <DialogTitle>Abbina Fattura</DialogTitle>
           <DialogDescription>
-            Seleziona la transazione corrispondente alla fattura
+            Seleziona la transazione e la categoria per la fattura
           </DialogDescription>
         </DialogHeader>
 
@@ -213,6 +263,26 @@ export function InvoiceMatchingModal({
               </span>
             </div>
           </div>
+        </div>
+
+        {/* Category Selection */}
+        <div className="space-y-2">
+          <Label className="flex items-center gap-2 text-sm font-medium">
+            <Tag className="h-4 w-4 text-muted-foreground" />
+            Categoria {isRevenue ? "(Ricavo)" : "(Costo)"}
+          </Label>
+          <Select value={selectedCategory || ""} onValueChange={setSelectedCategory}>
+            <SelectTrigger>
+              <SelectValue placeholder="Seleziona categoria..." />
+            </SelectTrigger>
+            <SelectContent>
+              {categoryList.map((cat) => (
+                <SelectItem key={cat} value={cat}>
+                  {cat}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
 
         {/* Matching Arrow */}
