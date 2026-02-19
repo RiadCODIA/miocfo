@@ -1,4 +1,4 @@
-import { TrendingUp, TrendingDown, Target, Percent, Wallet, ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { TrendingUp, Wallet, ArrowUpRight, ArrowDownRight } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import {
   Table,
@@ -73,26 +73,22 @@ export default function FlussiCassa() {
               variant={(kpis?.cashflowCumulativo ?? 0) >= 0 ? "success" : "destructive"}
             />
             <KPICard
+              title="Totale Incassi"
+              value={formatCurrency(kpis?.totaleIncassi ?? 0)}
+              icon={<ArrowUpRight className="h-5 w-5" />}
+              variant="success"
+            />
+            <KPICard
+              title="Totale Pagamenti"
+              value={formatCurrency(kpis?.totalePagamenti ?? 0)}
+              icon={<ArrowDownRight className="h-5 w-5" />}
+              variant="destructive"
+            />
+            <KPICard
               title="Margine Operativo"
               value={`${kpis?.margineOperativo ?? 0}%`}
-              change={kpis?.margineOperativoChange}
-              changeLabel="vs trimestre prec."
               icon={<TrendingUp className="h-5 w-5" />}
               variant={(kpis?.margineOperativo ?? 0) >= 20 ? "success" : "warning"}
-            />
-            <KPICard
-              title="Incidenza Costi"
-              value={`${kpis?.incidenzaCosti ?? 0}%`}
-              change={kpis?.incidenzaCostiChange ? -kpis.incidenzaCostiChange : undefined}
-              changeLabel="vs trimestre prec."
-              icon={<Percent className="h-5 w-5" />}
-              variant={(kpis?.incidenzaCosti ?? 0) <= 80 ? "default" : "warning"}
-            />
-            <KPICard
-              title="Costi Operativi"
-              value={formatCurrency(kpis?.breakEvenPoint ?? 0)}
-              icon={<Target className="h-5 w-5" />}
-              variant="default"
             />
           </>
         )}

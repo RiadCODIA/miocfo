@@ -15,9 +15,8 @@ interface MonthlyData {
 }
 
 interface CashFlowKPIs {
-  breakEvenPoint: number;
-  incidenzaCosti: number;
-  incidenzaCostiChange: number;
+  totaleIncassi: number;
+  totalePagamenti: number;
   cashflowCumulativo: number;
   cashflowChange: number;
   margineOperativo: number;
@@ -243,9 +242,8 @@ export function useCashFlowKPIs() {
       const margineOperativo = currentIncassi > 0 ? (currentCashflow / currentIncassi) * 100 : 0;
 
       return {
-        breakEvenPoint: currentPagamenti,
-        incidenzaCosti: Math.round(incidenzaCosti * 10) / 10,
-        incidenzaCostiChange: 0,
+        totaleIncassi: currentIncassi,
+        totalePagamenti: currentPagamenti,
         cashflowCumulativo: totalBalance,
         cashflowChange: 0,
         margineOperativo: Math.round(margineOperativo * 10) / 10,
