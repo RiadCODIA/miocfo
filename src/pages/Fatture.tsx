@@ -60,6 +60,7 @@ function transformInvoice(dbInvoice: DbInvoice): Invoice {
     amount: Number(dbInvoice.total_amount || dbInvoice.amount),
     matchStatus: matchStatus as "matched" | "pending" | "discrepancy",
     matchedTransactionId: dbInvoice.matched_transaction_id || undefined,
+    invoiceType: dbInvoice.invoice_type === "income" ? "income" : "expense",
     fileName: dbInvoice.file_name || "",
     filePath: dbInvoice.file_path || "",
     fileType: null,
@@ -244,14 +245,19 @@ export default function Fatture() {
     setIsMatchingOpen(true);
   };
 
-  const handleConfirmMatch = async (invoiceId: string, transactionId: string) => {
+  const handleConfirmMatch = async (invoiceId: string, transactionId: string, categoryId?: string) => {
     try {
+      const updateData: Record<string, unknown> = { 
+        payment_status: 'matched',
+        matched_transaction_id: transactionId,
+      };
+      if (categoryId) {
+        updateData.category_id = categoryId;
+      }
+
       const { error } = await supabase
         .from('invoices')
-        .update({ 
-          payment_status: 'matched',
-          matched_transaction_id: transactionId 
-        })
+        .update(updateData)
         .eq('id', invoiceId);
 
       if (error) throw error;
