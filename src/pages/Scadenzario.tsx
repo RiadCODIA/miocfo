@@ -3,7 +3,7 @@ import { ArrowDownLeft, ArrowUpRight, AlertTriangle, Plus, Info } from "lucide-r
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { useDeadlines, useDeadlinesSummary, useLiquidityForecast, DeadlineFilters as FilterType, Deadline } from "@/hooks/useDeadlines";
+import { useDeadlines, useDeadlinesSummary, useAccrualForecast, DeadlineFilters as FilterType, Deadline } from "@/hooks/useDeadlines";
 import { DeadlineModal } from "@/components/scadenzario/DeadlineModal";
 import { DeadlineFilters } from "@/components/scadenzario/DeadlineFilters";
 import { DeadlineList } from "@/components/scadenzario/DeadlineList";
@@ -16,7 +16,7 @@ export default function Scadenzario() {
 
   const { data: deadlines, isLoading: loadingDeadlines } = useDeadlines(filters);
   const { data: summary, isLoading: loadingSummary } = useDeadlinesSummary();
-  const { data: forecast, isLoading: loadingForecast } = useLiquidityForecast();
+  const { data: accrualData, isLoading: loadingAccrual } = useAccrualForecast();
 
   const formatCurrency = (value: number) => `€${value.toLocaleString("it-IT")}`;
 
@@ -48,15 +48,16 @@ export default function Scadenzario() {
                 </TooltipTrigger>
                 <TooltipContent className="max-w-xs">
                   <p>
-                    Pianifica incassi e pagamenti futuri per prevedere la liquidità disponibile.
-                    Le scadenze alimentano il grafico di proiezione a 30 giorni.
+                    Pianifica incassi e pagamenti futuri. Le fatture senza data di scadenza
+                    sono considerate già pagate/incassate. Solo le fatture con scadenza attiva
+                    vengono conteggiate nei totali.
                   </p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
           </div>
           <p className="text-muted-foreground mt-1">
-            Gestisci le scadenze per vedere l'impatto sulla liquidità futura
+            Gestisci le scadenze e monitora la previsione per competenza
           </p>
         </div>
         <Button onClick={() => setIsModalOpen(true)} className="shrink-0">
@@ -98,16 +99,14 @@ export default function Scadenzario() {
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-2">
             <AlertTriangle className="h-5 w-5 text-warning" />
-            <p className="text-sm text-muted-foreground">Saldo Minimo Previsto</p>
+            <p className="text-sm text-muted-foreground">Scadenze Scadute</p>
           </div>
-          {loadingForecast ? (
+          {loadingSummary ? (
             <Skeleton className="h-8 w-32" />
           ) : (
             <>
-              <p className="text-2xl font-bold text-foreground">{formatCurrency(forecast?.minBalance || 0)}</p>
-              <p className="text-xs text-muted-foreground mt-1">
-                {forecast?.minBalanceDate ? `Previsto il ${forecast.minBalanceDate}` : "Nessuna previsione"}
-              </p>
+              <p className="text-2xl font-bold text-warning">{formatCurrency(summary?.overdueAmount || 0)}</p>
+              <p className="text-xs text-muted-foreground mt-1">{summary?.overdueCount || 0} scadenze in ritardo</p>
             </>
           )}
         </div>
@@ -127,14 +126,14 @@ export default function Scadenzario() {
           />
         </div>
 
-        {/* Liquidity Forecast Chart */}
+        {/* Accrual Forecast Chart */}
         <div className="glass rounded-xl p-5">
           <div className="mb-4">
-            <h3 className="text-lg font-semibold text-foreground">Previsione Liquidità</h3>
-            <p className="text-sm text-muted-foreground">Saldo previsto nei prossimi 30 giorni</p>
+            <h3 className="text-lg font-semibold text-foreground">Previsione per Competenza</h3>
+            <p className="text-sm text-muted-foreground">Ricavi e costi mensili da fatture (pieno = pagato, semitrasparente = da pagare)</p>
           </div>
           <div className="h-[380px]">
-            <LiquidityForecastChart forecast={forecast?.forecast} isLoading={loadingForecast} />
+            <LiquidityForecastChart data={accrualData} isLoading={loadingAccrual} />
           </div>
         </div>
       </div>
