@@ -120,7 +120,7 @@ export function RevenueCentersManager() {
           </div>
           <div>
             <h3 className="font-semibold text-foreground">Centri di Incasso</h3>
-            <p className="text-sm text-muted-foreground">Gestisci le fonti di ricavo aziendali</p>
+            <p className="text-sm text-muted-foreground">Fonti di ricavo usate per classificare le entrate</p>
           </div>
         </div>
 

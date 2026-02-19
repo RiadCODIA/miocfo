@@ -123,7 +123,7 @@ export function VatRatesManager() {
           </div>
           <div>
             <h3 className="font-semibold text-foreground">Aliquote IVA</h3>
-            <p className="text-sm text-muted-foreground">Gestisci le aliquote IVA disponibili</p>
+            <p className="text-sm text-muted-foreground">Aliquote usate nella fatturazione e nel calcolo IVA</p>
           </div>
         </div>
 
