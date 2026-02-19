@@ -1,4 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
 export interface Alert {
@@ -111,4 +112,31 @@ export function useDeleteAlert() {
       queryClient.invalidateQueries({ queryKey: ["alerts-count"] });
     },
   });
+}
+
+export function useGenerateAlerts() {
+  const queryClient = useQueryClient();
+  const hasRun = useRef(false);
+
+  const mutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.functions.invoke("check-alerts", {
+        body: { userId },
+      });
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["alerts"] });
+      queryClient.invalidateQueries({ queryKey: ["alerts-count"] });
+    },
+  });
+
+  const generate = (userId: string | undefined) => {
+    if (!userId || hasRun.current || mutation.isPending) return;
+    hasRun.current = true;
+    mutation.mutate(userId);
+  };
+
+  return { generate, isPending: mutation.isPending };
 }
