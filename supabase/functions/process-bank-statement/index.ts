@@ -382,15 +382,22 @@ Regole:
     throw new Error("Nessun contenuto estratto dal documento");
   }
 
-  // Extract JSON from the response
-  const jsonMatch = content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
-    console.error("[process-bank-statement] No JSON found in AI response:", content);
-    throw new Error("Formato risposta AI non valido");
+  // Extract JSON from the response - try markdown code block first, then raw JSON
+  let jsonStr: string | null = null;
+  const codeBlockMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    jsonStr = codeBlockMatch[1].trim();
+  } else {
+    const jsonMatch = content.match(/\{[\s\S]*\}/);
+    if (jsonMatch) jsonStr = jsonMatch[0];
+  }
+  if (!jsonStr) {
+    console.error("[process-bank-statement] No JSON found in AI response:", content.substring(0, 500));
+    throw new Error("Il documento caricato non sembra essere un estratto conto bancario valido. Carica un PDF o CSV di un estratto conto.");
   }
 
   try {
-    const extracted = JSON.parse(jsonMatch[0]) as ExtractedStatement;
+    const extracted = JSON.parse(jsonStr) as ExtractedStatement;
     console.log(
       `[process-bank-statement] AI extracted ${extracted.transactions?.length || 0} transactions`
     );
@@ -463,7 +470,7 @@ serve(async (req) => {
         .from("bank_accounts")
         .select("id, bank_name")
         .eq("user_id", userId)
-        .eq("source", "manual");
+        .eq("provider", "manual");
       
       if (fetchError) {
         console.error("[process-bank-statement] Error fetching existing accounts:", fetchError);
@@ -487,7 +494,7 @@ serve(async (req) => {
           .from("bank_accounts")
           .delete()
           .eq("user_id", userId)
-          .eq("source", "manual");
+          .eq("provider", "manual");
         
         if (deleteError) {
           console.error("[process-bank-statement] Error deleting accounts:", deleteError);
@@ -564,16 +571,12 @@ serve(async (req) => {
         id: accountId,
         user_id: userId,
         bank_name: finalBankName,
-        account_name: statement.account_number || "Conto Principale",
+        name: statement.account_number || "Conto Principale",
         iban: statement.iban,
         currency: statement.currency,
-        current_balance: currentBalance,
-        available_balance: currentBalance,
-        status: "active",
-        source: "manual",
-        plaid_item_id: null,
-        plaid_account_id: `manual_${accountId}`,
-        plaid_access_token: null,
+        balance: currentBalance,
+        is_connected: false,
+        provider: "manual",
         last_sync_at: new Date().toISOString(),
       })
       .select()
@@ -591,15 +594,13 @@ serve(async (req) => {
 
     // Insert transactions
     if (statement.transactions.length > 0) {
-      const transactionsToInsert = statement.transactions.map((tx, index) => ({
+    const transactionsToInsert = statement.transactions.map((tx) => ({
         id: crypto.randomUUID(),
         bank_account_id: account.id,
-        plaid_transaction_id: `manual_${account.id}_${index}`,
+        user_id: userId,
         amount: tx.amount,
-        currency: statement.currency,
         date: tx.date,
-        name: tx.description,
-        pending: false,
+        description: tx.description,
         transaction_type: tx.amount >= 0 ? "credit" : "debit",
       }));
 
@@ -622,10 +623,10 @@ serve(async (req) => {
           id: account.id,
           bank_name: account.bank_name,
           iban: account.iban,
-          current_balance: account.current_balance,
+          balance: account.balance,
           currency: account.currency,
-          source: account.source,
-          status: account.status,
+          provider: account.provider,
+          is_connected: account.is_connected,
           last_sync_at: account.last_sync_at,
         },
         transactions_count: statement.transactions.length,
