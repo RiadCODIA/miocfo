@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { AlertTriangle, TrendingDown, Clock, CheckCircle, Bell, X, Check } from "lucide-react";
+import { useState, useEffect } from "react";
+import { AlertTriangle, TrendingDown, Clock, CheckCircle, Bell, X, Check, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -19,7 +19,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
-import { useAlerts, useActiveAlertsCount, useMarkAlertRead, useDeleteAlert, Alert } from "@/hooks/useAlerts";
+import { useAlerts, useActiveAlertsCount, useMarkAlertRead, useDeleteAlert, useGenerateAlerts, Alert } from "@/hooks/useAlerts";
+import { useAuth } from "@/contexts/AuthContext";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { toast } from "sonner";
@@ -67,6 +68,7 @@ export default function AlertNotifiche() {
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [readFilter, setReadFilter] = useState<string>("unread");
   const [typeFilter, setTypeFilter] = useState("all");
+  const { user } = useAuth();
 
   const { data: alerts, isLoading } = useAlerts({ 
     isRead: readFilter === "all" ? null : readFilter === "read",
@@ -75,6 +77,12 @@ export default function AlertNotifiche() {
   const { data: counts } = useActiveAlertsCount();
   const markAsRead = useMarkAlertRead();
   const deleteAlert = useDeleteAlert();
+  const { generate, isPending: isGenerating } = useGenerateAlerts();
+
+  // Auto-generate alerts on page mount
+  useEffect(() => {
+    generate(user?.id);
+  }, [user?.id]);
 
   const handleMarkAsRead = async (alertId: string) => {
     try {

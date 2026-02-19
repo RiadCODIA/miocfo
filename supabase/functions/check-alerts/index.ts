@@ -3,39 +3,51 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-interface AlertData {
-  type: "warning" | "info" | "success" | "error";
-  alert_type: string;
-  title: string;
-  description: string;
-  priority: "high" | "medium" | "low";
-  status: "active";
+function mapSeverity(priority: string): string {
+  switch (priority) {
+    case "high": return "error";
+    case "medium": return "warning";
+    case "low": return "info";
+    default: return "info";
+  }
 }
 
-async function createAlert(supabase: any, alertData: AlertData): Promise<string | null> {
-  // Check if similar active alert already exists (avoid duplicates)
+async function createAlert(
+  supabase: any,
+  userId: string,
+  data: { type: string; title: string; message: string; severity: string }
+): Promise<string | null> {
+  // Check for duplicate unread alert
   const { data: existing } = await supabase
     .from("alerts")
     .select("id")
-    .eq("alert_type", alertData.alert_type)
-    .eq("status", "active")
-    .eq("title", alertData.title)
+    .eq("type", data.type)
+    .eq("is_read", false)
+    .eq("title", data.title)
+    .eq("user_id", userId)
     .maybeSingle();
 
   if (existing) {
-    console.log(`[CheckAlerts] Alert already exists: ${alertData.title}`);
+    console.log(`[CheckAlerts] Alert already exists: ${data.title}`);
     return null;
   }
 
-  const { data, error } = await supabase
+  const { data: inserted, error } = await supabase
     .from("alerts")
-    .insert(alertData)
+    .insert({
+      type: data.type,
+      title: data.title,
+      message: data.message,
+      severity: data.severity,
+      is_read: false,
+      user_id: userId,
+    })
     .select("id")
     .single();
 
@@ -44,20 +56,20 @@ async function createAlert(supabase: any, alertData: AlertData): Promise<string 
     return null;
   }
 
-  console.log(`[CheckAlerts] Created alert: ${alertData.title}`);
-  return data.id;
+  console.log(`[CheckAlerts] Created alert: ${data.title}`);
+  return inserted.id;
 }
 
-async function checkDeadlines(supabase: any): Promise<string[]> {
+async function checkDeadlines(supabase: any, userId: string): Promise<string[]> {
   const alertIds: string[] = [];
   const today = new Date();
   const threeDaysFromNow = new Date(today);
   threeDaysFromNow.setDate(today.getDate() + 3);
 
-  // Check upcoming deadlines (within 3 days)
   const { data: upcomingDeadlines, error } = await supabase
     .from("deadlines")
     .select("*")
+    .eq("user_id", userId)
     .eq("status", "pending")
     .gte("due_date", today.toISOString().split("T")[0])
     .lte("due_date", threeDaysFromNow.toISOString().split("T")[0]);
@@ -70,16 +82,13 @@ async function checkDeadlines(supabase: any): Promise<string[]> {
   for (const deadline of upcomingDeadlines || []) {
     const dueDate = new Date(deadline.due_date);
     const daysUntil = Math.ceil((dueDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-    
-    const alertId = await createAlert(supabase, {
-      type: daysUntil <= 1 ? "warning" : "info",
-      alert_type: "scadenza",
-      title: `Scadenza ${deadline.type === "incasso" ? "incasso" : "pagamento"} in ${daysUntil} giorn${daysUntil === 1 ? "o" : "i"}`,
-      description: `${deadline.description} - €${deadline.amount?.toLocaleString("it-IT")}`,
-      priority: daysUntil <= 1 ? "high" : "medium",
-      status: "active",
-    });
 
+    const alertId = await createAlert(supabase, userId, {
+      type: "scadenza",
+      title: `Scadenza ${deadline.deadline_type === "incasso" ? "incasso" : "pagamento"} in ${daysUntil} giorn${daysUntil === 1 ? "o" : "i"}`,
+      message: `${deadline.title}${deadline.amount ? ` - €${Number(deadline.amount).toLocaleString("it-IT")}` : ""} - Scade il ${dueDate.toLocaleDateString("it-IT")}`,
+      severity: mapSeverity(daysUntil <= 1 ? "high" : "medium"),
+    });
     if (alertId) alertIds.push(alertId);
   }
 
@@ -87,92 +96,102 @@ async function checkDeadlines(supabase: any): Promise<string[]> {
   const { data: overdueDeadlines } = await supabase
     .from("deadlines")
     .select("*")
+    .eq("user_id", userId)
     .eq("status", "pending")
     .lt("due_date", today.toISOString().split("T")[0]);
 
   for (const deadline of overdueDeadlines || []) {
-    const alertId = await createAlert(supabase, {
-      type: "error",
-      alert_type: "scadenza",
-      title: `Scadenza ${deadline.type === "incasso" ? "incasso" : "pagamento"} scaduta!`,
-      description: `${deadline.description} - €${deadline.amount?.toLocaleString("it-IT")} - Scaduta il ${new Date(deadline.due_date).toLocaleDateString("it-IT")}`,
-      priority: "high",
-      status: "active",
+    const alertId = await createAlert(supabase, userId, {
+      type: "scadenza",
+      title: `Scadenza ${deadline.deadline_type === "incasso" ? "incasso" : "pagamento"} scaduta!`,
+      message: `${deadline.title}${deadline.amount ? ` - €${Number(deadline.amount).toLocaleString("it-IT")}` : ""} - Scaduta il ${new Date(deadline.due_date).toLocaleDateString("it-IT")}`,
+      severity: "error",
     });
-
     if (alertId) alertIds.push(alertId);
   }
 
   return alertIds;
 }
 
-async function checkBudgets(supabase: any): Promise<string[]> {
+async function checkBudgets(supabase: any, userId: string): Promise<string[]> {
   const alertIds: string[] = [];
 
   const { data: budgets, error } = await supabase
     .from("budgets")
-    .select("*");
+    .select("*")
+    .eq("user_id", userId)
+    .eq("is_active", true);
 
   if (error) {
     console.error("[CheckAlerts] Error fetching budgets:", error);
     return alertIds;
   }
 
+  // For each budget, calculate actual spending from transactions
   for (const budget of budgets || []) {
-    const percentage = budget.predicted_expenses > 0 
-      ? (budget.actual_expenses / budget.predicted_expenses) * 100 
-      : 0;
+    // Get transactions for the budget period
+    const { data: transactions } = await supabase
+      .from("bank_transactions")
+      .select("amount")
+      .eq("user_id", userId)
+      .eq("transaction_type", "expense")
+      .gte("date", budget.start_date)
+      .lte("date", budget.end_date || new Date().toISOString().split("T")[0]);
 
-    if (percentage >= 100) {
-      const alertId = await createAlert(supabase, {
-        type: "error",
-        alert_type: "budget",
-        title: `Budget "${budget.name}" superato!`,
-        description: `Spese effettive €${budget.actual_expenses?.toLocaleString("it-IT")} vs previste €${budget.predicted_expenses?.toLocaleString("it-IT")} (${percentage.toFixed(0)}%)`,
-        priority: "high",
-        status: "active",
-      });
-      if (alertId) alertIds.push(alertId);
-    } else if (percentage >= 90) {
-      const alertId = await createAlert(supabase, {
-        type: "warning",
-        alert_type: "budget",
-        title: `Budget "${budget.name}" quasi esaurito`,
-        description: `Hai utilizzato il ${percentage.toFixed(0)}% del budget. Rimangono €${(budget.predicted_expenses - budget.actual_expenses)?.toLocaleString("it-IT")}`,
-        priority: "medium",
-        status: "active",
-      });
-      if (alertId) alertIds.push(alertId);
+    const totalSpent = Math.abs(
+      (transactions || []).reduce((sum: number, t: any) => sum + Number(t.amount), 0)
+    );
+    const budgetAmount = Number(budget.amount);
+
+    if (budgetAmount > 0) {
+      const percentage = (totalSpent / budgetAmount) * 100;
+
+      if (percentage >= 100) {
+        const alertId = await createAlert(supabase, userId, {
+          type: "budget",
+          title: `Budget "${budget.name}" superato!`,
+          message: `Spese €${totalSpent.toLocaleString("it-IT")} vs budget €${budgetAmount.toLocaleString("it-IT")} (${percentage.toFixed(0)}%)`,
+          severity: "error",
+        });
+        if (alertId) alertIds.push(alertId);
+      } else if (percentage >= 80) {
+        const alertId = await createAlert(supabase, userId, {
+          type: "budget",
+          title: `Budget "${budget.name}" quasi esaurito`,
+          message: `Hai utilizzato il ${percentage.toFixed(0)}% del budget. Rimangono €${(budgetAmount - totalSpent).toLocaleString("it-IT")}`,
+          severity: "warning",
+        });
+        if (alertId) alertIds.push(alertId);
+      }
     }
   }
 
   return alertIds;
 }
 
-async function checkLiquidity(supabase: any): Promise<string[]> {
+async function checkLiquidity(supabase: any, userId: string): Promise<string[]> {
   const alertIds: string[] = [];
-  const LIQUIDITY_THRESHOLD = 5000; // €5.000 default threshold
+  const LIQUIDITY_THRESHOLD = 5000;
 
   const { data: accounts, error } = await supabase
     .from("bank_accounts")
-    .select("current_balance")
-    .eq("status", "active");
+    .select("balance")
+    .eq("user_id", userId)
+    .eq("is_connected", true);
 
   if (error) {
     console.error("[CheckAlerts] Error fetching bank accounts:", error);
     return alertIds;
   }
 
-  const totalBalance = accounts?.reduce((sum: number, acc: any) => sum + (acc.current_balance || 0), 0) || 0;
+  const totalBalance = accounts?.reduce((sum: number, acc: any) => sum + (Number(acc.balance) || 0), 0) || 0;
 
   if (totalBalance < LIQUIDITY_THRESHOLD) {
-    const alertId = await createAlert(supabase, {
-      type: totalBalance < 1000 ? "error" : "warning",
-      alert_type: "liquidità",
+    const alertId = await createAlert(supabase, userId, {
+      type: "liquidità",
       title: "Liquidità sotto la soglia",
-      description: `Saldo totale €${totalBalance.toLocaleString("it-IT")} è inferiore alla soglia di €${LIQUIDITY_THRESHOLD.toLocaleString("it-IT")}`,
-      priority: totalBalance < 1000 ? "high" : "medium",
-      status: "active",
+      message: `Saldo totale €${totalBalance.toLocaleString("it-IT")} è inferiore alla soglia di €${LIQUIDITY_THRESHOLD.toLocaleString("it-IT")}`,
+      severity: totalBalance < 1000 ? "error" : "warning",
     });
     if (alertId) alertIds.push(alertId);
   }
@@ -180,22 +199,83 @@ async function checkLiquidity(supabase: any): Promise<string[]> {
   return alertIds;
 }
 
-async function sendAlertEmails(supabase: any, alertIds: string[], userId?: string) {
-  if (!userId || alertIds.length === 0) return;
+async function checkInvoices(supabase: any, userId: string): Promise<string[]> {
+  const alertIds: string[] = [];
+  const today = new Date();
 
-  const functionsUrl = Deno.env.get("SUPABASE_URL")?.replace(".supabase.co", ".functions.supabase.co");
-  
-  for (const alertId of alertIds) {
-    try {
-      await fetch(`${functionsUrl}/send-alert-email`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ alertId, userId }),
-      });
-    } catch (e) {
-      console.error("[CheckAlerts] Error sending email for alert:", alertId, e);
-    }
+  // Check overdue unpaid invoices
+  const { data: overdueInvoices, error } = await supabase
+    .from("invoices")
+    .select("*")
+    .eq("user_id", userId)
+    .eq("payment_status", "pending")
+    .lt("due_date", today.toISOString().split("T")[0]);
+
+  if (error) {
+    console.error("[CheckAlerts] Error fetching invoices:", error);
+    return alertIds;
   }
+
+  for (const invoice of overdueInvoices || []) {
+    const alertId = await createAlert(supabase, userId, {
+      type: "fattura",
+      title: `Fattura ${invoice.invoice_number || ""} scaduta`,
+      message: `${invoice.vendor_name || invoice.client_name || "Fattura"} - €${Number(invoice.total_amount).toLocaleString("it-IT")} - Scaduta il ${new Date(invoice.due_date).toLocaleDateString("it-IT")}`,
+      severity: "warning",
+    });
+    if (alertId) alertIds.push(alertId);
+  }
+
+  // Check unmatched invoices
+  const { data: unmatchedInvoices } = await supabase
+    .from("invoices")
+    .select("id", { count: "exact" })
+    .eq("user_id", userId)
+    .eq("payment_status", "pending")
+    .is("matched_transaction_id", null);
+
+  const unmatchedCount = unmatchedInvoices?.length || 0;
+  if (unmatchedCount > 0) {
+    const alertId = await createAlert(supabase, userId, {
+      type: "fattura",
+      title: `${unmatchedCount} fattur${unmatchedCount === 1 ? "a" : "e"} da riconciliare`,
+      message: `Hai ${unmatchedCount} fattur${unmatchedCount === 1 ? "a" : "e"} non ancora associate a transazioni bancarie`,
+      severity: "info",
+    });
+    if (alertId) alertIds.push(alertId);
+  }
+
+  return alertIds;
+}
+
+async function checkBankSync(supabase: any, userId: string): Promise<string[]> {
+  const alertIds: string[] = [];
+  const threeDaysAgo = new Date();
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+
+  const { data: staleAccounts, error } = await supabase
+    .from("bank_accounts")
+    .select("name, bank_name, last_sync_at")
+    .eq("user_id", userId)
+    .eq("is_connected", true)
+    .lt("last_sync_at", threeDaysAgo.toISOString());
+
+  if (error) {
+    console.error("[CheckAlerts] Error fetching stale accounts:", error);
+    return alertIds;
+  }
+
+  for (const account of staleAccounts || []) {
+    const alertId = await createAlert(supabase, userId, {
+      type: "sync",
+      title: `Sincronizzazione ${account.name} non aggiornata`,
+      message: `Il conto ${account.name} (${account.bank_name}) non viene sincronizzato da più di 3 giorni. Ultima sync: ${new Date(account.last_sync_at).toLocaleDateString("it-IT")}`,
+      severity: "warning",
+    });
+    if (alertId) alertIds.push(alertId);
+  }
+
+  return alertIds;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -204,20 +284,30 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
+    const { userId } = await req.json();
+
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: "userId is required" }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    console.log("[CheckAlerts] Starting scheduled alert check...");
+    console.log(`[CheckAlerts] Starting alert check for user ${userId}...`);
 
-    const deadlineAlerts = await checkDeadlines(supabase);
-    const budgetAlerts = await checkBudgets(supabase);
-    const liquidityAlerts = await checkLiquidity(supabase);
+    const [deadlineAlerts, budgetAlerts, liquidityAlerts, invoiceAlerts, syncAlerts] = await Promise.all([
+      checkDeadlines(supabase, userId),
+      checkBudgets(supabase, userId),
+      checkLiquidity(supabase, userId),
+      checkInvoices(supabase, userId),
+      checkBankSync(supabase, userId),
+    ]);
 
-    const allAlerts = [...deadlineAlerts, ...budgetAlerts, ...liquidityAlerts];
+    const allAlerts = [...deadlineAlerts, ...budgetAlerts, ...liquidityAlerts, ...invoiceAlerts, ...syncAlerts];
 
-    console.log(`[CheckAlerts] Created ${allAlerts.length} new alerts`);
-
-    // Note: For a multi-tenant system, you'd iterate through users
-    // For now, this creates alerts that are visible to all
+    console.log(`[CheckAlerts] Created ${allAlerts.length} new alerts for user ${userId}`);
 
     return new Response(
       JSON.stringify({
@@ -227,6 +317,8 @@ const handler = async (req: Request): Promise<Response> => {
           deadlines: deadlineAlerts.length,
           budgets: budgetAlerts.length,
           liquidity: liquidityAlerts.length,
+          invoices: invoiceAlerts.length,
+          sync: syncAlerts.length,
         },
       }),
       { status: 200, headers: { "Content-Type": "application/json", ...corsHeaders } }
