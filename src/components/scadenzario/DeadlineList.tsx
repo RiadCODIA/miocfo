@@ -58,10 +58,11 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
   const handleComplete = async (deadline: Deadline) => {
     setCompletingId(deadline.id);
     try {
-      await completeMutation.mutateAsync(deadline.id);
+      // Pass the full deadline object so the hook can update invoices too
+      await completeMutation.mutateAsync(deadline);
       toast({
         title: deadline.type === "incasso" ? "Incasso registrato" : "Pagamento completato",
-        description: `${deadline.description} - ${formatCurrency(deadline.amount)}`,
+        description: `${deadline.title} - ${formatCurrency(deadline.amount)}`,
       });
     } catch (error) {
       toast({
@@ -180,7 +181,8 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
               </div>
 
               <div className="flex items-center gap-1">
-                {!isCompleted && !isFromInvoice && (
+                {/* Complete button: available for all non-completed deadlines (manual and invoice) */}
+                {!isCompleted && (
                   <Button
                     variant="ghost"
                     size="icon"
