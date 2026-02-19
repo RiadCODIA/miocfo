@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { Search, Filter, Download, Edit2, BarChart3, Loader2, X, Sparkles } from "lucide-react";
-
+import { useDateRange } from "@/contexts/DateRangeContext";
+import { format as formatDate } from "date-fns";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -45,6 +46,7 @@ interface CostCategory {
 
 export default function Transazioni() {
   const [searchTerm, setSearchTerm] = useState("");
+  const { dateRange } = useDateRange();
   const [accountId, setAccountId] = useState("all");
   const [category, setCategory] = useState("all");
   const [selectedTransaction, setSelectedTransaction] = useState<any | null>(null);
@@ -66,9 +68,18 @@ export default function Transazioni() {
   const [transactionType, setTransactionType] = useState<"all" | "income" | "expense">("all");
   const [startDate, setStartDate] = useState<string>("");
   const [endDate, setEndDate] = useState<string>("");
-  const [showAllDates, setShowAllDates] = useState(true);
+  // When true, use custom local dates; when false, use global TopBar dates
+  const [useLocalDates, setUseLocalDates] = useState(false);
 
   const queryClient = useQueryClient();
+
+  // Global context dates from TopBar
+  const contextStartDate = formatDate(dateRange.from, "yyyy-MM-dd");
+  const contextEndDate = formatDate(dateRange.to, "yyyy-MM-dd");
+
+  // Determine effective dates: local override > global TopBar
+  const effectiveStartDate = useLocalDates ? (startDate || undefined) : contextStartDate;
+  const effectiveEndDate = useLocalDates ? (endDate || undefined) : contextEndDate;
 
   const { data: transactions, isLoading, refetch } = useTransactions({
     searchTerm,
@@ -78,8 +89,8 @@ export default function Transazioni() {
     minAmount: minAmount ? parseFloat(minAmount) : undefined,
     maxAmount: maxAmount ? parseFloat(maxAmount) : undefined,
     transactionType,
-    startDate: showAllDates ? undefined : (startDate || undefined),
-    endDate: showAllDates ? undefined : (endDate || undefined),
+    startDate: effectiveStartDate,
+    endDate: effectiveEndDate,
   });
   
   const activeFiltersCount = [
@@ -97,7 +108,7 @@ export default function Transazioni() {
     setStartDate(tempStartDate);
     setEndDate(tempEndDate);
     if (tempStartDate || tempEndDate) {
-      setShowAllDates(false);
+      setUseLocalDates(true);
     }
     setFiltersOpen(false);
   };
@@ -113,7 +124,7 @@ export default function Transazioni() {
     setTransactionType("all");
     setStartDate("");
     setEndDate("");
-    setShowAllDates(true);
+    setUseLocalDates(false);
     setFiltersOpen(false);
   };
 
@@ -273,11 +284,15 @@ export default function Transazioni() {
           </SelectContent>
         </Select>
 
-        {/* "Tutte le date" badge */}
-        {showAllDates && !startDate && !endDate && (
+        {/* Local date override indicator */}
+        {useLocalDates && (startDate || endDate) && (
           <Badge variant="secondary" className="gap-1 py-1.5 px-3">
-            Tutte le date
-            <X className="h-3 w-3 cursor-pointer" onClick={() => setShowAllDates(false)} />
+            Date personalizzate
+            <X className="h-3 w-3 cursor-pointer" onClick={() => {
+              setUseLocalDates(false);
+              setStartDate("");
+              setEndDate("");
+            }} />
           </Badge>
         )}
 
@@ -362,29 +377,22 @@ export default function Transazioni() {
                     onClick={() => {
                       setTempStartDate("");
                       setTempEndDate("");
-                      setShowAllDates(true);
                     }}
                   >
-                    Tutte le date
+                    Usa filtro globale
                   </Button>
                 </div>
                 <div className="flex gap-2">
                   <Input
                     type="date"
                     value={tempStartDate}
-                    onChange={(e) => {
-                      setTempStartDate(e.target.value);
-                      setShowAllDates(false);
-                    }}
+                    onChange={(e) => setTempStartDate(e.target.value)}
                     className="bg-background border-border text-sm"
                   />
                   <Input
                     type="date"
                     value={tempEndDate}
-                    onChange={(e) => {
-                      setTempEndDate(e.target.value);
-                      setShowAllDates(false);
-                    }}
+                    onChange={(e) => setTempEndDate(e.target.value)}
                     className="bg-background border-border text-sm"
                   />
                 </div>
