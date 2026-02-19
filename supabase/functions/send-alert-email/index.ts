@@ -103,7 +103,7 @@ const handler = async (req: Request): Promise<Response> => {
 
     // Send email
     const emailResponse = await resend.emails.send({
-      from: "Finexa <alerts@finexa.app>",
+      from: "mioCFO <alerts@finexa.app>",
       to: [recipientEmail],
       subject: `${priorityEmoji} [ALERT] ${alert.title}`,
       html: `
@@ -125,7 +125,7 @@ const handler = async (req: Request): Promise<Response> => {
         <body>
           <div class="container">
             <div class="header">
-              <h1 style="margin: 0;">🔔 Finexa Alert</h1>
+              <h1 style="margin: 0;">🔔 mioCFO Alert</h1>
             </div>
             <div class="content">
               <p>Ciao <strong>${userName}</strong>,</p>
@@ -140,10 +140,10 @@ const handler = async (req: Request): Promise<Response> => {
                 </div>
               </div>
 
-              <a href="https://finexa.app/alert" class="button">Visualizza Dettagli</a>
+              <a href="https://miocfo.lovable.app/alert" class="button">Visualizza Dettagli</a>
               
               <div class="footer">
-                <p>Finexa - Gestione Finanziaria Intelligente</p>
+                <p>mioCFO - Gestione Finanziaria Intelligente</p>
                 <p>Puoi modificare le preferenze di notifica nelle impostazioni del tuo account.</p>
               </div>
             </div>
