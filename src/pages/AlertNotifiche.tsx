@@ -26,6 +26,18 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { toast } from "sonner";
 
+const typeToUrl: Record<string, string> = {
+  budget: "/budget",
+  scadenza: "/scadenzario",
+  "liquidità": "/flussi-cassa",
+  fattura: "/fatture",
+  sync: "/conti-bancari",
+};
+
+const getAlertUrl = (alert: Alert): string | null => {
+  return alert.actionUrl || typeToUrl[alert.type.toLowerCase()] || null;
+};
+
 const getAlertIcon = (alertType: string) => {
   switch (alertType.toLowerCase()) {
     case "liquidità":
@@ -234,16 +246,17 @@ export default function AlertNotifiche() {
             ) : (
               filteredAlerts?.map((alert, index) => {
                 const Icon = getAlertIcon(alert.type);
+                const alertUrl = getAlertUrl(alert);
                 return (
                   <TableRow
                     key={alert.id}
                     className={cn(
                       "border-border hover:bg-secondary/50",
-                      alert.actionUrl && "cursor-pointer"
+                      alertUrl && "cursor-pointer"
                     )}
                     onClick={() => {
                       if (!alert.isRead) handleMarkAsRead(alert.id);
-                      if (alert.actionUrl) navigate(alert.actionUrl);
+                      if (alertUrl) navigate(alertUrl);
                     }}
                   >
                     <TableCell>
