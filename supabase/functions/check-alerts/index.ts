@@ -21,7 +21,7 @@ function mapSeverity(priority: string): string {
 async function createAlert(
   supabase: any,
   userId: string,
-  data: { type: string; title: string; message: string; severity: string }
+  data: { type: string; title: string; message: string; severity: string; action_url?: string }
 ): Promise<string | null> {
   // Check for duplicate unread alert
   const { data: existing } = await supabase
@@ -47,6 +47,7 @@ async function createAlert(
       severity: data.severity,
       is_read: false,
       user_id: userId,
+      action_url: data.action_url || null,
     })
     .select("id")
     .single();
@@ -88,6 +89,7 @@ async function checkDeadlines(supabase: any, userId: string): Promise<string[]> 
       title: `Scadenza ${deadline.deadline_type === "incasso" ? "incasso" : "pagamento"} in ${daysUntil} giorn${daysUntil === 1 ? "o" : "i"}`,
       message: `${deadline.title}${deadline.amount ? ` - €${Number(deadline.amount).toLocaleString("it-IT")}` : ""} - Scade il ${dueDate.toLocaleDateString("it-IT")}`,
       severity: mapSeverity(daysUntil <= 1 ? "high" : "medium"),
+      action_url: "/scadenzario",
     });
     if (alertId) alertIds.push(alertId);
   }
@@ -106,6 +108,7 @@ async function checkDeadlines(supabase: any, userId: string): Promise<string[]> 
       title: `Scadenza ${deadline.deadline_type === "incasso" ? "incasso" : "pagamento"} scaduta!`,
       message: `${deadline.title}${deadline.amount ? ` - €${Number(deadline.amount).toLocaleString("it-IT")}` : ""} - Scaduta il ${new Date(deadline.due_date).toLocaleDateString("it-IT")}`,
       severity: "error",
+      action_url: "/scadenzario",
     });
     if (alertId) alertIds.push(alertId);
   }
@@ -152,6 +155,7 @@ async function checkBudgets(supabase: any, userId: string): Promise<string[]> {
           title: `Budget "${budget.name}" superato!`,
           message: `Spese €${totalSpent.toLocaleString("it-IT")} vs budget €${budgetAmount.toLocaleString("it-IT")} (${percentage.toFixed(0)}%)`,
           severity: "error",
+          action_url: "/budget",
         });
         if (alertId) alertIds.push(alertId);
       } else if (percentage >= 80) {
@@ -160,6 +164,7 @@ async function checkBudgets(supabase: any, userId: string): Promise<string[]> {
           title: `Budget "${budget.name}" quasi esaurito`,
           message: `Hai utilizzato il ${percentage.toFixed(0)}% del budget. Rimangono €${(budgetAmount - totalSpent).toLocaleString("it-IT")}`,
           severity: "warning",
+          action_url: "/budget",
         });
         if (alertId) alertIds.push(alertId);
       }
@@ -192,6 +197,7 @@ async function checkLiquidity(supabase: any, userId: string): Promise<string[]> 
       title: "Liquidità sotto la soglia",
       message: `Saldo totale €${totalBalance.toLocaleString("it-IT")} è inferiore alla soglia di €${LIQUIDITY_THRESHOLD.toLocaleString("it-IT")}`,
       severity: totalBalance < 1000 ? "error" : "warning",
+      action_url: "/flussi-cassa",
     });
     if (alertId) alertIds.push(alertId);
   }
@@ -222,6 +228,7 @@ async function checkInvoices(supabase: any, userId: string): Promise<string[]> {
       title: `Fattura ${invoice.invoice_number || ""} scaduta`,
       message: `${invoice.vendor_name || invoice.client_name || "Fattura"} - €${Number(invoice.total_amount).toLocaleString("it-IT")} - Scaduta il ${new Date(invoice.due_date).toLocaleDateString("it-IT")}`,
       severity: "warning",
+      action_url: "/fatture",
     });
     if (alertId) alertIds.push(alertId);
   }
@@ -241,6 +248,7 @@ async function checkInvoices(supabase: any, userId: string): Promise<string[]> {
       title: `${unmatchedCount} fattur${unmatchedCount === 1 ? "a" : "e"} da riconciliare`,
       message: `Hai ${unmatchedCount} fattur${unmatchedCount === 1 ? "a" : "e"} non ancora associate a transazioni bancarie`,
       severity: "info",
+      action_url: "/fatture",
     });
     if (alertId) alertIds.push(alertId);
   }
@@ -271,6 +279,7 @@ async function checkBankSync(supabase: any, userId: string): Promise<string[]> {
       title: `Sincronizzazione ${account.name} non aggiornata`,
       message: `Il conto ${account.name} (${account.bank_name}) non viene sincronizzato da più di 3 giorni. Ultima sync: ${new Date(account.last_sync_at).toLocaleDateString("it-IT")}`,
       severity: "warning",
+      action_url: "/conti-bancari",
     });
     if (alertId) alertIds.push(alertId);
   }

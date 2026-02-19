@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { AlertTriangle, TrendingDown, Clock, CheckCircle, Bell, X, Check, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -65,6 +66,7 @@ const getStatusBadge = (isRead: boolean) => {
 };
 
 export default function AlertNotifiche() {
+  const navigate = useNavigate();
   const [severityFilter, setSeverityFilter] = useState<string>("all");
   const [readFilter, setReadFilter] = useState<string>("unread");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -163,10 +165,11 @@ export default function AlertNotifiche() {
           </SelectTrigger>
           <SelectContent className="bg-card border-border">
             <SelectItem value="all">Tutti i tipi</SelectItem>
-            <SelectItem value="warning">Avviso</SelectItem>
-            <SelectItem value="error">Errore</SelectItem>
-            <SelectItem value="info">Info</SelectItem>
-            <SelectItem value="success">Successo</SelectItem>
+            <SelectItem value="scadenza">Scadenza</SelectItem>
+            <SelectItem value="budget">Budget</SelectItem>
+            <SelectItem value="liquidità">Liquidità</SelectItem>
+            <SelectItem value="fattura">Fattura</SelectItem>
+            <SelectItem value="sync">Sincronizzazione</SelectItem>
           </SelectContent>
         </Select>
 
@@ -234,7 +237,14 @@ export default function AlertNotifiche() {
                 return (
                   <TableRow
                     key={alert.id}
-                    className="border-border hover:bg-secondary/50"
+                    className={cn(
+                      "border-border hover:bg-secondary/50",
+                      alert.actionUrl && "cursor-pointer"
+                    )}
+                    onClick={() => {
+                      if (!alert.isRead) handleMarkAsRead(alert.id);
+                      if (alert.actionUrl) navigate(alert.actionUrl);
+                    }}
                   >
                     <TableCell>
                       <div className="flex items-center gap-2">
@@ -261,8 +271,8 @@ export default function AlertNotifiche() {
                       {format(new Date(alert.createdAt), "dd/MM/yyyy", { locale: it })}
                     </TableCell>
                     <TableCell>
-                      {!alert.isRead && (
-                        <div className="flex gap-1">
+                      <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                        {!alert.isRead && (
                           <Button 
                             variant="ghost" 
                             size="icon" 
@@ -272,17 +282,17 @@ export default function AlertNotifiche() {
                           >
                             <Check className="h-4 w-4 text-success" />
                           </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="icon" 
-                            className="h-8 w-8 hover:bg-destructive/20"
-                            onClick={() => handleDelete(alert.id)}
-                            disabled={deleteAlert.isPending}
-                          >
-                            <X className="h-4 w-4 text-muted-foreground" />
-                          </Button>
-                        </div>
-                      )}
+                        )}
+                        <Button 
+                          variant="ghost" 
+                          size="icon" 
+                          className="h-8 w-8 hover:bg-destructive/20"
+                          onClick={() => handleDelete(alert.id)}
+                          disabled={deleteAlert.isPending}
+                        >
+                          <X className="h-4 w-4 text-muted-foreground" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 );
