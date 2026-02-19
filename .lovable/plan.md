@@ -1,44 +1,122 @@
 
-# Fix schermo bianco / freeze su tutte le pagine
 
-## Problema identificato
+# Fix Area Economica - Income Statement & Invoice Intelligence
 
-La causa principale dello schermo bianco e del "freeze" e il pattern CSS `opacity-0 animate-fade-in` usato massivamente in tutta l'applicazione (185 occorrenze in 9 pagine).
+## Problems Found
 
-### Come funziona il bug:
-1. Gli elementi partono con `opacity: 0` (invisibili)
-2. L'animazione CSS `animate-fade-in` li porta a `opacity: 1` con `animation-fill-mode: forwards`
-3. Quando React ri-renderizza il componente (dopo cambio stato, refetch query, reset ErrorBoundary), il DOM non viene completamente rimosso e ri-aggiunto
-4. L'animazione CSS **non si ripete** perche il browser non la ritrigga su elementi gia presenti nel DOM
-5. Gli elementi restano permanentemente a `opacity: 0` = **schermo bianco**
+### 1. Income statement shows zero data (critical bug)
+The `useContoEconomico` hook queries invoices with `invoice_type = "emessa"` (issued) and `invoice_type = "ricevuta"` (received), but ALL invoices in the database are stored as `"passive"`. This means the income statement table always shows empty/zero values.
 
-Questo spiega perche il problema si verifica "su qualsiasi azione" e richiede un refresh manuale.
+### 2. Bank transactions should NOT be in the income statement
+The hook currently fetches `bank_transactions` and mixes them into revenue and costs. The user explicitly wants the income statement to be based ONLY on invoices.
 
-## Soluzione
+### 3. VAT and taxable amounts are always 0
+The AI extraction prompt in `process-invoice` only extracts the total amount. It does not extract the taxable base (imponibile) and VAT amount separately, so `vat_amount` is always 0 in the database.
 
-Rimuovere `opacity-0 animate-fade-in` e le relative `animationDelay` da tutte le pagine affette. Gli elementi saranno immediatamente visibili senza rischio di rimanere invisibili.
+### 4. AI cannot distinguish issued vs received invoices
+The current extraction prompt only asks for supplier name and amount. It does not analyze sender vs recipient headers to determine if the invoice was issued (emessa/active) or received (ricevuta/passive). Currently everything is hardcoded as `"passive"`.
 
-## File da modificare
+### 5. Scadenzario and Previsioni tabs are duplicates
+The user confirms these are copies of the Scadenzario and Budget & Previsioni pages already accessible from the sidebar. They should be removed from Area Economica.
 
-| File | Occorrenze da rimuovere |
-|------|------------------------|
-| `src/pages/Transazioni.tsx` | 3 occorrenze |
-| `src/pages/AlertNotifiche.tsx` | 5 occorrenze |
-| `src/pages/BudgetPrevisioni.tsx` | 5 occorrenze |
-| `src/pages/Impostazioni.tsx` | 4 occorrenze |
-| + altre 5 pagine | ~168 occorrenze rimanenti |
+---
 
-## Dettaglio tecnico
+## Solution
 
-Per ogni file, tutte le classi `opacity-0 animate-fade-in` verranno rimosse, insieme ai relativi attributi `style={{ animationDelay: "..." }}`.
+### Phase 1: Upgrade AI Invoice Extraction (`supabase/functions/process-invoice/index.ts`)
 
-Esempio di modifica:
+Enhance the AI prompt to extract:
+- **Invoice direction**: Determine if the logged-in user/company is the SENDER or RECIPIENT (emessa vs ricevuta)
+- **Taxable amount** (imponibile): The base amount before VAT
+- **VAT amount**: The actual VAT amount on the invoice
+- **VAT rate**: The percentage applied (4%, 10%, 22%, exempt, etc.)
+- **Invoice subject/category**: What the invoice is for (goods, services, consulting, transport, maintenance, insurance, etc.)
+- **Sender and recipient names**: Both parties on the invoice
+
+Update the database insert to populate:
+- `invoice_type`: `"emessa"` or `"ricevuta"` (instead of always `"passive"`)
+- `vat_amount`: Actual extracted VAT
+- `amount`: Taxable base (imponibile)
+- `total_amount`: Grand total including VAT
+- `vendor_name`: The supplier (if ricevuta) or blank
+- `client_name`: The client (if emessa) or blank
+- `extracted_data`: Store full breakdown including VAT rate, subject, sender/recipient
+
+### Phase 2: Fix Income Statement Hook (`src/hooks/useContoEconomico.ts`)
+
+- Query invoices with `invoice_type = "emessa"` for revenue and `invoice_type = "ricevuta"` for costs (these will now match after the AI extraction fix)
+- **Remove** all bank transaction fetching and aggregation
+- Remove `ricaviMovimenti`, `costiMovimentiPerCategoria`, `costiMovimentiTotali`, `movimentiCategoryNames` from the returned data
+- Use `amount` (taxable/imponibile) for income statement rows
+- Use `vat_amount` for the IVA section
+
+### Phase 3: Simplify Income Statement UI (`src/components/area-economica/ContoEconomicoTab.tsx`)
+
+- Remove all "Ricavi da movimenti bancari" and "Costi da movimenti bancari" rows
+- Remove the `hasMovimenti` logic
+- Update description text: "Analisi economica mensile basata su fatture emesse e ricevute"
+- Keep revenue from issued invoices, costs from received invoices, personnel costs, IVA section
+
+### Phase 4: Remove duplicate tabs (`src/pages/AreaEconomica.tsx`)
+
+- Remove the "Scadenzario Clienti/Fornitori" tab
+- Remove the "Previsioni" tab
+- Area Economica will only contain the "Conto Economico" tab (can remove the tab wrapper entirely and just render ContoEconomicoTab directly)
+- Delete imports for `ScadenzarioTab` and `PrevisioniTab`
+
+---
+
+## Technical Details
+
+### Updated AI Prompt (process-invoice)
+
+The new prompt will instruct the AI to return:
+
 ```text
-// PRIMA (bug)
-<div className="space-y-6 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
-
-// DOPO (fix)
-<div className="space-y-6">
+{
+  "invoice_number": "...",
+  "invoice_date": "YYYY-MM-DD",
+  "sender_name": "Company that ISSUED the invoice",
+  "recipient_name": "Company that RECEIVED the invoice",
+  "invoice_direction": "emessa" or "ricevuta",
+  "subject": "goods/services/consulting/transport/etc.",
+  "taxable_amount": 1000.00,
+  "vat_rate": 22,
+  "vat_amount": 220.00,
+  "total_amount": 1220.00
+}
 ```
 
-La definizione dell'animazione nel `tailwind.config.ts` puo rimanere perche potrebbe essere usata correttamente altrove (es. componenti che vengono montati/smontati con condizionali).
+Since the system cannot know who the logged-in user's company is at extraction time, the default will remain `"ricevuta"` (received invoice), as most uploaded invoices are from suppliers. Users can manually change the type in the Fatture page if needed.
+
+However, the prompt will be enhanced to detect patterns:
+- If the invoice has "FATTURA DI VENDITA", "Fattura emessa", or the user's company appears as sender, mark as `"emessa"`
+- Otherwise default to `"ricevuta"`
+
+### Database field mapping
+
+| Extracted Field | DB Column | Notes |
+|---|---|---|
+| taxable_amount | amount | Was previously total, now imponibile |
+| vat_amount | vat_amount | Was always 0, now actual VAT |
+| total_amount | total_amount | Grand total with VAT |
+| invoice_direction | invoice_type | "emessa" or "ricevuta" instead of "passive" |
+| sender_name | vendor_name (if ricevuta) or client_name (if emessa) | Contextual mapping |
+| subject | extracted_data.subject | Stored in JSONB for categorization |
+
+### Files to modify
+
+| File | Change |
+|---|---|
+| `supabase/functions/process-invoice/index.ts` | Enhanced AI prompt with VAT, direction, subject extraction; updated DB insert logic |
+| `src/hooks/useContoEconomico.ts` | Remove bank transactions; keep invoice-only aggregation |
+| `src/components/area-economica/ContoEconomicoTab.tsx` | Remove bank transaction rows; simplify UI |
+| `src/pages/AreaEconomica.tsx` | Remove Scadenzario and Previsioni tabs; render ContoEconomicoTab directly |
+
+### Impact on existing data
+
+The 7 existing invoices all have `invoice_type = "passive"` and `vat_amount = 0`. After the fix:
+- New uploads will have correct `invoice_type` and `vat_amount`
+- Existing invoices can be reprocessed using the existing "Riprocessa" button in the Fatture page, which will re-run AI extraction with the updated prompt
+- Until reprocessed, existing invoices won't appear in the income statement (since they have `invoice_type = "passive"`, not `"emessa"` or `"ricevuta"`)
+
