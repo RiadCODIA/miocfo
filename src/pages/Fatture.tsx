@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import {
   FileText,
@@ -79,6 +80,7 @@ export default function Fatture() {
   const [uploadProgress, setUploadProgress] = useState<{ current: number; total: number } | null>(null);
   const [connectedFiscalId, setConnectedFiscalId] = useState<string | null>(null);
   const [isFetchingCassetto, setIsFetchingCassetto] = useState(false);
+  const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
@@ -432,9 +434,12 @@ export default function Fatture() {
     return acc;
   }, {} as Record<string, { count: number; total: number }>);
 
-  const topSuppliers = Object.entries(supplierSummary)
-    .sort((a, b) => b[1].total - a[1].total)
-    .slice(0, 5);
+  const allSuppliers = Object.entries(supplierSummary)
+    .sort((a, b) => b[1].total - a[1].total);
+
+  const filteredSuppliers = supplierFilter === "all" 
+    ? allSuppliers 
+    : allSuppliers.filter(([name]) => name === supplierFilter);
 
   const handleFetchFromCassetto = async () => {
     if (!connectedFiscalId) return;
@@ -499,7 +504,7 @@ export default function Fatture() {
         <div>
           <h1 className="text-3xl font-bold text-foreground">Fatture</h1>
           <p className="text-muted-foreground mt-1">
-            Carica e gestisci le fatture ricevute
+            Carica e gestisci le fatture ricevute ed emesse
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -621,16 +626,48 @@ export default function Fatture() {
         </Card>
       </div>
 
-      {/* Supplier Summary */}
-      {topSuppliers.length > 0 && (
+      {/* Upload Zone */}
+      <InvoiceUploadZone
+        onUpload={handleUpload}
+        uploadingFiles={uploadingFiles}
+        onRemoveFile={handleRemoveUpload}
+      />
+
+      {/* Invoice Table */}
+      <InvoiceTable
+        invoices={invoices}
+        onView={handleView}
+        onMatch={handleMatch}
+        onReprocess={handleReprocess}
+        onDelete={handleDelete}
+        reprocessingId={reprocessingId}
+        deletingId={deletingId}
+        isLoading={isLoading}
+      />
+
+      {/* Supplier/Customer Summary */}
+      {allSuppliers.length > 0 && (
         <Card>
           <CardContent className="p-4">
-            <div className="flex items-center gap-2 mb-4">
-              <Users className="h-5 w-5 text-muted-foreground" />
-              <h3 className="font-semibold text-foreground">Riepilogo per Fornitore</h3>
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Users className="h-5 w-5 text-muted-foreground" />
+                <h3 className="font-semibold text-foreground">Riepilogo per Fornitore / Cliente</h3>
+              </div>
+              <Select value={supplierFilter} onValueChange={setSupplierFilter}>
+                <SelectTrigger className="w-[200px]">
+                  <SelectValue placeholder="Tutti" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Tutti</SelectItem>
+                  {allSuppliers.map(([name]) => (
+                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-              {topSuppliers.map(([supplier, data]) => (
+              {filteredSuppliers.map(([supplier, data]) => (
                 <div key={supplier} className="bg-muted/50 rounded-lg p-3">
                   <p className="font-medium text-sm text-foreground truncate" title={supplier}>
                     {supplier}
@@ -651,25 +688,6 @@ export default function Fatture() {
           </CardContent>
         </Card>
       )}
-
-      {/* Upload Zone */}
-      <InvoiceUploadZone
-        onUpload={handleUpload}
-        uploadingFiles={uploadingFiles}
-        onRemoveFile={handleRemoveUpload}
-      />
-
-      {/* Invoice Table */}
-      <InvoiceTable
-        invoices={invoices}
-        onView={handleView}
-        onMatch={handleMatch}
-        onReprocess={handleReprocess}
-        onDelete={handleDelete}
-        reprocessingId={reprocessingId}
-        deletingId={deletingId}
-        isLoading={isLoading}
-      />
 
       {/* Modals */}
       <InvoicePreview
