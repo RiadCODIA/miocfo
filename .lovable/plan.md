@@ -1,53 +1,44 @@
 
+# Fix schermo bianco / freeze su tutte le pagine
 
-# Fix filtri Transazioni
+## Problema identificato
 
-## Problemi identificati
+La causa principale dello schermo bianco e del "freeze" e il pattern CSS `opacity-0 animate-fade-in` usato massivamente in tutta l'applicazione (185 occorrenze in 9 pagine).
 
-### 1. Il filtro date e sempre vincolato al DateRangeContext (ultimi 30 giorni)
-Il codice attuale (riga 78 di Transazioni.tsx) fa:
-```
-startDate: startDate || contextStartDate,
-endDate: endDate || contextEndDate,
-```
-Questo significa che anche quando l'utente non imposta date personalizzate, il contesto globale forza sempre un intervallo (default: ultimi 30 giorni). Non e possibile visualizzare TUTTE le transazioni.
+### Come funziona il bug:
+1. Gli elementi partono con `opacity: 0` (invisibili)
+2. L'animazione CSS `animate-fade-in` li porta a `opacity: 1` con `animation-fill-mode: forwards`
+3. Quando React ri-renderizza il componente (dopo cambio stato, refetch query, reset ErrorBoundary), il DOM non viene completamente rimosso e ri-aggiunto
+4. L'animazione CSS **non si ripete** perche il browser non la ritrigga su elementi gia presenti nel DOM
+5. Gli elementi restano permanentemente a `opacity: 0` = **schermo bianco**
 
-### 2. I filtri avanzati sono reattivi ma il pulsante "Applica" non li conferma
-Le date nei filtri avanzati cambiano lo stato immediatamente (reattivo), ma il pulsante "Applica filtri" chiude solo il popover senza fare nulla di specifico. Questo puo confondere l'utente.
+Questo spiega perche il problema si verifica "su qualsiasi azione" e richiede un refresh manuale.
 
-### 3. Il filtro per conto funziona tecnicamente ma potrebbe non mostrare risultati
-Il filtro per conto (`accountId`) e implementato correttamente nel hook, ma se non ci sono conti bancari configurati il Select mostra solo "Tutti i conti".
+## Soluzione
 
-## Modifiche previste
+Rimuovere `opacity-0 animate-fade-in` e le relative `animationDelay` da tutte le pagine affette. Gli elementi saranno immediatamente visibili senza rischio di rimanere invisibili.
 
-### File: `src/pages/Transazioni.tsx`
+## File da modificare
 
-1. **Rimuovere la dipendenza forzata dal DateRangeContext**: Non usare piu `contextStartDate`/`contextEndDate` come fallback. Se l'utente non imposta date nei filtri avanzati e il periodo globale e "Ultimi 30 giorni", passare quel range; ma aggiungere un'opzione esplicita per vedere "Tutte le date" (nessun filtro temporale).
-
-2. **Aggiungere un pulsante "Tutte le date"**: Permettere all'utente di rimuovere qualsiasi filtro temporale per vedere tutte le transazioni storiche.
-
-3. **Rendere il pulsante "Applica filtri" funzionale**: Il pulsante applichera i filtri in modo esplicito (copiando i valori temporanei in quelli effettivi), dando un feedback chiaro all'utente.
-
-### File: `src/hooks/useTransactions.ts`
-
-4. **Rendere opzionale il filtro date**: Se `startDate` e `endDate` sono entrambi vuoti/undefined, non applicare alcun filtro temporale alla query Supabase, permettendo di caricare tutte le transazioni.
+| File | Occorrenze da rimuovere |
+|------|------------------------|
+| `src/pages/Transazioni.tsx` | 3 occorrenze |
+| `src/pages/AlertNotifiche.tsx` | 5 occorrenze |
+| `src/pages/BudgetPrevisioni.tsx` | 5 occorrenze |
+| `src/pages/Impostazioni.tsx` | 4 occorrenze |
+| + altre 5 pagine | ~168 occorrenze rimanenti |
 
 ## Dettaglio tecnico
 
-### Transazioni.tsx - Logica filtri rivista
+Per ogni file, tutte le classi `opacity-0 animate-fade-in` verranno rimosse, insieme ai relativi attributi `style={{ animationDelay: "..." }}`.
 
-- Introdurre uno stato `useGlobalDateRange` (default `true`) che indica se usare il range dal contesto globale
-- Quando l'utente imposta date nei filtri avanzati, disattivare automaticamente `useGlobalDateRange`
-- Aggiungere un chip/badge visibile "Tutte le date" quando nessun filtro temporale e attivo
-- Il pulsante "Applica filtri" chiudera il popover e forza un refetch
+Esempio di modifica:
+```text
+// PRIMA (bug)
+<div className="space-y-6 opacity-0 animate-fade-in" style={{ animationDelay: "100ms" }}>
 
-### useTransactions.ts - Nessuna modifica strutturale necessaria
+// DOPO (fix)
+<div className="space-y-6">
+```
 
-Il hook gia gestisce correttamente il caso in cui `startDate` e `endDate` siano undefined (righe 70-86). Il problema e solo che il componente Transazioni li passa sempre valorizzati.
-
-### Riepilogo modifiche
-
-| File | Modifica |
-|------|----------|
-| `src/pages/Transazioni.tsx` | Rimuovere fallback forzato a contextStartDate/contextEndDate; aggiungere opzione "Tutte le date"; rendere filtri espliciti con pulsante Applica |
-
+La definizione dell'animazione nel `tailwind.config.ts` puo rimanere perche potrebbe essere usata correttamente altrove (es. componenti che vengono montati/smontati con condizionali).
