@@ -25,12 +25,12 @@ const stats = [
 
 const testimonials = [
   {
-    quote: "Finexa ha rivoluzionato il modo in cui gestiamo le finanze aziendali. Finalmente ho visibilità in tempo reale.",
+    quote: "mioCFO ha rivoluzionato il modo in cui gestiamo le finanze aziendali. Finalmente ho visibilità in tempo reale.",
     author: "Marco R.",
     role: "CEO, TechStart Srl",
   },
   {
-    quote: "Addio Excel! Con Finexa risparmio ore ogni settimana e ho report sempre aggiornati automaticamente.",
+    quote: "Addio Excel! Con mioCFO risparmio ore ogni settimana e ho report sempre aggiornati automaticamente.",
     author: "Laura B.",
     role: "CFO, Design Studio",
   },

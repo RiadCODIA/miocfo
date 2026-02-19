@@ -30,7 +30,7 @@ export function HowItWorks() {
             Inizia in <span className="text-primary">3 semplici passi</span>
           </h2>
           <p className="text-base text-muted-foreground font-normal leading-relaxed">
-            Configurare Finexa è veloce e intuitivo. In pochi minuti avrai 
+            Configurare mioCFO è veloce e intuitivo. In pochi minuti avrai 
             il controllo completo delle finanze della tua azienda.
           </p>
         </div>

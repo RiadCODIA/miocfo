@@ -35,7 +35,7 @@ export default function DashboardSuperAdmin() {
       <div>
         <h1 className="text-3xl font-bold text-foreground">Dashboard di Sistema</h1>
         <p className="text-muted-foreground mt-1">
-          Panoramica globale della piattaforma Finexa
+          Panoramica globale della piattaforma mioCFO
         </p>
       </div>
 

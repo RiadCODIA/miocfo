@@ -50,7 +50,7 @@ export function FeaturesSection() {
             <span className="text-primary">gestire le finanze</span>
           </h2>
           <p className="text-base text-muted-foreground font-normal leading-relaxed">
-            Finexa integra tutti gli strumenti necessari per la gestione finanziaria 
+            mioCFO integra tutti gli strumenti necessari per la gestione finanziaria 
             della tua PMI in un'unica piattaforma intuitiva.
           </p>
         </div>
