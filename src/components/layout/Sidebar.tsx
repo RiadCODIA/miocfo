@@ -68,7 +68,7 @@ const userNavGroups: NavGroup[] = [
     ],
   },
   {
-    label: "GESTIONE BUSINESS",
+    label: "",
     collapsible: false,
     subGroups: [
       {
@@ -227,11 +227,11 @@ export function Sidebar() {
 
         {/* Navigation */}
         <nav className="flex-1 py-4 px-2 space-y-5 overflow-y-auto">
-          {navGroups.map((group) => {
+          {navGroups.map((group, groupIndex) => {
             const isGroupCollapsed = collapsedGroups[group.label];
             return (
-              <div key={group.label}>
-                {!collapsed && (
+              <div key={group.label || `group-${groupIndex}`}>
+                {!collapsed && group.label && (
                   <div
                     className={cn(
                       "px-3 mb-2 flex items-center justify-between",
