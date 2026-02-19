@@ -69,6 +69,11 @@ export function useBudgetComparison() {
         .select("*")
         .eq("is_active", true);
 
+      // If no active budgets, return empty array (no comparison to show)
+      if (!budgets || budgets.length === 0) {
+        return [];
+      }
+
       // Calculate monthly totals
       const monthlyData: Record<string, { income: number; expenses: number }> = {};
       
