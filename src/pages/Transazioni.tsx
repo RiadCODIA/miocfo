@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import { Search, Filter, Download, Edit2, BarChart3, Loader2, X, Sparkles } from "lucide-react";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { format as formatDate } from "date-fns";
@@ -129,7 +129,7 @@ export default function Transazioni() {
   };
 
   const { data: accounts } = useBankAccounts();
-  const { categorizeBatch, categorize, isLoading: isCategorizing } = useCategorizeTransactions();
+  const { isLoading: isCategorizing } = useCategorizeTransactions();
 
   // Fetch cost categories for mapping
   const { data: costCategories } = useQuery({
@@ -156,71 +156,26 @@ export default function Transazioni() {
     (tx) => !tx.aiCategoryId && !tx.categoryConfirmed
   ).length || 0;
 
-  // Ref to prevent multiple concurrent categorization runs
-  const isCategorizingRef = useRef(false);
-  const hasTriggeredRef = useRef(false);
 
-  // Automatic categorization when uncategorized transactions exist
-  useEffect(() => {
-    // Only run if:
-    // 1. There are uncategorized transactions
-    // 2. Not already categorizing
-    // 3. Haven't triggered in this session (reset when count changes to 0)
-    if (uncategorizedCount > 0 && !isCategorizing && !isCategorizingRef.current && !hasTriggeredRef.current) {
-      isCategorizingRef.current = true;
-      hasTriggeredRef.current = true;
-      
-      const runCategorization = async () => {
-        try {
-          const results = await categorizeBatch();
-          if (results.length > 0) {
-            toast.success(`${results.length} transazioni categorizzate con AI`);
-            refetch();
-          }
-        } catch (error) {
-          // Error toast already shown by hook
-        } finally {
-          isCategorizingRef.current = false;
-        }
-      };
-      
-      runCategorization();
-    }
-    
-    // Reset trigger flag when all transactions are categorized
-    if (uncategorizedCount === 0) {
-      hasTriggeredRef.current = false;
-    }
-  }, [uncategorizedCount, isCategorizing, categorizeBatch, refetch]);
+  // Users can manually categorize via the edit button on each row
 
-  const handleCategorizeOne = async (transaction: any) => {
+  const handleCategorizeOne = (transaction: any) => {
     setSelectedTransaction(transaction);
     
-    // If already has AI category, just open modal
+    // If already has AI category, pre-fill the suggestion
     if (transaction.aiCategoryId) {
       setAiSuggestion({
         transaction_id: transaction.id,
         category_id: transaction.aiCategoryId,
         category_name: getCategoryName(transaction.aiCategoryId) || "",
-        confidence: transaction.aiConfidence || 0,
+        confidence: 0,
         reasoning: "Suggerimento AI precedente",
       });
-      setCategoryModalOpen(true);
-      return;
+    } else {
+      setAiSuggestion(null);
     }
-
-    // Otherwise, get AI suggestion first
-    try {
-      const results = await categorize([transaction.id]);
-      if (results.length > 0) {
-        setAiSuggestion(results[0]);
-        refetch();
-      }
-      setCategoryModalOpen(true);
-    } catch (error) {
-      // Still open modal even if AI fails
-      setCategoryModalOpen(true);
-    }
+    
+    setCategoryModalOpen(true);
   };
 
   const getStatoBadge = (pending: boolean) => {
@@ -490,8 +445,7 @@ export default function Transazioni() {
               transactions?.map((tx, index) => (
                 <TableRow
                   key={tx.id}
-                  className="border-border hover:bg-secondary/50 opacity-0 animate-fade-in"
-                  style={{ animationDelay: `${300 + index * 50}ms` }}
+                  className="border-border hover:bg-secondary/50"
                 >
                   <TableCell className="font-medium">
                     {format(new Date(tx.date), "dd/MM/yyyy", { locale: it })}
