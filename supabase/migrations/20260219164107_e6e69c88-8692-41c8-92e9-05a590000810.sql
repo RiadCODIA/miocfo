@@ -1,0 +1,1 @@
+UPDATE profiles SET company_name = 'mioCFO' WHERE id = '53209e17-7ecc-4f80-adcf-82623a2a9e35' AND company_name = 'Finexa';
