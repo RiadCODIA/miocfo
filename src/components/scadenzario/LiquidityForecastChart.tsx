@@ -39,7 +39,10 @@ export function LiquidityForecastChart({ data, isLoading }: LiquidityForecastCha
           fontSize={11}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(value) => `€${(value / 1000).toFixed(0)}k`}
+          tickFormatter={(value) => {
+            if (Math.abs(value) >= 1000) return `€${(value / 1000).toFixed(0)}k`;
+            return `€${value.toLocaleString("it-IT")}`;
+          }}
         />
         <Tooltip
           contentStyle={{
