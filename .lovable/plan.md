@@ -1,108 +1,135 @@
 
-# Fatture — Fix completo: Tipo, Categorizzazione inline e Conto Economico
+# Configurazione — Fix: Categorie Costi + Dipendenti nel Conto Economico
 
-## Problemi identificati (con evidenza dal database)
+## Problemi identificati
 
-### 1. Fatture invisibili nel Conto Economico — causa root confermata
-Il problema principale: le fatture nel database hanno `invoice_type = 'passive'` (vecchio valore), ma `useContoEconomico.ts` filtra per `invoice_type = 'ricevuta'`. Risultato: **nessuna fattura appare mai nel Conto Economico**.
+### 1. Categorie Costi — impossibile aggiungere (blocco RLS)
 
-La stessa incongruenza esiste per le emesse: il codice cerca `invoice_type = 'emessa'`, ma il valore reale potrebbe essere `'active'` o `'income'`.
+La tabella `cost_categories` **non ha una colonna `user_id`** ed è condivisa tra tutti gli utenti del sistema. Le sue policy RLS permettono la scrittura (INSERT/UPDATE/DELETE) solo ai ruoli `super_admin` e `admin_aziendale`. L'utente corrente ha ruolo `user`, quindi ogni tentativo di aggiungere una categoria viene silenziosamente bloccato dal database — il form si chiude senza salvare nulla.
 
-Il `process-invoice` edge function salva i valori `'emessa'` / `'ricevuta'` correttamente — il problema sono i record esistenti migrati con i valori vecchi.
+Stessa situazione per `revenue_centers` e `vat_rates`: sono tabelle globali senza separazione per utente.
 
-### 2. Come viene determinato il tipo di fattura (emessa/ricevuta/autofattura)
-L'AI analizza il PDF e:
-- Identifica chi emette (mittente, in alto) e chi riceve (destinatario, dopo "Spett.le")
-- Confronta il nome del mittente con il `company_name` del profilo utente per capire la direzione
-- Se trova "FATTURA DI VENDITA" → `emessa`; default → `ricevuta`
-- Le **autofatture** (reverse charge, acquisti UE) al momento non sono gestite come tipo separato
+### 2. Dipendenti — non collegati al Conto Economico
 
-L'utente però **non può correggere manualmente** il tipo direttamente dalla tabella se l'AI sbaglia.
+Il dipendente "Fab" (€50.000/anno) è presente nel database, ma non appare nel Conto Economico perché:
 
-### 3. Categorizzazione inline assente
-Attualmente la categoria si può assegnare solo dentro il modal di abbinamento (che richiede anche una transazione bancaria). Se l'utente vuole solo categorizzare una fattura senza abbinarla, non ha modo di farlo.
+- La colonna `monthly_cost` nella tabella `employees` è `NULL` — il database non calcola automaticamente il costo mensile dall'annuale.
+- La sezione "Costi Personale" del Conto Economico legge esclusivamente da **localStorage** del browser, non dalla tabella `employees`. I due sistemi non si parlano.
 
-Il modal di abbinamento usa anche liste hardcoded di nomi (`REVENUE_CATEGORIES`, `COST_CATEGORIES`) invece degli ID reali delle categorie — quindi l'associazione al Conto Economico fallisce silenziosamente.
+Il risultato pratico: registrare un dipendente in Configurazione non ha alcun effetto sul Conto Economico.
 
 ---
 
-## Soluzione in 4 parti
+## Soluzione in 3 parti
 
-### A. Migrazione DB — normalizzare invoice_type
-Aggiornare tutti i record esistenti con i vecchi valori:
+### A. Fix Cost Categories, Revenue Centers, VAT Rates — aggiungere `user_id`
+
+Aggiungere una colonna `user_id uuid` (nullable) a `cost_categories`, `revenue_centers` e `vat_rates`:
+- I record esistenti (categorie di sistema) mantengono `user_id = NULL`
+- I nuovi record creati dall'utente salvano `user_id = auth.uid()`
+
+Aggiornare le RLS policy per permettere agli utenti autenticati di:
+- **SELECT**: tutti possono leggere (invariato)
+- **INSERT**: ogni utente autenticato può aggiungere le proprie categorie (con `user_id = auth.uid()`)
+- **UPDATE/DELETE**: ogni utente può modificare solo le proprie categorie (`user_id = auth.uid()`)
+
+Le categorie di sistema (`user_id IS NULL`) restano visibili ma non modificabili dagli utenti normali.
+
+**Migrazione SQL:**
 ```sql
-UPDATE invoices SET invoice_type = 'ricevuta' WHERE invoice_type IN ('passive', 'expense');
-UPDATE invoices SET invoice_type = 'emessa' WHERE invoice_type IN ('active', 'income');
+ALTER TABLE cost_categories ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id);
+ALTER TABLE revenue_centers ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id);
+ALTER TABLE vat_rates ADD COLUMN IF NOT EXISTS user_id uuid REFERENCES auth.users(id);
+
+-- Nuove RLS per cost_categories
+CREATE POLICY "Users can insert own cost_categories"
+  ON cost_categories FOR INSERT
+  WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can update own cost_categories"
+  ON cost_categories FOR UPDATE
+  USING (auth.uid() = user_id);
+
+CREATE POLICY "Users can delete own cost_categories"
+  ON cost_categories FOR DELETE
+  USING (auth.uid() = user_id);
+-- (stessa logica per revenue_centers e vat_rates)
 ```
-Anche il `transformInvoice` in `Fatture.tsx` va corretto: attualmente mappa `'income' → 'income'`, ignorando i valori `'emessa'`/`'ricevuta'`.
 
-### B. Colonna "Tipo" nella tabella fatture con badge visivo
-Aggiungere nella `InvoiceTable` una colonna **Tipo** che mostra:
-- Badge verde "Emessa" (fattura di vendita)
-- Badge blue "Ricevuta" (fattura di acquisto)
-- Badge orange "Autofattura" (per future estensioni)
+**Aggiornamento UI (`CostCategoriesManager.tsx`):**
+- Il `createMutation` deve passare `user_id: user.id` nell'INSERT (come già fa `EmployeesManager`)
+- Le categorie di sistema (senza `user_id`) mostrano un badge "Sistema" e non hanno i pulsanti Modifica/Elimina
 
-L'utente può vedere a colpo d'occhio il tipo e modificarlo cliccando sul badge.
+### B. Fix `monthly_cost` — calcolo automatico nel database
 
-### C. Categorizzazione inline senza abbinamento obbligatorio
-Nella tabella fatture, aggiungere un **dropdown categoria** direttamente nella riga, visibile per tutte le fatture (non solo quelle abbinate). Le opzioni si caricano dalla tabella `cost_categories` reale.
+Aggiungere un trigger Postgres che calcola automaticamente `monthly_cost = annual_cost / 12` ad ogni INSERT o UPDATE sulla tabella `employees`:
 
-Questo permette di categorizzare una fattura in modo indipendente dall'abbinamento bancario — essenziale per far comparire le fatture nel Conto Economico.
+```sql
+CREATE OR REPLACE FUNCTION sync_employee_monthly_cost()
+RETURNS trigger AS $$
+BEGIN
+  NEW.monthly_cost := NEW.annual_cost / 12.0;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
-Il modal di abbinamento va corretto per usare gli ID reali di `cost_categories` invece delle liste hardcoded.
+CREATE TRIGGER set_employee_monthly_cost
+  BEFORE INSERT OR UPDATE ON employees
+  FOR EACH ROW EXECUTE FUNCTION sync_employee_monthly_cost();
 
-### D. Possibilità di modificare il tipo manualmente
-Aggiungere un piccolo controllo (select o toggle) inline nella tabella per correggere il tipo se l'AI ha classificato male.
+-- Aggiorna i record esistenti
+UPDATE employees SET monthly_cost = annual_cost / 12.0 WHERE monthly_cost IS NULL;
+```
+
+### C. Collegare Dipendenti al Conto Economico
+
+Modificare `ContoEconomicoTab.tsx` per leggere i dipendenti attivi dal database e pre-popolare le righe del personale:
+
+- Aggiungere una query `useQuery` per caricare `employees` attivi (come fa `EmployeesManager`)
+- Calcolare il `totalMonthlyCost` degli attivi e distribuirlo uniformemente sui 12 mesi come valore di default per la riga "Salari e stipendi"
+- **Mantenere la possibilità di editing manuale** per ogni mese: se l'utente modifica un campo, il valore personalizzato sovrascrive quello del DB (il comportamento con localStorage rimane per le correzioni mese per mese)
+- Aggiungere una nota informativa nella sezione Personale che indica: "Pre-popolato dai dipendenti in Configurazione — modifica singolo mese se necessario"
+
+**Logica:**
+```typescript
+// In ContoEconomicoTab.tsx
+const { data: employeesData } = useQuery({
+  queryKey: ["employees"],
+  queryFn: async () => {
+    const { data } = await supabase
+      .from("employees")
+      .select("monthly_cost, is_active")
+      .eq("is_active", true);
+    return data;
+  },
+});
+
+const defaultMonthlySalary = employeesData?.reduce(
+  (sum, e) => sum + (e.monthly_cost || 0), 0
+) ?? 0;
+
+// Usato come fallback se l'utente non ha ancora digitato nulla per quel mese
+const getPersonnelValue = (field: "salari", month: number) => {
+  const saved = personnel[field][month];
+  if (saved !== undefined) return saved;
+  return field === "salari" ? defaultMonthlySalary : 0;
+};
+```
 
 ---
 
-## Dettaglio tecnico
+## File modificati
 
-### File modificati
-
-1. **`src/hooks/useContoEconomico.ts`**
-   - Allargare il filtro: `.in("invoice_type", ["ricevuta", "passive", "expense"])` per i costi e `.in("invoice_type", ["emessa", "active", "income"])` per i ricavi (tolleranza ai vecchi valori)
-
-2. **`src/pages/Fatture.tsx`**
-   - Correggere `transformInvoice`: mappare `'emessa'` → mostrare come "emessa", `'ricevuta'`/`'passive'` → mostrare come "expense"
-   - Aggiungere `category_id` e `invoice_type` all'interfaccia `DbInvoice`
-   - Aggiungere handler `handleCategoryChange(invoiceId, categoryId)` che fa UPDATE su Supabase
-   - Aggiungere handler `handleTypeChange(invoiceId, type)` per correzioni manuali
-
-3. **`src/components/fatture/InvoiceTable.tsx`**
-   - Aggiungere la colonna **Tipo** con badge colorati (`Emessa` / `Ricevuta` / `Autofattura`)
-   - Aggiungere colonna/dropdown **Categoria** inline con select che carica da `cost_categories`
-   - Il select sarà cliccabile direttamente nella riga senza aprire modal
-   - Passare `categories` come prop, e `onCategoryChange` / `onTypeChange` callback
-
-4. **`src/components/fatture/InvoiceMatchingModal.tsx`**
-   - Sostituire le liste hardcoded `REVENUE_CATEGORIES` / `COST_CATEGORIES` con dati reali da `cost_categories`
-   - Il `onMatch` salverà direttamente l'UUID della categoria, non il nome
-
-5. **Migrazione dati (SQL via tool)**
-   - `UPDATE invoices SET invoice_type = 'ricevuta' WHERE invoice_type IN ('passive', 'expense')`
-   - `UPDATE invoices SET invoice_type = 'emessa' WHERE invoice_type IN ('active', 'income')`
+1. **Migrazione DB** — aggiunta `user_id` a `cost_categories`, `revenue_centers`, `vat_rates` + nuove RLS + trigger `monthly_cost`
+2. **`src/components/configurazione/CostCategoriesManager.tsx`** — aggiunge `user_id` all'INSERT, nasconde Modifica/Elimina per le categorie di sistema
+3. **`src/components/configurazione/RevenueCentersManager.tsx`** — stessa fix di `user_id` nell'INSERT
+4. **`src/components/configurazione/VatRatesManager.tsx`** — stessa fix di `user_id` nell'INSERT
+5. **`src/components/area-economica/ContoEconomicoTab.tsx`** — legge dipendenti dal DB e pre-popola la riga Salari
 
 ---
 
-## Flusso risultante (dopo fix)
+## Comportamento finale
 
-```text
-Fattura caricata (PDF) 
-       ↓
-AI estrae dati → invoice_type = 'emessa' o 'ricevuta'
-       ↓
-Tabella Fatture mostra:
-  [Data] [Numero] [Fornitore] [Importo] [Tipo badge] [Categoria ▾] [Stato] [Azioni]
-       ↓
-Utente può:
-  • Cambiare tipo manualmente (badge cliccabile)
-  • Assegnare categoria inline (dropdown diretto nella riga)
-  • Abbinare a transazione bancaria (opzionale)
-       ↓
-Conto Economico legge le fatture con invoice_type corretto
-  → Ricevute con categoria variabile → Costi Variabili
-  → Ricevute con categoria fissa    → Costi Fissi
-  → Ricevute senza categoria        → Non categorizzato (warning)
-  → Emesse                          → Ricavi
-```
+- L'utente clicca "Nuova Categoria" in Categorie Costi → il record si salva, appare nella lista e diventa disponibile nel dropdown delle Fatture
+- Le categorie di sistema predefinite restano visibili ma non eliminabili
+- Il dipendente "Fab" (€50.000/anno → €4.167/mese) appare automaticamente pre-popolato nella riga "Salari e stipendi" del Conto Economico per ogni mese, senza bisogno di reinserire i dati
