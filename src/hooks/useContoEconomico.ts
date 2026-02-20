@@ -38,13 +38,13 @@ export function useContoEconomico(year: number) {
         supabase
           .from("invoices")
           .select("amount, vat_amount, invoice_date")
-          .eq("invoice_type", "emessa")
+          .in("invoice_type", ["emessa", "active", "income"])
           .gte("invoice_date", startDate)
           .lte("invoice_date", endDate),
         supabase
           .from("invoices")
           .select("amount, vat_amount, invoice_date, category_id")
-          .eq("invoice_type", "ricevuta")
+          .in("invoice_type", ["ricevuta", "passive", "expense"])
           .gte("invoice_date", startDate)
           .lte("invoice_date", endDate),
         supabase

@@ -22,39 +22,18 @@ import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 
-// Fixed category lists per the FD specification
-const REVENUE_CATEGORIES = [
-  "Ricavi da vendite",
-  "Ricavi da servizi",
-  "Altri ricavi",
-  "Oneri bancari",
-  "Oneri diversi",
-];
-
-const COST_CATEGORIES = [
-  "Acquisto materie prime",
-  "Energia e carburanti",
-  "Lavorazioni di terzi",
-  "Provvigioni",
-  "Carburanti",
-  "Manutenzione",
-  "Assicurazioni",
-  "Formazione e ricerca",
-  "Marketing e pubblicità",
-  "Beni di terzi",
-  "Canoni Leasing",
-  "Consulenze",
-  "Altre spese",
-  "Oneri bancari",
-  "Oneri diversi",
-];
-
 interface Transaction {
   id: string;
   date: Date;
   description: string;
   amount: number;
   matchScore: number;
+}
+
+interface DbCategory {
+  id: string;
+  name: string;
+  cashflow_type: string;
 }
 
 interface InvoiceMatchingModalProps {
@@ -75,26 +54,24 @@ export function InvoiceMatchingModal({
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [categoryMap, setCategoryMap] = useState<Record<string, string>>({});
+  const [allCategories, setAllCategories] = useState<DbCategory[]>([]);
 
-  // Determine category list based on invoice type
-  const isRevenue = invoice?.invoiceType === "income";
-  const categoryList = isRevenue ? REVENUE_CATEGORIES : COST_CATEGORIES;
+  // Determine if invoice is revenue (for label display)
+  const isRevenue = invoice?.invoiceType === "emessa" || invoice?.invoiceType === "income";
 
-  // Fetch cost_categories to map names to IDs
+  // Fetch real cost_categories from DB
   useEffect(() => {
     if (!open) return;
     
     const fetchCategories = async () => {
       const { data } = await supabase
         .from('cost_categories')
-        .select('id, name')
-        .eq('is_active', true);
+        .select('id, name, cashflow_type')
+        .eq('is_active', true)
+        .order('sort_order');
       
       if (data) {
-        const map: Record<string, string> = {};
-        data.forEach(cat => { map[cat.name] = cat.id; });
-        setCategoryMap(map);
+        setAllCategories(data as DbCategory[]);
       }
     };
     fetchCategories();
@@ -212,8 +189,8 @@ export function InvoiceMatchingModal({
 
   const handleMatch = () => {
     if (selectedTransaction) {
-      // Resolve category name to ID if available
-      const categoryId = selectedCategory ? categoryMap[selectedCategory] || undefined : undefined;
+      // selectedCategory is already the real UUID from DB
+      const categoryId = selectedCategory || undefined;
       onMatch(invoice.id, selectedTransaction, categoryId);
       setSelectedTransaction(null);
       setSelectedCategory(null);
@@ -276,9 +253,9 @@ export function InvoiceMatchingModal({
               <SelectValue placeholder="Seleziona categoria..." />
             </SelectTrigger>
             <SelectContent>
-              {categoryList.map((cat) => (
-                <SelectItem key={cat} value={cat}>
-                  {cat}
+              {allCategories.map((cat) => (
+                <SelectItem key={cat.id} value={cat.id}>
+                  {cat.name}
                 </SelectItem>
               ))}
             </SelectContent>
