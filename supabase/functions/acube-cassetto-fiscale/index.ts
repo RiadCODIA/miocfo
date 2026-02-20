@@ -137,9 +137,15 @@ async function handleSetup(fiscalId: string, password: string, pin: string) {
       configId = result.id || result.uuid || null;
       console.log(`[Cassetto] Created new config: ${configId}`);
     } catch (createErr: unknown) {
-      const err = createErr as Error & { body?: string };
-      // If "already exists" error, try to fetch again by listing all
-      if (err.body && (err.body.includes("already have") || err.body.includes("already exists"))) {
+      const err = createErr as Error & { body?: string; status?: number };
+      // If "already exists" error (400 with "already used" or similar), try to fetch again
+      const isAlreadyExists = err.body && (
+        err.body.includes("already have") ||
+        err.body.includes("already exists") ||
+        err.body.includes("already used") ||
+        err.body.includes("is already used")
+      );
+      if (isAlreadyExists) {
         console.log("[Cassetto] Already exists — re-fetching config list");
         try {
           const list = await govItRequest(`/business-registry-configurations`) as unknown[];
