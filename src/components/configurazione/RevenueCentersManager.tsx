@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -31,9 +32,11 @@ interface RevenueCenter {
   sort_order: number;
   is_active: boolean;
   created_at: string;
+  user_id: string | null;
 }
 
 export function RevenueCentersManager() {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<RevenueCenter | null>(null);
   const [formData, setFormData] = useState({ name: "", description: "", is_active: true });
@@ -54,7 +57,7 @@ export function RevenueCentersManager() {
   const createMutation = useMutation({
     mutationFn: async (data: { name: string; description: string; is_active: boolean }) => {
       const maxOrder = revenueCenters?.length ? Math.max(...revenueCenters.map(r => r.sort_order)) + 1 : 1;
-      const { error } = await supabase.from("revenue_centers").insert({ ...data, sort_order: maxOrder });
+      const { error } = await supabase.from("revenue_centers").insert({ ...data, sort_order: maxOrder, user_id: user?.id });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -187,34 +190,46 @@ export function RevenueCentersManager() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {revenueCenters?.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="font-medium">{item.name}</TableCell>
-                <TableCell className="text-muted-foreground">{item.description || "-"}</TableCell>
-                <TableCell>
-                  <span className={`px-2 py-1 rounded-full text-xs ${
-                    item.is_active ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"
-                  }`}>
-                    {item.is_active ? "Attivo" : "Inattivo"}
-                  </span>
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => deleteMutation.mutate(item.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+            {revenueCenters?.map((item) => {
+              const isSystem = !item.user_id;
+              return (
+                <TableRow key={item.id}>
+                  <TableCell className="font-medium">
+                    {item.name}
+                    {isSystem && (
+                      <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground">Sistema</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-muted-foreground">{item.description || "-"}</TableCell>
+                  <TableCell>
+                    <span className={`px-2 py-1 rounded-full text-xs ${
+                      item.is_active ? "bg-success/20 text-success" : "bg-muted text-muted-foreground"
+                    }`}>
+                      {item.is_active ? "Attivo" : "Inattivo"}
+                    </span>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {isSystem ? (
+                      <span className="text-xs text-muted-foreground italic">Sola lettura</span>
+                    ) : (
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => deleteMutation.mutate(item.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       )}

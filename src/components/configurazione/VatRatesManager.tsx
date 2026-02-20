@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -29,9 +30,11 @@ interface VatRate {
   rate: number;
   is_default: boolean;
   created_at: string;
+  user_id: string | null;
 }
 
 export function VatRatesManager() {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<VatRate | null>(null);
   const [formData, setFormData] = useState({ name: "", rate: "", is_default: false });
@@ -51,7 +54,7 @@ export function VatRatesManager() {
 
   const createMutation = useMutation({
     mutationFn: async (data: { name: string; rate: number; is_default: boolean }) => {
-      const { error } = await supabase.from("vat_rates").insert(data);
+      const { error } = await supabase.from("vat_rates").insert({ ...data, user_id: user?.id });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -194,34 +197,46 @@ export function VatRatesManager() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {vatRates?.map((item) => (
-              <TableRow key={item.id}>
-                <TableCell className="font-medium">{item.name}</TableCell>
-                <TableCell>{item.rate}%</TableCell>
-                <TableCell>
-                  {item.is_default && (
-                    <span className="px-2 py-1 rounded-full text-xs bg-primary/20 text-primary">
-                      Default
-                    </span>
-                  )}
-                </TableCell>
-                <TableCell className="text-right">
-                  <div className="flex gap-2 justify-end">
-                    <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
-                      <Pencil className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:text-destructive"
-                      onClick={() => deleteMutation.mutate(item.id)}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+            {vatRates?.map((item) => {
+              const isSystem = !item.user_id;
+              return (
+                <TableRow key={item.id}>
+                  <TableCell className="font-medium">
+                    {item.name}
+                    {isSystem && (
+                      <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground">Sistema</span>
+                    )}
+                  </TableCell>
+                  <TableCell>{item.rate}%</TableCell>
+                  <TableCell>
+                    {item.is_default && (
+                      <span className="px-2 py-1 rounded-full text-xs bg-primary/20 text-primary">
+                        Default
+                      </span>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right">
+                    {isSystem ? (
+                      <span className="text-xs text-muted-foreground italic">Sola lettura</span>
+                    ) : (
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => deleteMutation.mutate(item.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
           </TableBody>
         </Table>
       )}

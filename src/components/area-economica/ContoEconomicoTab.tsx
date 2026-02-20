@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { useContoEconomico, MONTHS, MonthlyData } from "@/hooks/useContoEconomico";
 import { IVASection } from "./IVASection";
 import { AIReportSection, AIReport } from "./AIReportSection";
@@ -7,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Brain, Loader2, AlertCircle } from "lucide-react";
+import { Brain, Loader2, AlertCircle, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -45,6 +46,21 @@ export function ContoEconomicoTab() {
   const [aiReport, setAiReport] = useState<AIReport | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
 
+  // Load active employees for pre-populating salari row
+  const { data: employeesData } = useQuery({
+    queryKey: ["employees-active"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("employees")
+        .select("monthly_cost")
+        .eq("is_active", true);
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const defaultMonthlySalary = employeesData?.reduce((sum, e) => sum + (e.monthly_cost || 0), 0) ?? 0;
+
   useEffect(() => {
     setPersonnel(loadPersonnel(year));
     setAiReport(null);
@@ -69,7 +85,8 @@ export function ContoEconomicoTab() {
       const ebitda: MonthlyData = {};
 
       for (let m = 0; m < 12; m++) {
-        personnelTotal[m] = (personnel.salari[m] || 0) + (personnel.amministratore[m] || 0);
+        const salariM = personnel.salari[m] !== undefined ? personnel.salari[m] : defaultMonthlySalary;
+        personnelTotal[m] = salariM + (personnel.amministratore[m] || 0);
         margineContribuzione[m] = (data.ricavi[m] || 0) - (data.costiVariabiliTotali[m] || 0);
         ebitda[m] = margineContribuzione[m] - (data.costiFissiTotali[m] || 0) - personnelTotal[m];
       }
@@ -133,7 +150,8 @@ export function ContoEconomicoTab() {
 
   for (let m = 0; m < 12; m++) {
     margineContribuzione[m] = (ricavi[m] ?? 0) - (costiVariabiliTotali[m] ?? 0);
-    personnelTotal[m] = (personnel.salari[m] ?? 0) + (personnel.amministratore[m] ?? 0);
+    const salariM = personnel.salari[m] !== undefined ? personnel.salari[m] : defaultMonthlySalary;
+    personnelTotal[m] = salariM + (personnel.amministratore[m] ?? 0);
     ebitda[m] = margineContribuzione[m] - (costiFissiTotali[m] ?? 0) - personnelTotal[m];
   }
 
@@ -237,19 +255,26 @@ export function ContoEconomicoTab() {
   const renderEditableRow = (label: string, field: "salari" | "amministratore") => (
     <tr className="border-b border-border/50">
       <td className="py-1 px-3 text-xs whitespace-nowrap sticky left-0 bg-card z-10">{label}</td>
-      {Array.from({ length: 12 }).map((_, m) => (
-        <td key={m} className="py-0.5 px-1">
-          <Input
-            type="number"
-            value={personnel[field][m] || ""}
-            onChange={(e) => handlePersonnelChange(field, m, e.target.value)}
-            placeholder="0"
-            className="h-7 text-xs text-right w-16 bg-muted/50 border-border/50 px-1"
-          />
-        </td>
-      ))}
+      {Array.from({ length: 12 }).map((_, m) => {
+        const savedValue = personnel[field][m];
+        const displayValue = savedValue !== undefined ? savedValue : (field === "salari" ? defaultMonthlySalary : 0);
+        return (
+          <td key={m} className="py-0.5 px-1">
+            <Input
+              type="number"
+              value={displayValue || ""}
+              onChange={(e) => handlePersonnelChange(field, m, e.target.value)}
+              placeholder={field === "salari" && defaultMonthlySalary > 0 ? String(Math.round(defaultMonthlySalary)) : "0"}
+              className="h-7 text-xs text-right w-16 bg-muted/50 border-border/50 px-1"
+            />
+          </td>
+        );
+      })}
       <td className="py-1.5 px-2 text-right text-xs font-semibold">
-        {fmt(sumMonthly(personnel[field]))}
+        {fmt(field === "salari" && Object.keys(personnel[field]).length === 0
+          ? defaultMonthlySalary * 12
+          : sumMonthly(personnel[field])
+        )}
       </td>
     </tr>
   );
@@ -338,10 +363,13 @@ export function ContoEconomicoTab() {
               {renderSubtotal("TOTALE COSTI FISSI", costiFissiTotali)}
 
               {/* ── PERSONALE (manual) ── */}
-              {renderSectionHeader("Costi Personale (inserimento manuale)")}
+              {renderSectionHeader("Costi Personale")}
               <tr>
                 <td colSpan={14} className="px-3 py-1 text-[10px] text-muted-foreground italic">
-                  Inserisci i costi mensili del personale — non presenti nelle fatture ricevute.
+                  {defaultMonthlySalary > 0
+                    ? <><Users className="inline h-3 w-3 mr-1 mb-0.5" />Pre-popolato dai dipendenti in Configurazione (€{Math.round(defaultMonthlySalary).toLocaleString("it-IT")}/mese) — modifica singolo mese se necessario.</>
+                    : "Inserisci i costi mensili del personale — non presenti nelle fatture ricevute."
+                  }
                 </td>
               </tr>
               {renderEditableRow("Salari e stipendi", "salari")}
