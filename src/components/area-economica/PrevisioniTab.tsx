@@ -1,9 +1,10 @@
 import { useState } from "react";
-import { Plus, Save, TrendingUp, TrendingDown, Brain, Loader2 } from "lucide-react";
+import { Plus, Save, TrendingUp, TrendingDown, Brain, Loader2, ArrowUpCircle, ArrowDownCircle } from "lucide-react";
 import { CreateBudgetModal } from "@/components/budget/CreateBudgetModal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
 import { cn } from "@/lib/utils";
@@ -46,10 +47,21 @@ export function PrevisioniTab() {
   const runAIAnalysis = async () => {
     setAiLoading(true);
     try {
+      const ricavi = budgets?.filter(b => b.budgetType === "income") || [];
+      const costi = budgets?.filter(b => b.budgetType === "expense") || [];
+      const totaleRicaviPrevisti = ricavi.reduce((s, b) => s + b.amount, 0);
+      const totaleCostiPrevisti = costi.reduce((s, b) => s + b.amount, 0);
+      const cashflowNettoPrevisto = totaleRicaviPrevisti - totaleCostiPrevisti;
+
       const aiData = {
-        budgets: budgets?.map((b) => ({ name: b.name, amount: b.amount, startDate: b.startDate, endDate: b.endDate })) || [],
-        comparison: comparison || [],
-        variance: variance || {},
+        contesto: "Questi sono budget PREVISIONALI futuri, non consuntivi passati. Gli scostamenti con consuntivo = 0 indicano mesi futuri non ancora realizzati, NON perdite.",
+        budgetsRicavi: ricavi.map(b => ({ nome: b.name, importo: b.amount, mese: b.startDate })),
+        budgetsCosti: costi.map(b => ({ nome: b.name, importo: b.amount, mese: b.startDate })),
+        totaleRicaviPrevisti,
+        totaleCostiPrevisti,
+        cashflowNettoPrevisto,
+        confrontoMensile: comparison || [],
+        scostamenti: variance || {},
       };
 
       const { data, error } = await supabase.functions.invoke("analyze-conto-economico", {
@@ -69,6 +81,9 @@ export function PrevisioniTab() {
       setAiLoading(false);
     }
   };
+
+  const ricaviBudgets = budgets?.filter(b => b.budgetType === "income") || [];
+  const costiBudgets = budgets?.filter(b => b.budgetType === "expense") || [];
 
   return (
     <div className="space-y-6">
@@ -96,28 +111,38 @@ export function PrevisioniTab() {
         <Table>
           <TableHeader>
             <TableRow className="border-border">
+              <TableHead className="text-muted-foreground">Tipo</TableHead>
               <TableHead className="text-muted-foreground">Nome</TableHead>
+              <TableHead className="text-muted-foreground">Mese</TableHead>
               <TableHead className="text-muted-foreground text-right">Importo Previsto</TableHead>
-              <TableHead className="text-muted-foreground text-right">Cashflow</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loadingBudgets ? (
               Array.from({ length: 4 }).map((_, i) => (
-                <TableRow key={i}><TableCell><Skeleton className="h-4 w-20" /></TableCell><TableCell><Skeleton className="h-8 w-24 ml-auto" /></TableCell><TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell></TableRow>
+                <TableRow key={i}>
+                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                  <TableCell><Skeleton className="h-8 w-24 ml-auto" /></TableCell>
+                </TableRow>
               ))
             ) : !budgets?.length ? (
-              <TableRow><TableCell colSpan={3} className="h-24 text-center text-muted-foreground">Nessun budget. Clicca "Inserisci Budget".</TableCell></TableRow>
+              <TableRow><TableCell colSpan={4} className="h-24 text-center text-muted-foreground">Nessun budget. Clicca "Inserisci Budget" per aggiungere ricavi o costi previsti.</TableCell></TableRow>
             ) : budgets.map((b) => {
-              const amt = editedValues[b.id]?.income ?? b.amount;
+              const isIncome = b.budgetType === "income";
               return (
                 <TableRow key={b.id} className="border-border">
-                  <TableCell className="font-medium">{b.name}</TableCell>
-                  <TableCell className="text-right">
-                    <Input type="text" defaultValue={formatCurrency(b.amount)} onChange={(e) => handleInputChange(b.id, e.target.value)} className="w-28 ml-auto text-right bg-transparent border-transparent hover:border-border h-8" />
+                  <TableCell>
+                    <Badge variant="outline" className={cn("gap-1", isIncome ? "border-success/50 text-success" : "border-destructive/50 text-destructive")}>
+                      {isIncome ? <ArrowUpCircle className="h-3 w-3" /> : <ArrowDownCircle className="h-3 w-3" />}
+                      {isIncome ? "Ricavo" : "Costo"}
+                    </Badge>
                   </TableCell>
-                  <TableCell className={cn("text-right font-semibold", amt >= 0 ? "text-success" : "text-destructive")}>
-                    {amt >= 0 ? "+" : ""}{formatCurrency(amt)}
+                  <TableCell className="font-medium">{b.name}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">{new Date(b.startDate).toLocaleDateString("it-IT", { month: "long", year: "numeric" })}</TableCell>
+                  <TableCell className={cn("text-right font-semibold", isIncome ? "text-success" : "text-destructive")}>
+                    {isIncome ? "+" : "-"}{formatCurrency(b.amount)}
                   </TableCell>
                 </TableRow>
               );
@@ -126,12 +151,38 @@ export function PrevisioniTab() {
         </Table>
       </div>
 
+      {/* Summary cards */}
+      {!loadingVariance && variance && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="glass rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingUp className="h-4 w-4 text-success" />
+              <span className="text-xs text-muted-foreground">Ricavi Previsti</span>
+            </div>
+            <p className="text-lg font-bold text-success">+{formatCurrency(variance.totalRicaviPrevisti || 0)}</p>
+          </div>
+          <div className="glass rounded-xl p-4">
+            <div className="flex items-center gap-2 mb-1">
+              <TrendingDown className="h-4 w-4 text-destructive" />
+              <span className="text-xs text-muted-foreground">Costi Previsti</span>
+            </div>
+            <p className="text-lg font-bold text-destructive">-{formatCurrency(variance.totalCostiPrevisti || 0)}</p>
+          </div>
+          <div className="glass rounded-xl p-4">
+            <span className="text-xs text-muted-foreground">Cashflow Netto Previsto</span>
+            <p className={cn("text-lg font-bold mt-1", (variance.cashflowNettoPrevisto || 0) >= 0 ? "text-success" : "text-destructive")}>
+              {(variance.cashflowNettoPrevisto || 0) >= 0 ? "+" : ""}{formatCurrency(variance.cashflowNettoPrevisto || 0)}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Chart */}
       <div className="glass rounded-xl p-5">
         <h3 className="text-sm font-semibold mb-4">Consuntivo vs Previsionale</h3>
         <div className="h-[280px]">
           {loadingComparison ? <Skeleton className="w-full h-full" /> : !comparison?.length ? (
-            <p className="text-sm text-muted-foreground text-center pt-20">Nessun dato</p>
+            <p className="text-sm text-muted-foreground text-center pt-20">Nessun dato di confronto disponibile</p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={comparison}>
@@ -142,29 +193,9 @@ export function PrevisioniTab() {
                 <Legend />
                 <ReferenceLine y={0} stroke="hsl(var(--border))" />
                 <Bar dataKey="consuntivo" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Consuntivo" />
-                <Bar dataKey="previsionale" fill="hsl(var(--primary) / 0.4)" radius={[4, 4, 0, 0]} name="Previsionale" />
+                <Bar dataKey="previsionale" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} name="Cashflow Netto Previsto" opacity={0.5} />
               </BarChart>
             </ResponsiveContainer>
-          )}
-        </div>
-      </div>
-
-      {/* Variance */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="glass rounded-xl p-4">
-          <div className="flex items-center gap-2"><TrendingDown className="h-4 w-4 text-destructive" /><span className="text-xs text-muted-foreground">Scost. Negativo</span></div>
-          {loadingVariance ? <Skeleton className="h-6 w-20 mt-2" /> : <p className="text-lg font-bold text-destructive mt-1">-{formatCurrency(variance?.negativeVariance || 0)}</p>}
-        </div>
-        <div className="glass rounded-xl p-4">
-          <div className="flex items-center gap-2"><TrendingUp className="h-4 w-4 text-success" /><span className="text-xs text-muted-foreground">Scost. Positivo</span></div>
-          {loadingVariance ? <Skeleton className="h-6 w-20 mt-2" /> : <p className="text-lg font-bold text-success mt-1">+{formatCurrency(variance?.positiveVariance || 0)}</p>}
-        </div>
-        <div className="glass rounded-xl p-4">
-          <span className="text-xs text-muted-foreground">Scost. Netto</span>
-          {loadingVariance ? <Skeleton className="h-6 w-20 mt-2" /> : (
-            <p className={cn("text-lg font-bold mt-1", (variance?.netVariance || 0) >= 0 ? "text-success" : "text-destructive")}>
-              {(variance?.netVariance || 0) >= 0 ? "+" : ""}{formatCurrency(variance?.netVariance || 0)}
-            </p>
           )}
         </div>
       </div>

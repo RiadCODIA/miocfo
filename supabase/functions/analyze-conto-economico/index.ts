@@ -29,24 +29,31 @@ Rispondi SOLO con un JSON valido (senza markdown) con questa struttura:
   }
 
   if (type === "previsioni") {
-    return `Sei un CFO virtuale esperto in PMI italiane. Analizza i seguenti dati di budget e confronto consuntivo vs previsionale e fornisci un report strutturato.
+    return `Sei un CFO virtuale esperto in PMI italiane. Analizza i seguenti dati di BUDGET PREVISIONALE (piani futuri, NON consuntivi passati).
+
+ISTRUZIONI FONDAMENTALI:
+- I budget sono PREVISIONI FUTURE, non dati storici realizzati
+- Se il consuntivo di un mese è 0, significa che quel mese non è ancora avvenuto, NON che si è in perdita
+- Valuta la coerenza e la solidità del piano finanziario
+- Distingui chiaramente tra ricavi previsti e costi previsti
+- Lo scostamento tra consuntivo=0 e previsionale>0 indica mesi futuri pianificati, NON una perdita
 
 DATI BUDGET E PREVISIONI:
 ${JSON.stringify(data, null, 2)}
 
 Rispondi SOLO con un JSON valido (senza markdown) con questa struttura:
 {
-  "healthScore": <numero 1-100 che indica l'attendibilità delle previsioni, 100=perfettamente attendibili>,
+  "healthScore": <numero 1-100 che indica la solidità del piano previsionale, 100=piano eccellente e coerente>,
   "healthLabel": "<Critico|Insufficiente|Sufficiente|Buono|Ottimo>",
-  "summary": "<sintesi in 2-3 frasi dell'attendibilità previsionale>",
+  "summary": "<sintesi in 2-3 frasi della solidità del piano. Se ci sono solo ricavi previsti e nessun costo, commentalo positivamente o suggerisci di aggiungere costi previsti per completare il piano>",
   "marginTrend": "<positivo|stabile|negativo>",
   "criticalAreas": [
-    { "area": "<area con scostamento significativo>", "description": "<descrizione dello scostamento>", "severity": "<alta|media|bassa>" }
+    { "area": "<area del piano che potrebbe essere migliorata>", "description": "<descrizione costruttiva>", "severity": "<alta|media|bassa>" }
   ],
   "suggestions": [
-    { "title": "<suggerimento budget>", "description": "<come migliorare la pianificazione>", "priority": "<alta|media|bassa>", "timeline": "<breve termine|medio termine|lungo termine>" }
+    { "title": "<suggerimento concreto per migliorare il piano>", "description": "<come ottimizzare la pianificazione finanziaria>", "priority": "<alta|media|bassa>", "timeline": "<breve termine|medio termine|lungo termine>" }
   ],
-  "forecasts": "<forecast aggiornato basato sui trend attuali in 2-3 frasi>"
+  "forecasts": "<previsione costruttiva basata sul piano inserito in 2-3 frasi. Se cashflowNettoPrevisto è positivo, sottolinealo come punto di forza>"
 }`;
   }
 

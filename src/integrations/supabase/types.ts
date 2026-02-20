@@ -289,6 +289,7 @@ export type Database = {
       budgets: {
         Row: {
           amount: number
+          budget_type: string | null
           category_id: string | null
           created_at: string
           end_date: string | null
@@ -302,6 +303,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          budget_type?: string | null
           category_id?: string | null
           created_at?: string
           end_date?: string | null
@@ -315,6 +317,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          budget_type?: string | null
           category_id?: string | null
           created_at?: string
           end_date?: string | null
