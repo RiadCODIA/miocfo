@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +43,7 @@ interface CostCategory {
   sort_order: number;
   is_active: boolean;
   created_at: string;
+  user_id: string | null;
 }
 
 const costTypeLabels: Record<CostType, string> = {
@@ -56,6 +58,7 @@ const cashflowTypeLabels: Record<CashflowType, string> = {
 };
 
 export function CostCategoriesManager() {
+  const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<CostCategory | null>(null);
   const [formData, setFormData] = useState({
@@ -88,9 +91,9 @@ export function CostCategoriesManager() {
   const parentCategories = categories?.filter((c) => !c.parent_id);
 
   const createMutation = useMutation({
-    mutationFn: async (data: Omit<CostCategory, "id" | "created_at" | "sort_order">) => {
+    mutationFn: async (data: Omit<CostCategory, "id" | "created_at" | "sort_order" | "user_id">) => {
       const maxOrder = categories?.length ? Math.max(...categories.map((c) => c.sort_order)) + 1 : 1;
-      const { error } = await supabase.from("cost_categories").insert({ ...data, sort_order: maxOrder });
+      const { error } = await supabase.from("cost_categories").insert({ ...data, sort_order: maxOrder, user_id: user?.id });
       if (error) throw error;
     },
     onSuccess: () => {
@@ -304,11 +307,15 @@ export function CostCategoriesManager() {
           <TableBody>
             {filteredCategories?.map((item) => {
               const parent = categories?.find((c) => c.id === item.parent_id);
+              const isSystem = !item.user_id;
               return (
                 <TableRow key={item.id}>
                   <TableCell className="font-medium">
                     {parent && <span className="text-muted-foreground mr-2">↳</span>}
                     {item.name}
+                    {isSystem && (
+                      <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] bg-muted text-muted-foreground">Sistema</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <span className={`px-2 py-1 rounded-full text-xs ${
@@ -330,19 +337,23 @@ export function CostCategoriesManager() {
                     </span>
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex gap-2 justify-end">
-                      <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
-                        <Pencil className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-destructive hover:text-destructive"
-                        onClick={() => deleteMutation.mutate(item.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                    {isSystem ? (
+                      <span className="text-xs text-muted-foreground italic">Sola lettura</span>
+                    ) : (
+                      <div className="flex gap-2 justify-end">
+                        <Button variant="ghost" size="icon" onClick={() => handleEdit(item)}>
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:text-destructive"
+                          onClick={() => deleteMutation.mutate(item.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    )}
                   </TableCell>
                 </TableRow>
               );

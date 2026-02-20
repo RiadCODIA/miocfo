@@ -491,6 +491,7 @@ export type Database = {
           name: string
           parent_id: string | null
           sort_order: number | null
+          user_id: string | null
         }
         Insert: {
           cashflow_type?: Database["public"]["Enums"]["cashflow_type"]
@@ -501,6 +502,7 @@ export type Database = {
           name: string
           parent_id?: string | null
           sort_order?: number | null
+          user_id?: string | null
         }
         Update: {
           cashflow_type?: Database["public"]["Enums"]["cashflow_type"]
@@ -511,6 +513,7 @@ export type Database = {
           name?: string
           parent_id?: string | null
           sort_order?: number | null
+          user_id?: string | null
         }
         Relationships: [
           {
@@ -950,6 +953,7 @@ export type Database = {
           is_active: boolean | null
           name: string
           sort_order: number | null
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -958,6 +962,7 @@ export type Database = {
           is_active?: boolean | null
           name: string
           sort_order?: number | null
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -966,6 +971,7 @@ export type Database = {
           is_active?: boolean | null
           name?: string
           sort_order?: number | null
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -1141,6 +1147,7 @@ export type Database = {
           is_default: boolean | null
           name: string
           rate: number
+          user_id: string | null
         }
         Insert: {
           created_at?: string
@@ -1148,6 +1155,7 @@ export type Database = {
           is_default?: boolean | null
           name: string
           rate: number
+          user_id?: string | null
         }
         Update: {
           created_at?: string
@@ -1155,6 +1163,7 @@ export type Database = {
           is_default?: boolean | null
           name?: string
           rate?: number
+          user_id?: string | null
         }
         Relationships: []
       }
