@@ -22,6 +22,7 @@ import {
 import { useCreateBudget } from "@/hooks/useBudgets";
 import { toast } from "sonner";
 import { Loader2, CalendarDays, TrendingUp, TrendingDown } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface CreateBudgetModalProps {
   open: boolean;
@@ -30,8 +31,7 @@ interface CreateBudgetModalProps {
 
 export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps) {
   const createBudget = useCreateBudget();
-  
-  // Generate next 12 months options
+
   const monthOptions = Array.from({ length: 12 }, (_, i) => {
     const date = addMonths(startOfMonth(new Date()), i);
     return {
@@ -43,10 +43,11 @@ export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps
   const [selectedMonth, setSelectedMonth] = useState(monthOptions[0].value);
   const [budgetName, setBudgetName] = useState("");
   const [budgetAmount, setBudgetAmount] = useState("");
+  const [budgetType, setBudgetType] = useState<"income" | "expense">("income");
 
   const handleSubmit = async () => {
     const cleanedValue = budgetAmount.replace(/[€.\s]/g, "").replace(",", ".");
-    const amount = parseFloat(cleanedValue) || 0;
+    const amount = Math.abs(parseFloat(cleanedValue) || 0);
 
     if (!budgetName.trim()) {
       toast.error("Inserisci un nome per il budget");
@@ -54,7 +55,7 @@ export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps
     }
 
     if (amount === 0) {
-      toast.error("Inserisci un importo valido (positivo per ricavi, negativo per costi)");
+      toast.error("Inserisci un importo valido");
       return;
     }
 
@@ -62,26 +63,19 @@ export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps
       await createBudget.mutateAsync({
         name: budgetName.trim(),
         amount,
+        budgetType,
         startDate: new Date(selectedMonth),
         periodType: "monthly",
       });
       toast.success("Budget creato con successo");
       onOpenChange(false);
-      // Reset form
       setBudgetName("");
       setBudgetAmount("");
       setSelectedMonth(monthOptions[0].value);
+      setBudgetType("income");
     } catch (error) {
       toast.error("Errore durante la creazione del budget");
     }
-  };
-
-  const formatInputCurrency = (value: string) => {
-    const cleaned = value.replace(/[€.\s]/g, "").replace(",", ".");
-    const num = parseFloat(cleaned) || 0;
-    if (num === 0) return "";
-    const sign = num < 0 ? "-" : "";
-    return `${sign}€${Math.abs(num).toLocaleString("it-IT")}`;
   };
 
   return (
@@ -93,16 +87,49 @@ export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps
             Nuovo Budget
           </DialogTitle>
           <DialogDescription>
-            Inserisci l'importo della spesa (con segno meno) o del ricavo (con segno più) che hai previsto per il tuo budget. In questo modo potrai pianificare i costi fissi o i ricavi futuri per monitorarne l'andamento mese per mese.
+            Inserisci il tipo (ricavo o costo), il nome e l'importo previsto per il mese selezionato.
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-4">
+          {/* Budget Type selector */}
           <div className="space-y-2">
-            <Label htmlFor="name">Nome Budget</Label>
+            <Label>Tipo</Label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setBudgetType("income")}
+                className={cn(
+                  "flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors",
+                  budgetType === "income"
+                    ? "border-success bg-success/10 text-success"
+                    : "border-border bg-secondary text-muted-foreground hover:bg-secondary/80"
+                )}
+              >
+                <TrendingUp className="h-4 w-4" />
+                Ricavo previsto
+              </button>
+              <button
+                type="button"
+                onClick={() => setBudgetType("expense")}
+                className={cn(
+                  "flex items-center justify-center gap-2 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors",
+                  budgetType === "expense"
+                    ? "border-destructive bg-destructive/10 text-destructive"
+                    : "border-border bg-secondary text-muted-foreground hover:bg-secondary/80"
+                )}
+              >
+                <TrendingDown className="h-4 w-4" />
+                Costo previsto
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="name">Nome</Label>
             <Input
               id="name"
-              placeholder="Es. Marketing Q1"
+              placeholder={budgetType === "income" ? "Es. Fatturato atteso" : "Es. Costi marketing"}
               value={budgetName}
               onChange={(e) => setBudgetName(e.target.value)}
               className="bg-secondary border-border"
@@ -110,7 +137,7 @@ export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="month">Mese di inizio</Label>
+            <Label htmlFor="month">Mese</Label>
             <Select value={selectedMonth} onValueChange={setSelectedMonth}>
               <SelectTrigger className="bg-secondary border-border">
                 <SelectValue />
@@ -126,17 +153,17 @@ export function CreateBudgetModal({ open, onOpenChange }: CreateBudgetModalProps
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="amount" className="flex items-center gap-2">
-              <TrendingUp className="h-4 w-4 text-success" />
-              Importo Budget
+            <Label htmlFor="amount">
+              Importo (€)
             </Label>
             <Input
               id="amount"
-              type="text"
-              placeholder="€0"
+              type="number"
+              min="0"
+              step="0.01"
+              placeholder="0.00"
               value={budgetAmount}
               onChange={(e) => setBudgetAmount(e.target.value)}
-              onBlur={(e) => setBudgetAmount(formatInputCurrency(e.target.value))}
               className="bg-secondary border-border"
             />
           </div>
