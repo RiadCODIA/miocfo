@@ -212,9 +212,19 @@ async function handleDownloadNow(fiscalId: string, startDate?: string, endDate?:
     body.end_date = new Date().toISOString().split("T")[0];
   }
 
-  const result = await govItRequest("/jobs/invoice-download", "POST", body);
-  console.log("[Cassetto] Download job created:", result);
-  return result;
+  try {
+    const result = await govItRequest("/jobs/invoice-download", "POST", body);
+    console.log("[Cassetto] Download job created:", result);
+    return result;
+  } catch (err: unknown) {
+    const e = err as Error & { status?: number };
+    if (e.status === 403 || e.status === 402) {
+      // Sandbox / plan limitation: invoice-download job not available
+      console.log(`[Cassetto] ${e.status} on download job (sandbox limitation) — skipping job trigger`);
+      return { skipped: true, reason: "sandbox_limitation", status: e.status };
+    }
+    throw err;
+  }
 }
 
 // Action: fetch-invoices - Get downloaded invoices from A-Cube and import to DB
