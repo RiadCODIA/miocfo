@@ -7,7 +7,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Brain, Loader2 } from "lucide-react";
+import { Brain, Loader2, AlertCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "@/hooks/use-toast";
 
@@ -64,14 +64,14 @@ export function ContoEconomicoTab() {
     if (!data) return;
     setAiLoading(true);
     try {
-      const primoMargine: MonthlyData = {};
       const personnelTotal: MonthlyData = {};
+      const margineContribuzione: MonthlyData = {};
       const ebitda: MonthlyData = {};
 
       for (let m = 0; m < 12; m++) {
-        primoMargine[m] = (data.ricavi[m] || 0) - (data.costiTotali[m] || 0);
         personnelTotal[m] = (personnel.salari[m] || 0) + (personnel.amministratore[m] || 0);
-        ebitda[m] = primoMargine[m] - personnelTotal[m];
+        margineContribuzione[m] = (data.ricavi[m] || 0) - (data.costiVariabiliTotali[m] || 0);
+        ebitda[m] = margineContribuzione[m] - (data.costiFissiTotali[m] || 0) - personnelTotal[m];
       }
 
       const payload = {
@@ -81,8 +81,7 @@ export function ContoEconomicoTab() {
           ricaviTotali: data.ricavi,
           costiFatture: data.costiTotali,
           costiTotali: data.costiTotali,
-          costiPerCategoria: data.costiPerCategoria,
-          primoMargine,
+          margineContribuzione,
           costiPersonale: personnelTotal,
           ebitda,
           mesi: MONTHS,
@@ -100,9 +99,10 @@ export function ContoEconomicoTab() {
       }
 
       setAiReport(result);
-    } catch (e: any) {
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Errore durante l'analisi AI";
       console.error("AI analysis error:", e);
-      toast({ title: "Errore", description: e.message || "Errore durante l'analisi AI", variant: "destructive" });
+      toast({ title: "Errore", description: msg, variant: "destructive" });
     } finally {
       setAiLoading(false);
     }
@@ -114,47 +114,74 @@ export function ContoEconomicoTab() {
 
   if (!data) return null;
 
-  const { ricavi, costiPerCategoria, costiTotali, ivaRicavi, ivaCosti, categoryNames } = data;
+  const {
+    ricavi,
+    costiVariabili,
+    costiFissi,
+    costiNonCategorizzati,
+    costiVariabiliTotali,
+    costiFissiTotali,
+    costiTotali,
+    ivaRicavi,
+    ivaCosti,
+    variableCategories,
+    fixedCategories,
+  } = data;
 
-  const primoMargine: MonthlyData = {};
+  // Derived rows
+  const margineContribuzione: MonthlyData = {};
   const personnelTotal: MonthlyData = {};
   const ebitda: MonthlyData = {};
 
   for (let m = 0; m < 12; m++) {
-    primoMargine[m] = (ricavi[m] || 0) - (costiTotali[m] || 0);
+    margineContribuzione[m] = (ricavi[m] || 0) - (costiVariabiliTotali[m] || 0);
     personnelTotal[m] = (personnel.salari[m] || 0) + (personnel.amministratore[m] || 0);
-    ebitda[m] = primoMargine[m] - personnelTotal[m];
+    ebitda[m] = margineContribuzione[m] - (costiFissiTotali[m] || 0) - personnelTotal[m];
   }
 
   const totalRicavi = sumMonthly(ricavi);
+  const hasUncategorized = sumMonthly(costiNonCategorizzati) > 0;
 
   const renderValueCell = (value: number, isTotal = false, isNegative = false) => (
     <td className={cn(
       "py-1.5 px-2 text-right text-xs whitespace-nowrap",
       isTotal && "font-bold",
       isNegative && value < 0 && "text-destructive",
-      !isNegative && value > 0 && isTotal && "text-success"
+      !isNegative && value > 0 && isTotal && "text-primary"
     )}>
       {fmt(value)}
     </td>
   );
 
-  const renderRow = (label: string, monthlyData: MonthlyData, options?: { bold?: boolean; highlight?: boolean; negative?: boolean; indent?: boolean }) => {
+  const renderRow = (label: string, monthlyData: MonthlyData, options?: {
+    bold?: boolean;
+    highlight?: string; // tailwind bg class
+    negative?: boolean;
+    indent?: boolean;
+    warn?: boolean;
+  }) => {
     const total = sumMonthly(monthlyData);
     return (
       <tr className={cn(
         "border-b border-border/50",
-        options?.highlight && "bg-muted/30",
-        options?.bold && "font-semibold"
+        options?.highlight,
+        options?.warn && "bg-amber-500/10"
       )}>
-        <td className={cn("py-1.5 px-3 text-xs whitespace-nowrap sticky left-0 bg-card z-10", options?.bold && "font-bold text-foreground", options?.indent && "pl-6")}>
+        <td className={cn(
+          "py-1.5 px-3 text-xs whitespace-nowrap sticky left-0 z-10",
+          options?.highlight ? options.highlight : "bg-card",
+          options?.bold && "font-bold text-foreground",
+          options?.indent && "pl-6 text-muted-foreground",
+          options?.warn && "text-amber-700 dark:text-amber-400 font-medium"
+        )}>
+          {options?.warn && <AlertCircle className="inline h-3 w-3 mr-1 mb-0.5" />}
           {label}
         </td>
         {Array.from({ length: 12 }).map((_, m) => renderValueCell(monthlyData[m] || 0, options?.bold, options?.negative))}
         <td className={cn(
           "py-1.5 px-2 text-right text-xs font-bold whitespace-nowrap",
           options?.negative && total < 0 && "text-destructive",
-          !options?.negative && total > 0 && options?.bold && "text-success"
+          !options?.negative && total > 0 && options?.bold && "text-primary"
         )}>
           {fmt(total)}
         </td>
@@ -175,6 +202,39 @@ export function ContoEconomicoTab() {
       </td>
     </tr>
   );
+
+  const renderSectionHeader = (label: string) => (
+    <tr className="bg-muted/40">
+      <td colSpan={14} className="py-1.5 px-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wide sticky left-0">
+        {label}
+      </td>
+    </tr>
+  );
+
+  const renderSubtotal = (label: string, monthlyData: MonthlyData, options?: { negative?: boolean }) => {
+    const total = sumMonthly(monthlyData);
+    return (
+      <tr className="border-b-2 border-border bg-muted/20">
+        <td className="py-2 px-3 text-xs font-bold text-foreground sticky left-0 bg-muted/20 z-10">{label}</td>
+        {Array.from({ length: 12 }).map((_, m) => (
+        <td key={m} className={cn(
+            "py-2 px-2 text-right text-xs font-bold whitespace-nowrap",
+            options?.negative && (monthlyData[m] || 0) < 0 && "text-destructive",
+            !options?.negative && (monthlyData[m] || 0) >= 0 && "text-primary"
+          )}>
+            {fmt(monthlyData[m] || 0)}
+          </td>
+        ))}
+        <td className={cn(
+          "py-2 px-2 text-right text-xs font-bold whitespace-nowrap",
+          options?.negative && total < 0 && "text-destructive",
+          !options?.negative && total >= 0 && "text-primary"
+        )}>
+          {fmt(total)}
+        </td>
+      </tr>
+    );
+  };
 
   const renderEditableRow = (label: string, field: "salari" | "amministratore") => (
     <tr className="border-b border-border/50">
@@ -228,13 +288,24 @@ export function ContoEconomicoTab() {
         </div>
       </div>
 
-      {/* Main table */}
+      {/* Alert for uncategorized */}
+      {hasUncategorized && (
+        <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-sm">
+          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+          <span>
+            Alcune fatture ricevute non hanno una categoria abbinata e appaiono come <strong>Non categorizzato</strong>.
+            Vai su <strong>Fatture</strong> per assegnare la categoria corretta a ciascuna voce.
+          </span>
+        </div>
+      )}
+
+      {/* Main P&L table */}
       <div className="glass rounded-xl overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[900px]">
             <thead>
               <tr className="border-b border-border bg-muted/50">
-                <th className="py-2 px-3 text-left text-xs font-semibold text-muted-foreground sticky left-0 bg-muted/50 z-10 min-w-[180px]">Categoria</th>
+                <th className="py-2 px-3 text-left text-xs font-semibold text-muted-foreground sticky left-0 bg-muted/50 z-10 min-w-[200px]">Voce</th>
                 {MONTHS.map((m) => (
                   <th key={m} className="py-2 px-2 text-right text-xs font-semibold text-muted-foreground w-16">{m}</th>
                 ))}
@@ -242,34 +313,44 @@ export function ContoEconomicoTab() {
               </tr>
             </thead>
             <tbody>
-              {/* RICAVI */}
-              {renderRow("Ricavi da fatture emesse", ricavi, { bold: false })}
-              {renderRow("TOTALE RICAVI", ricavi, { bold: true, highlight: true })}
+              {/* ── RICAVI ── */}
+              {renderSectionHeader("Ricavi")}
+              {renderRow("Ricavi da fatture emesse", ricavi)}
+              {renderSubtotal("TOTALE RICAVI", ricavi)}
 
-              {/* COSTI */}
-              <tr className="bg-muted/20">
-                <td colSpan={14} className="py-1.5 px-3 text-xs font-bold text-muted-foreground uppercase">Costi da fatture ricevute</td>
-              </tr>
-              {categoryNames.map((cat) => renderRow(cat, costiPerCategoria[cat] || {}, { indent: true }))}
+              {/* ── COSTI VARIABILI ── */}
+              {renderSectionHeader("Costi Variabili")}
+              {variableCategories.map((cat) =>
+                renderRow(cat.name, costiVariabili[cat.id] || {}, { indent: true })
+              )}
+              {hasUncategorized &&
+                renderRow("Non categorizzato", costiNonCategorizzati, { indent: true, warn: true })
+              }
+              {renderSubtotal("TOTALE COSTI VARIABILI", costiVariabiliTotali)}
 
-              {/* TOTALE COSTI */}
-              {renderRow("TOTALE COSTI", costiTotali, { bold: true, highlight: true })}
+              {/* ── MARGINE DI CONTRIBUZIONE ── */}
+              {renderSubtotal("MARGINE DI CONTRIBUZIONE", margineContribuzione, { negative: true })}
+              {renderPercentRow("% sul fatturato", margineContribuzione)}
 
-              {/* PRIMO MARGINE */}
-              {renderRow("PRIMO MARGINE", primoMargine, { bold: true, highlight: true, negative: true })}
-              {renderPercentRow("% sul fatturato", primoMargine)}
+              {/* ── COSTI FISSI ── */}
+              {renderSectionHeader("Costi Fissi")}
+              {fixedCategories.map((cat) =>
+                renderRow(cat.name, costiFissi[cat.id] || {}, { indent: true })
+              )}
+              {renderSubtotal("TOTALE COSTI FISSI", costiFissiTotali)}
 
-              {/* Personnel */}
-              <tr className="bg-amber-500/10">
-                <td colSpan={14} className="py-2 px-3 text-xs text-amber-600 dark:text-amber-400">
-                  <strong>Inserimento manuale:</strong> Inserire i costi del personale e compensi amministratore.
+              {/* ── PERSONALE (manual) ── */}
+              {renderSectionHeader("Costi Personale (inserimento manuale)")}
+              <tr>
+                <td colSpan={14} className="px-3 py-1 text-[10px] text-muted-foreground italic">
+                  Inserisci i costi mensili del personale — non presenti nelle fatture ricevute.
                 </td>
               </tr>
               {renderEditableRow("Salari e stipendi", "salari")}
               {renderEditableRow("Compenso amministratore", "amministratore")}
 
-              {/* EBITDA */}
-              {renderRow("MARGINE OPERATIVO (EBITDA)", ebitda, { bold: true, highlight: true, negative: true })}
+              {/* ── EBITDA ── */}
+              {renderSubtotal("EBITDA", ebitda, { negative: true })}
               {renderPercentRow("% sul fatturato", ebitda)}
             </tbody>
           </table>

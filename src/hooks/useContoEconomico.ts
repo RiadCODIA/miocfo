@@ -3,33 +3,28 @@ import { supabase } from "@/integrations/supabase/client";
 
 const MONTHS = ["GEN", "FEB", "MAR", "APR", "MAG", "GIU", "LUG", "AGO", "SET", "OTT", "NOV", "DIC"];
 
-const COST_CATEGORIES_LABELS = [
-  "Acquisto materie prime",
-  "Energia e combustibili",
-  "Lavorazioni di terzi",
-  "Provvigioni",
-  "Carburanti",
-  "Manutenzioni",
-  "Assicurazioni",
-  "Formazione e ricerca",
-  "Marketing e pubblicità",
-  "God. Beni di terzi",
-  "Canoni di leasing",
-  "Consulenze",
-  "Altre spese",
-];
-
 export interface MonthlyData {
   [month: number]: number; // 0-11
 }
 
+export interface CostCategory {
+  id: string;
+  name: string;
+  cost_type: "fixed" | "variable";
+}
+
 export interface ContoEconomicoData {
   ricavi: MonthlyData;
-  costiPerCategoria: Record<string, MonthlyData>;
+  costiVariabili: Record<string, MonthlyData>;
+  costiFissi: Record<string, MonthlyData>;
+  costiNonCategorizzati: MonthlyData;
+  costiVariabiliTotali: MonthlyData;
+  costiFissiTotali: MonthlyData;
   costiTotali: MonthlyData;
   ivaRicavi: MonthlyData;
   ivaCosti: MonthlyData;
-  categoryNames: string[];
+  variableCategories: CostCategory[];
+  fixedCategories: CostCategory[];
 }
 
 export function useContoEconomico(year: number) {
@@ -54,7 +49,7 @@ export function useContoEconomico(year: number) {
           .lte("invoice_date", endDate),
         supabase
           .from("cost_categories")
-          .select("id, name")
+          .select("id, name, cost_type")
           .eq("is_active", true)
           .order("sort_order"),
       ]);
@@ -62,12 +57,20 @@ export function useContoEconomico(year: number) {
       if (emesseRes.error) throw emesseRes.error;
       if (ricevuteRes.error) throw ricevuteRes.error;
 
-      const categoryMap: Record<string, string> = {};
-      categoriesRes.data?.forEach((c) => {
-        categoryMap[c.id] = c.name;
-      });
+      const allCategories: CostCategory[] = (categoriesRes.data || []).map((c) => ({
+        id: c.id,
+        name: c.name,
+        cost_type: c.cost_type as "fixed" | "variable",
+      }));
 
-      // Aggregate ricavi by month (issued invoices only)
+      const variableCategories = allCategories.filter((c) => c.cost_type === "variable");
+      const fixedCategories = allCategories.filter((c) => c.cost_type === "fixed");
+
+      // Map category id → category object
+      const categoryById: Record<string, CostCategory> = {};
+      allCategories.forEach((c) => { categoryById[c.id] = c; });
+
+      // Aggregate ricavi by month (issued invoices)
       const ricavi: MonthlyData = {};
       const ivaRicavi: MonthlyData = {};
       emesseRes.data?.forEach((inv) => {
@@ -77,50 +80,77 @@ export function useContoEconomico(year: number) {
         ivaRicavi[month] = (ivaRicavi[month] || 0) + Number(inv.vat_amount || 0);
       });
 
-      // Aggregate costi by category and month (received invoices only)
-      const costiPerCategoria: Record<string, MonthlyData> = {};
+      // Initialize cost buckets
+      const costiVariabili: Record<string, MonthlyData> = {};
+      const costiFissi: Record<string, MonthlyData> = {};
+      const costiNonCategorizzati: MonthlyData = {};
       const ivaCosti: MonthlyData = {};
-      
-      COST_CATEGORIES_LABELS.forEach((label) => {
-        costiPerCategoria[label] = {};
-      });
 
+      variableCategories.forEach((c) => { costiVariabili[c.id] = {}; });
+      fixedCategories.forEach((c) => { costiFissi[c.id] = {}; });
+
+      // Aggregate received invoices
       ricevuteRes.data?.forEach((inv) => {
         if (!inv.invoice_date) return;
         const month = new Date(inv.invoice_date).getMonth();
-        const catName = inv.category_id ? (categoryMap[inv.category_id] || "Altre spese") : "Altre spese";
-        
-        const matchedLabel = COST_CATEGORIES_LABELS.find(
-          (l) => catName.toLowerCase().includes(l.toLowerCase().slice(0, 6))
-        ) || "Altre spese";
-
-        if (!costiPerCategoria[matchedLabel]) {
-          costiPerCategoria[matchedLabel] = {};
-        }
-        costiPerCategoria[matchedLabel][month] = (costiPerCategoria[matchedLabel][month] || 0) + Number(inv.amount);
         ivaCosti[month] = (ivaCosti[month] || 0) + Number(inv.vat_amount || 0);
+
+        if (!inv.category_id) {
+          // No category assigned at all → non categorizzato
+          costiNonCategorizzati[month] = (costiNonCategorizzati[month] || 0) + Number(inv.amount);
+          return;
+        }
+
+        const cat = categoryById[inv.category_id];
+        if (!cat) {
+          // Category ID exists but not in active list → non categorizzato
+          costiNonCategorizzati[month] = (costiNonCategorizzati[month] || 0) + Number(inv.amount);
+          return;
+        }
+
+        if (cat.cost_type === "variable") {
+          if (!costiVariabili[cat.id]) costiVariabili[cat.id] = {};
+          costiVariabili[cat.id][month] = (costiVariabili[cat.id][month] || 0) + Number(inv.amount);
+        } else {
+          if (!costiFissi[cat.id]) costiFissi[cat.id] = {};
+          costiFissi[cat.id][month] = (costiFissi[cat.id][month] || 0) + Number(inv.amount);
+        }
       });
 
-      // Calculate totali costi
+      // Compute totals
+      const costiVariabiliTotali: MonthlyData = {};
+      const costiFissiTotali: MonthlyData = {};
       const costiTotali: MonthlyData = {};
+
       for (let m = 0; m < 12; m++) {
-        let total = 0;
-        Object.values(costiPerCategoria).forEach((catData) => {
-          total += catData[m] || 0;
-        });
+        let varTotal = 0;
+        variableCategories.forEach((c) => { varTotal += costiVariabili[c.id]?.[m] || 0; });
+        varTotal += costiNonCategorizzati[m] || 0; // non-cat goes to variable for now
+        if (varTotal > 0) costiVariabiliTotali[m] = varTotal;
+
+        let fixTotal = 0;
+        fixedCategories.forEach((c) => { fixTotal += costiFissi[c.id]?.[m] || 0; });
+        if (fixTotal > 0) costiFissiTotali[m] = fixTotal;
+
+        const total = varTotal + fixTotal;
         if (total > 0) costiTotali[m] = total;
       }
 
       return {
         ricavi,
-        costiPerCategoria,
+        costiVariabili,
+        costiFissi,
+        costiNonCategorizzati,
+        costiVariabiliTotali,
+        costiFissiTotali,
         costiTotali,
         ivaRicavi,
         ivaCosti,
-        categoryNames: COST_CATEGORIES_LABELS,
+        variableCategories,
+        fixedCategories,
       };
     },
   });
 }
 
-export { MONTHS, COST_CATEGORIES_LABELS };
+export { MONTHS };
