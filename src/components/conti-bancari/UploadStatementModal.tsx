@@ -37,7 +37,7 @@ interface ProcessResult {
     id: string;
     bank_name: string;
     iban: string | null;
-    current_balance: number;
+    balance: number;
     currency: string;
   };
   transactions_count: number;
@@ -172,7 +172,19 @@ export function UploadStatementModal({
 
       if (processError) {
         console.error("Process error:", processError);
-        throw new Error(processError.message || "Errore nell'elaborazione del file");
+        // Try to extract the real error message from the response body
+        let errorMessage = "Errore nell'elaborazione del file";
+        try {
+          // processError.context contains the raw response
+          const ctx = (processError as { context?: Response }).context;
+          if (ctx && typeof ctx.json === "function") {
+            const body = await ctx.json();
+            if (body?.error) errorMessage = body.error;
+          }
+        } catch {
+          // fallback to generic message
+        }
+        throw new Error(errorMessage);
       }
 
       if (data?.error) {
@@ -364,7 +376,7 @@ export function UploadStatementModal({
                     {new Intl.NumberFormat("it-IT", {
                       style: "currency",
                       currency: result.account.currency,
-                    }).format(result.account.current_balance)}
+                    }).format(result.account.balance)}
                   </span>
                 </div>
                 {result.period && (
