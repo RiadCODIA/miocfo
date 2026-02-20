@@ -183,9 +183,9 @@ async function handleSetup(fiscalId: string, password: string, pin: string) {
       console.log("[Cassetto] Fisconline credentials saved");
     } catch (credErr: unknown) {
       const err = credErr as Error & { status?: number };
-      if (err.status === 402) {
-        // A-Cube sandbox limitation: Tax Authority auth not emulated
-        console.log("[Cassetto] 402 on credentials (expected in sandbox) — proceeding as connected");
+        if (err.status === 402 || err.status === 403) {
+        // A-Cube sandbox limitation: Tax Authority auth not emulated (402) or not authorized (403)
+        console.log(`[Cassetto] ${err.status} on credentials (expected in sandbox) — proceeding as connected`);
       } else {
         throw credErr;
       }
