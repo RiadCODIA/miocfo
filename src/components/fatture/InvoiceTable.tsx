@@ -29,26 +29,48 @@ export interface Invoice {
   amount: number;
   matchStatus: "matched" | "pending" | "discrepancy";
   matchedTransactionId?: string;
-  invoiceType: "income" | "expense";
+  invoiceType: "emessa" | "ricevuta" | "autofattura" | "income" | "expense";
+  categoryId?: string | null;
   fileName: string;
   filePath: string;
   fileType?: string | null;
 }
 
+export interface CostCategory {
+  id: string;
+  name: string;
+}
+
 interface InvoiceTableProps {
   invoices: Invoice[];
+  categories?: CostCategory[];
   onView: (invoice: Invoice) => void;
   onMatch: (invoice: Invoice) => void;
   onReprocess?: (invoice: Invoice) => void;
   onDelete?: (invoice: Invoice) => void;
+  onCategoryChange?: (invoiceId: string, categoryId: string | null) => void;
+  onTypeChange?: (invoiceId: string, type: "emessa" | "ricevuta" | "autofattura") => void;
   reprocessingId?: string | null;
   deletingId?: string | null;
   isLoading?: boolean;
 }
 
-export function InvoiceTable({ invoices, onView, onMatch, onReprocess, onDelete, reprocessingId, deletingId, isLoading }: InvoiceTableProps) {
+export function InvoiceTable({
+  invoices,
+  categories = [],
+  onView,
+  onMatch,
+  onReprocess,
+  onDelete,
+  onCategoryChange,
+  onTypeChange,
+  reprocessingId,
+  deletingId,
+  isLoading,
+}: InvoiceTableProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
 
   const filteredInvoices = invoices.filter((invoice) => {
     const matchesSearch =
@@ -56,7 +78,10 @@ export function InvoiceTable({ invoices, onView, onMatch, onReprocess, onDelete,
       invoice.supplier.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesStatus =
       statusFilter === "all" || invoice.matchStatus === statusFilter;
-    return matchesSearch && matchesStatus;
+    const normalizedType = normalizeType(invoice.invoiceType);
+    const matchesType =
+      typeFilter === "all" || normalizedType === typeFilter;
+    return matchesSearch && matchesStatus && matchesType;
   });
 
   const statusConfig = {
@@ -90,6 +115,17 @@ export function InvoiceTable({ invoices, onView, onMatch, onReprocess, onDelete,
             className="pl-10"
           />
         </div>
+        <Select value={typeFilter} onValueChange={setTypeFilter}>
+          <SelectTrigger className="w-full sm:w-[160px]">
+            <SelectValue placeholder="Tipo" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">Tutti i tipi</SelectItem>
+            <SelectItem value="emessa">Emessa</SelectItem>
+            <SelectItem value="ricevuta">Ricevuta</SelectItem>
+            <SelectItem value="autofattura">Autofattura</SelectItem>
+          </SelectContent>
+        </Select>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
           <SelectTrigger className="w-full sm:w-[180px]">
             <SelectValue placeholder="Filtra per stato" />
@@ -110,7 +146,9 @@ export function InvoiceTable({ invoices, onView, onMatch, onReprocess, onDelete,
             <TableRow className="bg-muted/50">
               <TableHead>Data</TableHead>
               <TableHead>Numero</TableHead>
-              <TableHead>Fornitore</TableHead>
+              <TableHead>Fornitore / Cliente</TableHead>
+              <TableHead>Tipo</TableHead>
+              <TableHead>Categoria</TableHead>
               <TableHead className="text-right">Importo</TableHead>
               <TableHead>Stato</TableHead>
               <TableHead className="text-right">Azioni</TableHead>
@@ -118,12 +156,13 @@ export function InvoiceTable({ invoices, onView, onMatch, onReprocess, onDelete,
           </TableHeader>
           <TableBody>
             {isLoading ? (
-              // Loading skeleton
               Array.from({ length: 5 }).map((_, i) => (
                 <TableRow key={i}>
                   <TableCell><Skeleton className="h-4 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+                  <TableCell><Skeleton className="h-6 w-20" /></TableCell>
+                  <TableCell><Skeleton className="h-8 w-32" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
                   <TableCell><Skeleton className="h-6 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-8 w-16 ml-auto" /></TableCell>
@@ -131,8 +170,8 @@ export function InvoiceTable({ invoices, onView, onMatch, onReprocess, onDelete,
               ))
             ) : filteredInvoices.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
-                  {invoices.length === 0 
+                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                  {invoices.length === 0
                     ? "Nessuna fattura caricata. Carica le tue prime fatture qui sopra."
                     : "Nessuna fattura trovata con i filtri selezionati"
                   }
@@ -142,6 +181,9 @@ export function InvoiceTable({ invoices, onView, onMatch, onReprocess, onDelete,
               filteredInvoices.map((invoice) => {
                 const status = statusConfig[invoice.matchStatus];
                 const StatusIcon = status.icon;
+                const normalizedType = normalizeType(invoice.invoiceType);
+                const typeConfig = invoiceTypeConfig[normalizedType];
+
                 return (
                   <TableRow key={invoice.id}>
                     <TableCell className="font-medium">
@@ -151,6 +193,62 @@ export function InvoiceTable({ invoices, onView, onMatch, onReprocess, onDelete,
                       {invoice.invoiceNumber}
                     </TableCell>
                     <TableCell>{invoice.supplier}</TableCell>
+
+                    {/* Tipo badge — clickable to change */}
+                    <TableCell>
+                      {onTypeChange ? (
+                        <Select
+                          value={normalizedType}
+                          onValueChange={(val) =>
+                            onTypeChange(invoice.id, val as "emessa" | "ricevuta" | "autofattura")
+                          }
+                        >
+                          <SelectTrigger className="h-7 w-28 text-xs px-2 border-0 bg-transparent p-0">
+                            <Badge variant="outline" className={cn("cursor-pointer", typeConfig.className)}>
+                              {typeConfig.label}
+                            </Badge>
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="emessa">Emessa</SelectItem>
+                            <SelectItem value="ricevuta">Ricevuta</SelectItem>
+                            <SelectItem value="autofattura">Autofattura</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant="outline" className={typeConfig.className}>
+                          {typeConfig.label}
+                        </Badge>
+                      )}
+                    </TableCell>
+
+                    {/* Inline category dropdown */}
+                    <TableCell>
+                      {onCategoryChange && categories.length > 0 ? (
+                        <Select
+                          value={invoice.categoryId || "none"}
+                          onValueChange={(val) =>
+                            onCategoryChange(invoice.id, val === "none" ? null : val)
+                          }
+                        >
+                          <SelectTrigger className="h-7 text-xs min-w-[140px] max-w-[180px]">
+                            <SelectValue placeholder="Categoria..." />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="none">
+                              <span className="text-muted-foreground">Nessuna</span>
+                            </SelectItem>
+                            {categories.map((cat) => (
+                              <SelectItem key={cat.id} value={cat.id}>
+                                {cat.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <span className="text-xs text-muted-foreground">—</span>
+                      )}
+                    </TableCell>
+
                     <TableCell className="text-right font-medium">
                       {new Intl.NumberFormat("it-IT", {
                         style: "currency",
@@ -164,7 +262,7 @@ export function InvoiceTable({ invoices, onView, onMatch, onReprocess, onDelete,
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-end gap-1">
                         <Button
                           variant="ghost"
                           size="sm"
@@ -224,3 +322,24 @@ export function InvoiceTable({ invoices, onView, onMatch, onReprocess, onDelete,
     </div>
   );
 }
+
+function normalizeType(t: string): "emessa" | "ricevuta" | "autofattura" {
+  if (t === "emessa" || t === "income" || t === "active") return "emessa";
+  if (t === "autofattura") return "autofattura";
+  return "ricevuta";
+}
+
+const invoiceTypeConfig: Record<"emessa" | "ricevuta" | "autofattura", { label: string; className: string }> = {
+  emessa: {
+    label: "Emessa",
+    className: "bg-success/10 text-success border-success/20",
+  },
+  ricevuta: {
+    label: "Ricevuta",
+    className: "bg-primary/10 text-primary border-primary/20",
+  },
+  autofattura: {
+    label: "Autofattura",
+    className: "bg-warning/10 text-warning border-warning/20",
+  },
+};

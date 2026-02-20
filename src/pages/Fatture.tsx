@@ -47,12 +47,25 @@ interface DbInvoice {
   user_id: string;
 }
 
+interface DbCategory {
+  id: string;
+  name: string;
+}
+
 // Transform database invoice to frontend format
 function transformInvoice(dbInvoice: DbInvoice): Invoice {
   const matchStatus = dbInvoice.matched_transaction_id ? "matched" 
     : dbInvoice.payment_status === "discrepancy" ? "discrepancy" 
     : "pending";
     
+  // Normalize legacy invoice_type values
+  let invoiceType: Invoice["invoiceType"] = "ricevuta";
+  if (dbInvoice.invoice_type === "emessa" || dbInvoice.invoice_type === "active" || dbInvoice.invoice_type === "income") {
+    invoiceType = "emessa";
+  } else if (dbInvoice.invoice_type === "autofattura") {
+    invoiceType = "autofattura";
+  }
+
   return {
     id: dbInvoice.id,
     invoiceNumber: dbInvoice.invoice_number || "",
@@ -61,7 +74,8 @@ function transformInvoice(dbInvoice: DbInvoice): Invoice {
     amount: Number(dbInvoice.total_amount || dbInvoice.amount),
     matchStatus: matchStatus as "matched" | "pending" | "discrepancy",
     matchedTransactionId: dbInvoice.matched_transaction_id || undefined,
-    invoiceType: dbInvoice.invoice_type === "income" ? "income" : "expense",
+    invoiceType,
+    categoryId: dbInvoice.category_id,
     fileName: dbInvoice.file_name || "",
     filePath: dbInvoice.file_path || "",
     fileType: null,
@@ -95,6 +109,20 @@ export default function Fatture() {
 
       if (error) throw error;
       return (data as DbInvoice[]).map(transformInvoice);
+    },
+  });
+
+  // Fetch categories for inline dropdown
+  const { data: categories = [] } = useQuery({
+    queryKey: ['cost-categories-for-invoices'],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('cost_categories')
+        .select('id, name')
+        .eq('is_active', true)
+        .order('sort_order');
+      if (error) throw error;
+      return (data || []) as DbCategory[];
     },
   });
 
@@ -235,6 +263,36 @@ export default function Fatture() {
 
   const handleRemoveUpload = (id: string) => {
     setUploadingFiles((prev) => prev.filter((f) => f.id !== id));
+  };
+
+  // Inline category change handler
+  const handleCategoryChange = async (invoiceId: string, categoryId: string | null) => {
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ category_id: categoryId })
+        .eq('id', invoiceId);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['conto-economico'] });
+    } catch {
+      toast({ title: "Errore", description: "Impossibile aggiornare la categoria.", variant: "destructive" });
+    }
+  };
+
+  // Inline invoice type change handler
+  const handleTypeChange = async (invoiceId: string, type: "emessa" | "ricevuta" | "autofattura") => {
+    try {
+      const { error } = await supabase
+        .from('invoices')
+        .update({ invoice_type: type })
+        .eq('id', invoiceId);
+      if (error) throw error;
+      queryClient.invalidateQueries({ queryKey: ['invoices'] });
+      queryClient.invalidateQueries({ queryKey: ['conto-economico'] });
+    } catch {
+      toast({ title: "Errore", description: "Impossibile aggiornare il tipo fattura.", variant: "destructive" });
+    }
   };
 
   const handleView = (invoice: Invoice) => {
@@ -636,10 +694,13 @@ export default function Fatture() {
       {/* Invoice Table */}
       <InvoiceTable
         invoices={invoices}
+        categories={categories}
         onView={handleView}
         onMatch={handleMatch}
         onReprocess={handleReprocess}
         onDelete={handleDelete}
+        onCategoryChange={handleCategoryChange}
+        onTypeChange={handleTypeChange}
         reprocessingId={reprocessingId}
         deletingId={deletingId}
         isLoading={isLoading}
