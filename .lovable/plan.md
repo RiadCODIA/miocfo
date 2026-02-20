@@ -1,111 +1,108 @@
 
-# Budget & Previsioni — Fix completo
+# Fatture — Fix completo: Tipo, Categorizzazione inline e Conto Economico
 
-## Problemi identificati
+## Problemi identificati (con evidenza dal database)
 
-### 1. Non c'è separazione Ricavi / Costi nel modello dati
-La tabella `budgets` ha un solo campo `amount` senza un campo `budget_type` (ricavo o costo). Attualmente il modal chiede un singolo importo e spiega con una nota a piè "usa il meno per i costi", ma:
-- Il campo nella tabella non distingue se si tratta di un ricavo previsto o di un costo previsto
-- L'interfaccia mostra una sola colonna "Importo Previsto", che è ambigua
-- La logica di confronto in `useBudgets.ts` somma tutto insieme senza separare ricavi e costi
+### 1. Fatture invisibili nel Conto Economico — causa root confermata
+Il problema principale: le fatture nel database hanno `invoice_type = 'passive'` (vecchio valore), ma `useContoEconomico.ts` filtra per `invoice_type = 'ricevuta'`. Risultato: **nessuna fattura appare mai nel Conto Economico**.
 
-### 2. L'AI riceve dati di confronto errati
-In `PrevisioniTab.tsx`, la funzione `runAIAnalysis` invia all'AI i dati di `comparison` (che contiene `consuntivo` e `previsionale` aggregati insieme senza distinzione ricavi/costi) e `variance`. Il problema è che:
-- Se l'utente inserisce solo ricavi previsti (€14.000), il `previsionale` risultante è negativo perché `totalBudget` in `useBudgetComparison` somma tutti gli `amount` compresi quelli negativi (costi)
-- Ma soprattutto, se l'utente ha inserito solo ricavi e nessuna transazione bancaria reale di quel mese, `consuntivo = 0 - 0 = 0`, mentre `previsionale = 14000`. L'AI vede `scostamento = 0 - 14000 = -14000` e dice che si è in perdita, quando in realtà si tratta solo di ricavi pianificati non ancora incassati
+La stessa incongruenza esiste per le emesse: il codice cerca `invoice_type = 'emessa'`, ma il valore reale potrebbe essere `'active'` o `'income'`.
 
-### 3. Il prompt AI non conosce il contesto dei budget
-Il prompt inviato all'AI non spiega che i budget sono **previsioni future** (non consuntivi passati). L'AI interpreta gli scostamenti come perdite reali anziché come differenze tra pianificato e realizzato.
+Il `process-invoice` edge function salva i valori `'emessa'` / `'ricevuta'` correttamente — il problema sono i record esistenti migrati con i valori vecchi.
 
-### 4. UX confusa per l'inserimento
-Il modal ha un solo campo importo con note poco chiare. L'utente non sa se deve inserire -14000 per i costi o +14000 per i ricavi. Serve un campo `tipo` esplicito (Ricavo / Costo) che gestisca automaticamente il segno.
+### 2. Come viene determinato il tipo di fattura (emessa/ricevuta/autofattura)
+L'AI analizza il PDF e:
+- Identifica chi emette (mittente, in alto) e chi riceve (destinatario, dopo "Spett.le")
+- Confronta il nome del mittente con il `company_name` del profilo utente per capire la direzione
+- Se trova "FATTURA DI VENDITA" → `emessa`; default → `ricevuta`
+- Le **autofatture** (reverse charge, acquisti UE) al momento non sono gestite come tipo separato
+
+L'utente però **non può correggere manualmente** il tipo direttamente dalla tabella se l'AI sbaglia.
+
+### 3. Categorizzazione inline assente
+Attualmente la categoria si può assegnare solo dentro il modal di abbinamento (che richiede anche una transazione bancaria). Se l'utente vuole solo categorizzare una fattura senza abbinarla, non ha modo di farlo.
+
+Il modal di abbinamento usa anche liste hardcoded di nomi (`REVENUE_CATEGORIES`, `COST_CATEGORIES`) invece degli ID reali delle categorie — quindi l'associazione al Conto Economico fallisce silenziosamente.
 
 ---
 
-## Soluzione
+## Soluzione in 4 parti
 
-### A. Aggiungere `budget_type` alla tabella `budgets` (migrazione DB)
-Aggiungere la colonna `budget_type text DEFAULT 'income' CHECK (budget_type IN ('income', 'expense'))`.
-
-### B. Aggiornare `CreateBudgetModal.tsx`
-- Aggiungere un selettore **Tipo** con due opzioni: "Ricavo previsto" e "Costo previsto"
-- Il modal gestirà automaticamente il segno: i ricavi salvati come positivi, i costi come negativi
-- Rimuovere la confusa nota sul "segno meno"
-
-### C. Aggiornare `useBudgets.ts`
-- Aggiungere `budget_type` all'interfaccia `Budget`
-- Aggiornare `useCreateBudget` per salvare `budget_type`
-- Correggere `useBudgetComparison` e `useBudgetVarianceSummary`:
-  - Separare `previsionaleRicavi` e `previsionaleC osti`
-  - Il `previsionale` nel grafico diventa `previsionaleRicavi - previsionaleC osti` (netto)
-  - Il confronto diventa: consuntivo reale vs cashflow netto previsto
-
-### D. Aggiornare `PrevisioniTab.tsx` — dati inviati all'AI
-Il payload inviato all'AI deve includere contesto chiaro:
+### A. Migrazione DB — normalizzare invoice_type
+Aggiornare tutti i record esistenti con i vecchi valori:
+```sql
+UPDATE invoices SET invoice_type = 'ricevuta' WHERE invoice_type IN ('passive', 'expense');
+UPDATE invoices SET invoice_type = 'emessa' WHERE invoice_type IN ('active', 'income');
 ```
-budgetsRicavi: [...],  // lista budget di tipo income
-budgetsC osti: [...],  // lista budget di tipo expense  
-totaleRicaviPrevisti: 14000,
-totaleCostiPrevisti: 0,
-cashflowNettoPrevisto: 14000,
-nota: "I budget sono previsioni future. Se non ci sono transazioni reali, lo scostamento indica dati non ancora realizzati, non una perdita."
-```
+Anche il `transformInvoice` in `Fatture.tsx` va corretto: attualmente mappa `'income' → 'income'`, ignorando i valori `'emessa'`/`'ricevuta'`.
 
-### E. Aggiornare il prompt AI in `analyze-conto-economico/index.ts`
-Il prompt per `type === "previsioni"` deve essere riscritto per:
-- Chiarire esplicitamente che i budget sono previsioni, non consuntivi
-- Indicare che scostamenti con transazioni reali = 0 significano mese futuro, non perdita
-- Chiedere all'AI di commentare la solidità del piano, non di allarmarsi per mesi futuri
+### B. Colonna "Tipo" nella tabella fatture con badge visivo
+Aggiungere nella `InvoiceTable` una colonna **Tipo** che mostra:
+- Badge verde "Emessa" (fattura di vendita)
+- Badge blue "Ricevuta" (fattura di acquisto)
+- Badge orange "Autofattura" (per future estensioni)
 
-### F. Aggiornare `BudgetPrevisioni.tsx` (la pagina standalone)
-Allineare la pagina `/budget` con la stessa logica corretta usata in `PrevisioniTab`.
+L'utente può vedere a colpo d'occhio il tipo e modificarlo cliccando sul badge.
+
+### C. Categorizzazione inline senza abbinamento obbligatorio
+Nella tabella fatture, aggiungere un **dropdown categoria** direttamente nella riga, visibile per tutte le fatture (non solo quelle abbinate). Le opzioni si caricano dalla tabella `cost_categories` reale.
+
+Questo permette di categorizzare una fattura in modo indipendente dall'abbinamento bancario — essenziale per far comparire le fatture nel Conto Economico.
+
+Il modal di abbinamento va corretto per usare gli ID reali di `cost_categories` invece delle liste hardcoded.
+
+### D. Possibilità di modificare il tipo manualmente
+Aggiungere un piccolo controllo (select o toggle) inline nella tabella per correggere il tipo se l'AI ha classificato male.
 
 ---
 
 ## Dettaglio tecnico
 
-### Migrazione DB
-```sql
-ALTER TABLE budgets 
-ADD COLUMN IF NOT EXISTS budget_type text DEFAULT 'income' 
-CHECK (budget_type IN ('income', 'expense'));
-```
+### File modificati
 
-### Interfaccia `Budget` aggiornata
-```typescript
-interface Budget {
-  // ... existing fields
-  budgetType: 'income' | 'expense';
-}
-```
+1. **`src/hooks/useContoEconomico.ts`**
+   - Allargare il filtro: `.in("invoice_type", ["ricevuta", "passive", "expense"])` per i costi e `.in("invoice_type", ["emessa", "active", "income"])` per i ricavi (tolleranza ai vecchi valori)
 
-### Logica previsionale corretta
-```typescript
-// In useBudgetComparison:
-const previsionaleRicavi = budgets
-  .filter(b => b.budget_type === 'income' || Number(b.amount) > 0)
-  .reduce((s, b) => s + Math.abs(Number(b.amount)), 0);
+2. **`src/pages/Fatture.tsx`**
+   - Correggere `transformInvoice`: mappare `'emessa'` → mostrare come "emessa", `'ricevuta'`/`'passive'` → mostrare come "expense"
+   - Aggiungere `category_id` e `invoice_type` all'interfaccia `DbInvoice`
+   - Aggiungere handler `handleCategoryChange(invoiceId, categoryId)` che fa UPDATE su Supabase
+   - Aggiungere handler `handleTypeChange(invoiceId, type)` per correzioni manuali
 
-const previsionaleC osti = budgets
-  .filter(b => b.budget_type === 'expense' || Number(b.amount) < 0)
-  .reduce((s, b) => s + Math.abs(Number(b.amount)), 0);
+3. **`src/components/fatture/InvoiceTable.tsx`**
+   - Aggiungere la colonna **Tipo** con badge colorati (`Emessa` / `Ricevuta` / `Autofattura`)
+   - Aggiungere colonna/dropdown **Categoria** inline con select che carica da `cost_categories`
+   - Il select sarà cliccabile direttamente nella riga senza aprire modal
+   - Passare `categories` come prop, e `onCategoryChange` / `onTypeChange` callback
 
-const cashflowNetto = previsionaleRicavi - previsionaleC osti;
-```
+4. **`src/components/fatture/InvoiceMatchingModal.tsx`**
+   - Sostituire le liste hardcoded `REVENUE_CATEGORIES` / `COST_CATEGORIES` con dati reali da `cost_categories`
+   - Il `onMatch` salverà direttamente l'UUID della categoria, non il nome
 
-### Prompt AI corretto
-```
-Sei un CFO virtuale. Analizza i dati di BUDGET PREVISIONALE (piani futuri, non consuntivi). 
-Ricorda: gli scostamenti con consuntivo = 0 indicano mesi futuri non ancora realizzati, 
-non perdite. Valuta la coerenza del piano e suggerisci miglioramenti.
-```
+5. **Migrazione dati (SQL via tool)**
+   - `UPDATE invoices SET invoice_type = 'ricevuta' WHERE invoice_type IN ('passive', 'expense')`
+   - `UPDATE invoices SET invoice_type = 'emessa' WHERE invoice_type IN ('active', 'income')`
 
 ---
 
-## File modificati
-1. `supabase/migrations/` — aggiunta colonna `budget_type`
-2. `src/hooks/useBudgets.ts` — logica separazione ricavi/costi, payload AI
-3. `src/components/budget/CreateBudgetModal.tsx` — selettore tipo Ricavo/Costo
-4. `src/components/area-economica/PrevisioniTab.tsx` — payload AI arricchito
-5. `supabase/functions/analyze-conto-economico/index.ts` — prompt previsioni corretto
-6. `src/pages/BudgetPrevisioni.tsx` — allineamento logica
+## Flusso risultante (dopo fix)
+
+```text
+Fattura caricata (PDF) 
+       ↓
+AI estrae dati → invoice_type = 'emessa' o 'ricevuta'
+       ↓
+Tabella Fatture mostra:
+  [Data] [Numero] [Fornitore] [Importo] [Tipo badge] [Categoria ▾] [Stato] [Azioni]
+       ↓
+Utente può:
+  • Cambiare tipo manualmente (badge cliccabile)
+  • Assegnare categoria inline (dropdown diretto nella riga)
+  • Abbinare a transazione bancaria (opzionale)
+       ↓
+Conto Economico legge le fatture con invoice_type corretto
+  → Ricevute con categoria variabile → Costi Variabili
+  → Ricevute con categoria fissa    → Costi Fissi
+  → Ricevute senza categoria        → Non categorizzato (warning)
+  → Emesse                          → Ricavi
+```
