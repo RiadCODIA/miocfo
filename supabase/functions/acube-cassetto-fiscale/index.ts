@@ -14,12 +14,12 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const SUPABASE_ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 
 // Gov IT API URLs
+// NOTE: Gov IT has no separate sandbox URL — always use the production endpoint.
+// Sandbox vs production is distinguished by A-Cube account credentials, not by URL.
 const ACUBE_COMMON_URL = ACUBE_ENV === "production"
   ? "https://common.api.acubeapi.com"
   : "https://common-sandbox.api.acubeapi.com";
-const ACUBE_GOV_IT_URL = ACUBE_ENV === "production"
-  ? "https://gov-it.api.acubeapi.com"
-  : "https://gov-it-sandbox.api.acubeapi.com";
+const ACUBE_GOV_IT_URL = "https://gov-it.api.acubeapi.com";
 
 let cachedToken: { token: string; expiresAt: number } | null = null;
 
@@ -247,8 +247,8 @@ function parseAcubeInvoice(
   const vatAmount = Number(inv.vat_amount || 0);
   const netAmount = totalAmount - vatAmount || totalAmount;
 
-  // Determine invoice type (active = revenue, passive = expense)
-  const invoiceType = (inv.direction === "outbound" || inv.type === "active") ? "revenue" : "expense";
+  // Determine invoice type: outbound/active = emessa (revenue), inbound/passive = ricevuta (expense)
+  const invoiceType = (inv.direction === "outbound" || inv.type === "active") ? "emessa" : "ricevuta";
 
   return {
     user_id: userId,

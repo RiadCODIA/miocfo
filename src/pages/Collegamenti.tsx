@@ -1,22 +1,31 @@
 import { useState } from "react";
-import { ShieldCheck, CheckCircle2, Circle, FileText, Loader2, Landmark, Link } from "lucide-react";
+import { ShieldCheck, CheckCircle2, Circle, FileText, Loader2, Landmark, Link, Download } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/contexts/AuthContext";
 import { CassettoFiscaleModal } from "@/components/fatture/CassettoFiscaleModal";
 import { ConnectBankModal } from "@/components/conti-bancari/ConnectBankModal";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { useToast } from "@/hooks/use-toast";
+
+const EDGE_URL = "https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/acube-cassetto-fiscale";
 
 export default function Collegamenti() {
   const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
   const [cassettoModalOpen, setCassettoModalOpen] = useState(false);
   const [bankModalOpen, setBankModalOpen] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  // Check localStorage for a configured fiscal_id — shows "connected" badge immediately after setup
+  const savedFiscalId = localStorage.getItem("cassetto_fiscal_id");
 
   const { data: cassettoInvoices = [], isLoading: isLoadingCassetto } = useQuery({
     queryKey: ["cassetto-fiscale-invoices", user?.id],
@@ -46,8 +55,47 @@ export default function Collegamenti() {
     enabled: !!user,
   });
 
-  const cassettoConnected = cassettoInvoices.length > 0;
+  const cassettoConnected = !!savedFiscalId || cassettoInvoices.length > 0;
   const connectedBanks = bankAccounts.filter((a) => a.is_connected);
+
+  const handleDownloadNow = async () => {
+    if (!savedFiscalId) return;
+    setIsDownloading(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (session?.access_token) headers["Authorization"] = `Bearer ${session.access_token}`;
+
+      await fetch(EDGE_URL, {
+        method: "POST", headers,
+        body: JSON.stringify({ action: "download-now", fiscal_id: savedFiscalId }),
+      });
+
+      const res = await fetch(EDGE_URL, {
+        method: "POST", headers,
+        body: JSON.stringify({ action: "fetch-invoices", fiscal_id: savedFiscalId }),
+      });
+      const result = await res.json();
+      const count = result?.imported ?? 0;
+
+      toast({
+        title: "Importazione completata",
+        description: count > 0
+          ? `${count} fatture importate.`
+          : "Nessuna nuova fattura. Il download A-Cube potrebbe richiedere alcuni minuti.",
+      });
+
+      queryClient.invalidateQueries({ queryKey: ["cassetto-fiscale-invoices"] });
+    } catch (err) {
+      toast({
+        title: "Errore download",
+        description: err instanceof Error ? err.message : "Errore sconosciuto",
+        variant: "destructive",
+      });
+    } finally {
+      setIsDownloading(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -185,6 +233,9 @@ export default function Collegamenti() {
                     <CardTitle className="text-base">Cassetto Fiscale (A-Cube)</CardTitle>
                     <CardDescription className="text-sm">
                       Importa automaticamente le fatture passive dall'Agenzia delle Entrate
+                      {savedFiscalId && (
+                        <span className="ml-2 font-mono text-xs opacity-70">({savedFiscalId})</span>
+                      )}
                     </CardDescription>
                   </div>
                 </div>
@@ -196,6 +247,19 @@ export default function Collegamenti() {
                       <><Circle className="h-3 w-3 mr-1" /> Non connesso</>
                     )}
                   </Badge>
+                  {cassettoConnected && savedFiscalId && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleDownloadNow}
+                      disabled={isDownloading}
+                    >
+                      {isDownloading
+                        ? <><Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />Scaricamento...</>
+                        : <><Download className="h-3.5 w-3.5 mr-1.5" />Scarica ora</>
+                      }
+                    </Button>
+                  )}
                   <Button
                     variant={cassettoConnected ? "outline" : "default"}
                     onClick={() => setCassettoModalOpen(true)}
@@ -274,6 +338,23 @@ export default function Collegamenti() {
                     ))}
                   </TableBody>
                 </Table>
+              </CardContent>
+            </Card>
+          ) : cassettoConnected ? (
+            // Connected but no invoices yet
+            <Card>
+              <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                <Download className="h-12 w-12 text-muted-foreground/40 mb-4" />
+                <p className="text-muted-foreground font-medium">Nessuna fattura ancora importata</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  Il Cassetto Fiscale è connesso. Avvia il download per importare le fatture disponibili.
+                </p>
+                <Button className="mt-4" onClick={handleDownloadNow} disabled={isDownloading}>
+                  {isDownloading
+                    ? <><Loader2 className="h-4 w-4 mr-2 animate-spin" />Importazione...</>
+                    : <><Download className="h-4 w-4 mr-2" />Scarica fatture ora</>
+                  }
+                </Button>
               </CardContent>
             </Card>
           ) : (
