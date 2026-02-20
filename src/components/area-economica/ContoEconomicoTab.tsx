@@ -114,19 +114,17 @@ export function ContoEconomicoTab() {
 
   if (!data) return null;
 
-  const {
-    ricavi,
-    costiVariabili,
-    costiFissi,
-    costiNonCategorizzati,
-    costiVariabiliTotali,
-    costiFissiTotali,
-    costiTotali,
-    ivaRicavi,
-    ivaCosti,
-    variableCategories,
-    fixedCategories,
-  } = data;
+  const ricavi = data.ricavi ?? {};
+  const costiVariabili = data.costiVariabili ?? {};
+  const costiFissi = data.costiFissi ?? {};
+  const costiNonCategorizzati = data.costiNonCategorizzati ?? {};
+  const costiVariabiliTotali = data.costiVariabiliTotali ?? {};
+  const costiFissiTotali = data.costiFissiTotali ?? {};
+  const costiTotali = data.costiTotali ?? {};
+  const ivaRicavi = data.ivaRicavi ?? {};
+  const ivaCosti = data.ivaCosti ?? {};
+  const variableCategories = data.variableCategories ?? [];
+  const fixedCategories = data.fixedCategories ?? [];
 
   // Derived rows
   const margineContribuzione: MonthlyData = {};
@@ -134,9 +132,9 @@ export function ContoEconomicoTab() {
   const ebitda: MonthlyData = {};
 
   for (let m = 0; m < 12; m++) {
-    margineContribuzione[m] = (ricavi[m] || 0) - (costiVariabiliTotali[m] || 0);
-    personnelTotal[m] = (personnel.salari[m] || 0) + (personnel.amministratore[m] || 0);
-    ebitda[m] = margineContribuzione[m] - (costiFissiTotali[m] || 0) - personnelTotal[m];
+    margineContribuzione[m] = (ricavi[m] ?? 0) - (costiVariabiliTotali[m] ?? 0);
+    personnelTotal[m] = (personnel.salari[m] ?? 0) + (personnel.amministratore[m] ?? 0);
+    ebitda[m] = margineContribuzione[m] - (costiFissiTotali[m] ?? 0) - personnelTotal[m];
   }
 
   const totalRicavi = sumMonthly(ricavi);
@@ -321,7 +319,7 @@ export function ContoEconomicoTab() {
               {/* ── COSTI VARIABILI ── */}
               {renderSectionHeader("Costi Variabili")}
               {variableCategories.map((cat) =>
-                renderRow(cat.name, costiVariabili[cat.id] || {}, { indent: true })
+                renderRow(cat.name, costiVariabili[cat.id] ?? {}, { indent: true })
               )}
               {hasUncategorized &&
                 renderRow("Non categorizzato", costiNonCategorizzati, { indent: true, warn: true })
@@ -335,7 +333,7 @@ export function ContoEconomicoTab() {
               {/* ── COSTI FISSI ── */}
               {renderSectionHeader("Costi Fissi")}
               {fixedCategories.map((cat) =>
-                renderRow(cat.name, costiFissi[cat.id] || {}, { indent: true })
+                renderRow(cat.name, costiFissi[cat.id] ?? {}, { indent: true })
               )}
               {renderSubtotal("TOTALE COSTI FISSI", costiFissiTotali)}
 
