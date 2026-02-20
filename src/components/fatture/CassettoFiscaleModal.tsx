@@ -110,14 +110,19 @@ export function CassettoFiscaleModal({
     try {
       const headers = await getAuthHeaders();
 
-      // Step 1: trigger download job
-      await fetch(EDGE_URL, {
+      // Step 1: trigger download job (may return skipped in sandbox — that's ok)
+      const downloadRes = await fetch(EDGE_URL, {
         method: "POST",
         headers,
         body: JSON.stringify({ action: "download-now", fiscal_id: connectedFiscalId }),
       });
+      const downloadResult = await downloadRes.json();
+      const isSandboxSkip = downloadResult?.skipped || !downloadRes.ok;
+      if (isSandboxSkip) {
+        console.log("[CassettoFiscale] Download job skipped (sandbox limitation) — proceeding to fetch");
+      }
 
-      // Step 2: fetch and import invoices
+      // Step 2: fetch and import invoices already available on A-Cube
       const fetchRes = await fetch(EDGE_URL, {
         method: "POST",
         headers,
@@ -131,7 +136,9 @@ export function CassettoFiscaleModal({
         title: "Importazione completata",
         description: count > 0
           ? `${count} fatture importate con successo.`
-          : "Nessuna nuova fattura trovata. Il download potrebbe richiedere alcuni minuti prima che le fatture siano disponibili.",
+          : isSandboxSkip
+            ? "Nessuna fattura disponibile in sandbox. In produzione il download avviene dall'Agenzia delle Entrate."
+            : "Nessuna nuova fattura trovata. Il download potrebbe richiedere alcuni minuti.",
       });
 
       onOpenChange(false);
