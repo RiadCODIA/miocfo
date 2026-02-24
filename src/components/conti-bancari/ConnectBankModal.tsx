@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Building2, ExternalLink, CheckCircle2, Loader2, AlertCircle, Search, ArrowLeft } from "lucide-react";
 import { useBankingIntegration, BankAccount, ASPSP } from "@/hooks/useBankingIntegration";
 import { useAuth } from "@/contexts/AuthContext";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/client";
@@ -51,7 +51,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   
   const { getASPSPs, startAuth, completeSession, isLoading } = useBankingIntegration();
   const { isDemoMode } = useAuth();
-  const { toast } = useToast();
+  
 
   // Generate redirect URI
   const getRedirectUri = useCallback(() => {
@@ -160,11 +160,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       setAspsps(banks);
     } catch (err) {
       console.error("Failed to load banks:", err);
-      toast({
-        title: "Errore",
-        description: "Impossibile caricare la lista delle banche",
-        variant: "destructive",
-      });
+      toast.error("Errore", { description: "Impossibile caricare la lista delle banche" });
     } finally {
       setLoadingBanks(false);
     }
@@ -228,7 +224,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
   const handleAcubeConnect = async () => {
     if (!fiscalId.trim()) {
-      toast({ title: "Errore", description: "Inserisci il codice fiscale o P.IVA", variant: "destructive" });
+      toast.error("Errore", { description: "Inserisci il codice fiscale o P.IVA" });
       return;
     }
     setAcubeLoading(true);

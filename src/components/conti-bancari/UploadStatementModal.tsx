@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface UploadStatementModalProps {
   open: boolean;
@@ -56,7 +56,7 @@ export function UploadStatementModal({
   const [uploadState, setUploadState] = useState<UploadState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<ProcessResult | null>(null);
-  const { toast } = useToast();
+  
 
   const resetState = useCallback(() => {
     setFile(null);
@@ -194,10 +194,7 @@ export function UploadStatementModal({
       setResult(data);
       setUploadState("success");
 
-      toast({
-        title: "Estratto conto importato",
-        description: `${data.transactions_count} transazioni importate con successo`,
-      });
+      toast.success("Estratto conto importato", { description: `${data.transactions_count} transazioni importate con successo` });
     } catch (err) {
       console.error("Upload error:", err);
       setError(err instanceof Error ? err.message : "Errore sconosciuto");

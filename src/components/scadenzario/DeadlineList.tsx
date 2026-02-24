@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Deadline, useCompleteDeadline, useDeleteDeadline } from "@/hooks/useDeadlines";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useState } from "react";
 import {
   AlertDialog,
@@ -26,7 +26,6 @@ interface DeadlineListProps {
 }
 
 export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps) {
-  const { toast } = useToast();
   const completeMutation = useCompleteDeadline();
   const deleteMutation = useDeleteDeadline();
   const [deleteTarget, setDeleteTarget] = useState<Deadline | null>(null);
@@ -58,17 +57,13 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
   const handleComplete = async (deadline: Deadline) => {
     setCompletingId(deadline.id);
     try {
-      // Pass the full deadline object so the hook can update invoices too
       await completeMutation.mutateAsync(deadline);
-      toast({
-        title: deadline.type === "incasso" ? "Incasso registrato" : "Pagamento completato",
+      toast.success(deadline.type === "incasso" ? "Incasso registrato" : "Pagamento completato", {
         description: `${deadline.title} - ${formatCurrency(deadline.amount)}`,
       });
     } catch (error) {
-      toast({
-        title: "Errore",
+      toast.error("Errore", {
         description: "Impossibile completare la scadenza",
-        variant: "destructive",
       });
     } finally {
       setCompletingId(null);
@@ -79,15 +74,12 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
     if (!deleteTarget) return;
     try {
       await deleteMutation.mutateAsync(deleteTarget.id);
-      toast({
-        title: "Scadenza eliminata",
+      toast.success("Scadenza eliminata", {
         description: deleteTarget.description,
       });
     } catch (error) {
-      toast({
-        title: "Errore",
+      toast.error("Errore", {
         description: "Impossibile eliminare la scadenza",
-        variant: "destructive",
       });
     } finally {
       setDeleteTarget(null);
@@ -181,7 +173,6 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
               </div>
 
               <div className="flex items-center gap-1">
-                {/* Complete button: available for all non-completed deadlines (manual and invoice) */}
                 {!isCompleted && (
                   <Button
                     variant="ghost"

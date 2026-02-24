@@ -20,7 +20,7 @@ import { InvoiceTable, Invoice } from "@/components/fatture/InvoiceTable";
 import { InvoiceMatchingModal } from "@/components/fatture/InvoiceMatchingModal";
 import { InvoicePreview } from "@/components/fatture/InvoicePreview";
 import { CassettoFiscaleModal } from "@/components/fatture/CassettoFiscaleModal";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -95,7 +95,7 @@ export default function Fatture() {
   const [connectedFiscalId, setConnectedFiscalId] = useState<string | null>(null);
   const [isFetchingCassetto, setIsFetchingCassetto] = useState(false);
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
-  const { toast } = useToast();
+  
   const queryClient = useQueryClient();
 
   // Fetch invoices from database
@@ -212,17 +212,10 @@ export default function Fatture() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       const failedMsg = data.failed > 0 ? ` (${data.failed} non elaborate)` : '';
-      toast({
-        title: "Fatture elaborate",
-        description: `${data.total_invoices} fatture estratte da ${data.processed} file.${failedMsg}`,
-      });
+      toast.success("Fatture elaborate", { description: `${data.total_invoices} fatture estratte da ${data.processed} file.${failedMsg}` });
     },
     onError: (error: Error) => {
-      toast({
-        title: "Errore",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast.error("Errore", { description: error.message });
     },
   });
 
@@ -276,7 +269,7 @@ export default function Fatture() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['conto-economico'] });
     } catch {
-      toast({ title: "Errore", description: "Impossibile aggiornare la categoria.", variant: "destructive" });
+      toast.error("Errore", { description: "Impossibile aggiornare la categoria." });
     }
   };
 
@@ -291,7 +284,7 @@ export default function Fatture() {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['conto-economico'] });
     } catch {
-      toast({ title: "Errore", description: "Impossibile aggiornare il tipo fattura.", variant: "destructive" });
+      toast.error("Errore", { description: "Impossibile aggiornare il tipo fattura." });
     }
   };
 
@@ -324,26 +317,16 @@ export default function Fatture() {
 
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       
-      toast({
-        title: "Abbinamento confermato",
-        description: "La fattura è stata abbinata alla transazione.",
-      });
+      toast.success("Abbinamento confermato", { description: "La fattura è stata abbinata alla transazione." });
     } catch (error) {
-      toast({
-        title: "Errore",
-        description: "Impossibile salvare l'abbinamento.",
-        variant: "destructive",
-      });
+      toast.error("Errore", { description: "Impossibile salvare l'abbinamento." });
     }
   };
 
   const handleAutoMatch = async () => {
     setIsAutoMatching(true);
     
-    toast({
-      title: "Abbinamento automatico",
-      description: "Analisi delle fatture in corso...",
-    });
+    toast("Abbinamento automatico", { description: "Analisi delle fatture in corso..." });
 
     try {
       // Fetch bank transactions for matching
@@ -378,18 +361,13 @@ export default function Fatture() {
 
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
 
-      toast({
-        title: "Abbinamento completato",
+      toast.success("Abbinamento completato", {
         description: matchedCount > 0 
           ? `${matchedCount} fatture abbinate automaticamente.`
           : "Nessuna corrispondenza trovata. Prova l'abbinamento manuale.",
       });
     } catch (error) {
-      toast({
-        title: "Errore",
-        description: "Errore durante l'abbinamento automatico.",
-        variant: "destructive",
-      });
+      toast.error("Errore", { description: "Errore durante l'abbinamento automatico." });
     } finally {
       setIsAutoMatching(false);
     }
@@ -416,16 +394,9 @@ export default function Fatture() {
       const result = await response.json();
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
 
-      toast({
-        title: "Fattura riprocessata",
-        description: `${result.invoice?.supplier_name || 'Fattura'} - €${result.invoice?.amount?.toFixed(2) || 0}`,
-      });
+      toast.success("Fattura riprocessata", { description: `${result.invoice?.supplier_name || 'Fattura'} - €${result.invoice?.amount?.toFixed(2) || 0}` });
     } catch (error) {
-      toast({
-        title: "Errore",
-        description: error instanceof Error ? error.message : "Errore durante il riprocessamento",
-        variant: "destructive",
-      });
+      toast.error("Errore", { description: error instanceof Error ? error.message : "Errore durante il riprocessamento" });
     } finally {
       setReprocessingId(null);
     }
@@ -458,16 +429,9 @@ export default function Fatture() {
 
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
 
-      toast({
-        title: "Fattura eliminata",
-        description: `La fattura ${invoice.invoiceNumber} è stata eliminata.`,
-      });
+      toast.success("Fattura eliminata", { description: `La fattura ${invoice.invoiceNumber} è stata eliminata.` });
     } catch (error) {
-      toast({
-        title: "Errore",
-        description: error instanceof Error ? error.message : "Errore durante l'eliminazione",
-        variant: "destructive",
-      });
+      toast.error("Errore", { description: error instanceof Error ? error.message : "Errore durante l'eliminazione" });
     } finally {
       setDeletingId(null);
     }
@@ -540,16 +504,9 @@ export default function Fatture() {
       const result = await response.json();
       queryClient.invalidateQueries({ queryKey: ["invoices"] });
 
-      toast({
-        title: "Fatture importate",
-        description: `${result.imported || 0} nuove fatture importate dal Cassetto Fiscale.`,
-      });
+      toast.success("Fatture importate", { description: `${result.imported || 0} nuove fatture importate dal Cassetto Fiscale.` });
     } catch (error) {
-      toast({
-        title: "Errore",
-        description: error instanceof Error ? error.message : "Errore sconosciuto",
-        variant: "destructive",
-      });
+      toast.error("Errore", { description: error instanceof Error ? error.message : "Errore sconosciuto" });
     } finally {
       setIsFetchingCassetto(false);
     }

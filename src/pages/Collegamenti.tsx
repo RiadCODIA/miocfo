@@ -12,13 +12,13 @@ import { ConnectBankModal } from "@/components/conti-bancari/ConnectBankModal";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 const EDGE_URL = "https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/acube-cassetto-fiscale";
 
 export default function Collegamenti() {
   const { user } = useAuth();
-  const { toast } = useToast();
+  
   const queryClient = useQueryClient();
   const [cassettoModalOpen, setCassettoModalOpen] = useState(false);
   const [bankModalOpen, setBankModalOpen] = useState(false);
@@ -78,20 +78,12 @@ export default function Collegamenti() {
       const result = await res.json();
       const count = result?.imported ?? 0;
 
-      toast({
-        title: "Importazione completata",
-        description: count > 0
-          ? `${count} fatture importate.`
-          : "Nessuna nuova fattura. Il download A-Cube potrebbe richiedere alcuni minuti.",
+      toast.success("Importazione completata", {
+        description: count > 0 ? `${count} fatture importate.` : "Nessuna nuova fattura. Il download A-Cube potrebbe richiedere alcuni minuti.",
       });
-
       queryClient.invalidateQueries({ queryKey: ["cassetto-fiscale-invoices"] });
     } catch (err) {
-      toast({
-        title: "Errore download",
-        description: err instanceof Error ? err.message : "Errore sconosciuto",
-        variant: "destructive",
-      });
+      toast.error("Errore download", { description: err instanceof Error ? err.message : "Errore sconosciuto" });
     } finally {
       setIsDownloading(false);
     }

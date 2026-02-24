@@ -4,7 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
@@ -29,7 +29,7 @@ export default function AIAssistant() {
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { toast } = useToast();
+  
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -64,7 +64,7 @@ export default function AIAssistant() {
       const { data: { session } } = await supabase.auth.getSession();
       const accessToken = session?.access_token;
       if (!accessToken) {
-        toast({ variant: "destructive", title: "Non autenticato", description: "Effettua il login per usare l'assistente AI." });
+        toast.error("Non autenticato", { description: "Effettua il login per usare l'assistente AI." });
         setIsStreaming(false);
         return;
       }
@@ -82,11 +82,11 @@ export default function AIAssistant() {
       if (!resp.ok) {
         const err = await resp.json().catch(() => ({ error: "Errore sconosciuto" }));
         if (resp.status === 429) {
-          toast({ variant: "destructive", title: "Rate limit", description: "Troppe richieste. Riprova tra poco." });
+          toast.error("Rate limit", { description: "Troppe richieste. Riprova tra poco." });
         } else if (resp.status === 402) {
-          toast({ variant: "destructive", title: "Crediti esauriti", description: "Aggiungi crediti al workspace Lovable." });
+          toast.error("Crediti esauriti", { description: "Aggiungi crediti al workspace Lovable." });
         } else {
-          toast({ variant: "destructive", title: "Errore", description: err.error || "Errore nella risposta AI." });
+          toast.error("Errore", { description: err.error || "Errore nella risposta AI." });
         }
         setIsStreaming(false);
         return;
@@ -136,7 +136,7 @@ export default function AIAssistant() {
       }
     } catch (e) {
       console.error("AI Assistant error:", e);
-      toast({ variant: "destructive", title: "Errore di connessione", description: "Impossibile contattare l'assistente AI." });
+      toast.error("Errore di connessione", { description: "Impossibile contattare l'assistente AI." });
     } finally {
       setIsStreaming(false);
     }

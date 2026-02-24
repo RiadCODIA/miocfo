@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Brain, Loader2, AlertCircle, Users } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { toast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 const fmt = (v: number) => v === 0 ? "" : v.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 const fmtPerc = (v: number) => isNaN(v) || !isFinite(v) ? "" : `${v.toFixed(1)}%`;
@@ -111,7 +111,7 @@ export function ContoEconomicoTab() {
 
       if (error) throw error;
       if (result?.error) {
-        toast({ title: "Errore AI", description: result.error, variant: "destructive" });
+        toast.error("Errore AI", { description: result.error });
         return;
       }
 
@@ -119,7 +119,7 @@ export function ContoEconomicoTab() {
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Errore durante l'analisi AI";
       console.error("AI analysis error:", e);
-      toast({ title: "Errore", description: msg, variant: "destructive" });
+      toast.error("Errore", { description: msg });
     } finally {
       setAiLoading(false);
     }
@@ -171,7 +171,7 @@ export function ContoEconomicoTab() {
 
   const renderRow = (label: string, monthlyData: MonthlyData, options?: {
     bold?: boolean;
-    highlight?: string; // tailwind bg class
+    highlight?: string;
     negative?: boolean;
     indent?: boolean;
     warn?: boolean;

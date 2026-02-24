@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Loader2, ShieldCheck, AlertTriangle, CheckCircle2, Download } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 
 interface CassettoFiscaleModalProps {
@@ -32,7 +32,7 @@ export function CassettoFiscaleModal({
   const [isLoading, setIsLoading] = useState(false);
   const [step, setStep] = useState<"form" | "connected">("form");
   const [connectedFiscalId, setConnectedFiscalId] = useState("");
-  const { toast } = useToast();
+  
 
   const getAuthHeaders = async () => {
     const { data: { session } } = await supabase.auth.getSession();
@@ -46,11 +46,7 @@ export function CassettoFiscaleModal({
     e.preventDefault();
 
     if (!fiscalId || !password || !pin) {
-      toast({
-        title: "Campi obbligatori",
-        description: "Inserisci codice fiscale, password e PIN.",
-        variant: "destructive",
-      });
+      toast.error("Campi obbligatori", { description: "Inserisci codice fiscale, password e PIN." });
       return;
     }
 
@@ -95,11 +91,7 @@ export function CassettoFiscaleModal({
       setPassword("");
       setPin("");
     } catch (error) {
-      toast({
-        title: "Errore",
-        description: error instanceof Error ? error.message : "Errore sconosciuto",
-        variant: "destructive",
-      });
+      toast.error("Errore", { description: error instanceof Error ? error.message : "Errore sconosciuto" });
     } finally {
       setIsLoading(false);
     }
@@ -132,8 +124,7 @@ export function CassettoFiscaleModal({
       const result = await fetchRes.json();
       const count = result?.imported ?? 0;
 
-      toast({
-        title: "Importazione completata",
+      toast.success("Importazione completata", {
         description: count > 0
           ? `${count} fatture importate con successo.`
           : isSandboxSkip
@@ -144,11 +135,7 @@ export function CassettoFiscaleModal({
       onOpenChange(false);
       setStep("form");
     } catch (error) {
-      toast({
-        title: "Errore durante il download",
-        description: error instanceof Error ? error.message : "Errore sconosciuto",
-        variant: "destructive",
-      });
+      toast.error("Errore durante il download", { description: error instanceof Error ? error.message : "Errore sconosciuto" });
     } finally {
       setIsLoading(false);
     }

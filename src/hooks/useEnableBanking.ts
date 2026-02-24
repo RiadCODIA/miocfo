@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 export interface BankAccount {
   id: string;
@@ -55,29 +55,20 @@ export function useEnableBanking() {
   const [isLoading, setIsLoading] = useState(false);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [transactions, setTransactions] = useState<BankTransaction[]>([]);
-  const { toast } = useToast();
 
   const callEnableBankingFunction = useCallback(
     async (action: string, params: Record<string, unknown> = {}) => {
-      // Define public actions that don't require authentication (demo mode friendly)
       const publicActions = ["get_aspsps"];
-      
-      // Get the current session for auth token
       const { data: { session } } = await supabase.auth.getSession();
 
-      // Only block protected actions for unauthenticated users
       if (!publicActions.includes(action) && !session?.access_token) {
         throw new Error("Autenticazione richiesta. Effettua il login per utilizzare i conti bancari.");
       }
 
-      // Use fetch directly to get better error handling with response body
       const supabaseUrl = "https://ublsnradzhfpqhunfqbn.supabase.co";
       const anonKey = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVibHNucmFkemhmcHFodW5mcWJuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjYwODUyNDQsImV4cCI6MjA4MTY2MTI0NH0.njhpIOLukx6bmrw5p-AHCNShPkCnB-QqrDOvkYSkTOw";
-      
-      // Use session token if available, otherwise anon key for public actions
       const authToken = session?.access_token || anonKey;
-      
-      // Auth is now handled via Authorization header - no user_id in body needed
+
       const response = await fetch(`${supabaseUrl}/functions/v1/enable-banking`, {
         method: "POST",
         headers: {
@@ -92,8 +83,6 @@ export function useEnableBanking() {
 
       if (!response.ok) {
         console.error("[useEnableBanking] Function error:", response.status, data);
-        
-        // Extract the error message from the response body
         const errorMessage = data?.error || "Errore nella chiamata Enable Banking";
         throw new Error(errorMessage);
       }
@@ -109,19 +98,11 @@ export function useEnableBanking() {
   );
 
   const createSession = useCallback(
-    async (
-      redirectUri: string,
-      aspspCountry?: string,
-      aspspName?: string,
-      psuType?: "personal" | "business"
-    ): Promise<{ session_id: string; authorization_url: string }> => {
+    async (redirectUri: string, aspspCountry?: string, aspspName?: string, psuType?: "personal" | "business"): Promise<{ session_id: string; authorization_url: string }> => {
       setIsLoading(true);
       try {
         const data = await callEnableBankingFunction("create_session", {
-          redirect_uri: redirectUri,
-          aspsp_country: aspspCountry,
-          aspsp_name: aspspName,
-          psu_type: psuType || "personal",
+          redirect_uri: redirectUri, aspsp_country: aspspCountry, aspsp_name: aspspName, psu_type: psuType || "personal",
         });
         return data;
       } finally {
@@ -135,32 +116,19 @@ export function useEnableBanking() {
     async (code: string): Promise<BankAccount[]> => {
       setIsLoading(true);
       try {
-        const data = await callEnableBankingFunction("complete_session", {
-          code: code,
-        });
-
+        const data = await callEnableBankingFunction("complete_session", { code });
         const newAccounts = data.accounts as BankAccount[];
         setAccounts((prev) => [...prev, ...newAccounts]);
-
-        toast({
-          title: "Conto collegato",
-          description: `${newAccounts.length} conto/i collegati con successo`,
-        });
-
+        toast.success("Conto collegato", { description: `${newAccounts.length} conto/i collegati con successo` });
         return newAccounts;
       } catch (error) {
-        toast({
-          title: "Errore",
-          description:
-            error instanceof Error ? error.message : "Errore nel collegamento",
-          variant: "destructive",
-        });
+        toast.error("Errore", { description: error instanceof Error ? error.message : "Errore nel collegamento" });
         throw error;
       } finally {
         setIsLoading(false);
       }
     },
-    [callEnableBankingFunction, toast]
+    [callEnableBankingFunction]
   );
 
   const fetchAccounts = useCallback(async (): Promise<BankAccount[]> => {
@@ -171,127 +139,74 @@ export function useEnableBanking() {
       setAccounts(fetchedAccounts);
       return fetchedAccounts;
     } catch (error) {
-      toast({
-        title: "Errore",
-        description: "Impossibile caricare i conti bancari",
-        variant: "destructive",
-      });
+      toast.error("Errore", { description: "Impossibile caricare i conti bancari" });
       throw error;
     } finally {
       setIsLoading(false);
     }
-  }, [callEnableBankingFunction, toast]);
+  }, [callEnableBankingFunction]);
 
   const syncAccount = useCallback(
-    async (
-      accountId: string
-    ): Promise<{ account: BankAccount; transactions_synced: number }> => {
+    async (accountId: string): Promise<{ account: BankAccount; transactions_synced: number }> => {
       setIsLoading(true);
       try {
-        const data = await callEnableBankingFunction("sync_account", {
-          account_id: accountId,
-        });
-
-        toast({
-          title: "Sincronizzazione completata",
-          description: `${data.transactions_synced} transazioni sincronizzate`,
-        });
-
-        // Refresh all accounts from DB to ensure UI is fully in sync
+        const data = await callEnableBankingFunction("sync_account", { account_id: accountId });
+        toast.success("Sincronizzazione completata", { description: `${data.transactions_synced} transazioni sincronizzate` });
         await fetchAccounts();
-
         return data;
       } catch (error) {
-        toast({
-          title: "Errore sincronizzazione",
-          description:
-            error instanceof Error ? error.message : "Errore nella sincronizzazione",
-          variant: "destructive",
-        });
-        
-        // Refresh accounts to sync UI with DB status (status may have changed to error/disconnected)
-        try {
-          await fetchAccounts();
-        } catch {
-          // Ignore fetch error, just trying to refresh UI
-        }
-        
+        toast.error("Errore sincronizzazione", { description: error instanceof Error ? error.message : "Errore nella sincronizzazione" });
+        try { await fetchAccounts(); } catch { /* Ignore */ }
         throw error;
       } finally {
         setIsLoading(false);
       }
     },
-    [callEnableBankingFunction, toast, fetchAccounts]
+    [callEnableBankingFunction, fetchAccounts]
   );
 
   const fetchTransactions = useCallback(
-    async (
-      accountId: string,
-      startDate?: string,
-      endDate?: string
-    ): Promise<BankTransaction[]> => {
+    async (accountId: string, startDate?: string, endDate?: string): Promise<BankTransaction[]> => {
       setIsLoading(true);
       try {
         const data = await callEnableBankingFunction("get_transactions", {
-          account_id: accountId,
-          start_date: startDate,
-          end_date: endDate,
+          account_id: accountId, start_date: startDate, end_date: endDate,
         });
-
         const fetchedTransactions = data.transactions as BankTransaction[];
         setTransactions(fetchedTransactions);
         return fetchedTransactions;
       } catch (error) {
-        toast({
-          title: "Errore",
-          description: "Impossibile caricare le transazioni",
-          variant: "destructive",
-        });
+        toast.error("Errore", { description: "Impossibile caricare le transazioni" });
         throw error;
       } finally {
         setIsLoading(false);
       }
     },
-    [callEnableBankingFunction, toast]
+    [callEnableBankingFunction]
   );
 
   const removeAccount = useCallback(
     async (accountId: string): Promise<void> => {
       setIsLoading(true);
       try {
-        const result = await callEnableBankingFunction("remove_connection", {
-          account_id: accountId,
-        });
-
-        // Refresh accounts from DB
+        const result = await callEnableBankingFunction("remove_connection", { account_id: accountId });
         await fetchAccounts();
-
-        toast({
-          title: "Conto rimosso",
-          description: `${result.deleted_count || 1} conto/i scollegati con successo`,
-        });
+        toast.success("Conto rimosso", { description: `${result.deleted_count || 1} conto/i scollegati con successo` });
       } catch (error) {
-        toast({
-          title: "Errore",
-          description:
-            error instanceof Error ? error.message : "Errore nella rimozione",
-          variant: "destructive",
-        });
+        toast.error("Errore", { description: error instanceof Error ? error.message : "Errore nella rimozione" });
         throw error;
       } finally {
         setIsLoading(false);
       }
     },
-    [callEnableBankingFunction, toast, fetchAccounts]
+    [callEnableBankingFunction, fetchAccounts]
   );
 
   const getASPSPs = useCallback(
     async (country: string): Promise<unknown[]> => {
       setIsLoading(true);
       try {
-        const data = await callEnableBankingFunction("get_aspsps", {
-          aspsp_country: country,
-        });
+        const data = await callEnableBankingFunction("get_aspsps", { aspsp_country: country });
         return data.aspsps;
       } finally {
         setIsLoading(false);
@@ -300,14 +215,11 @@ export function useEnableBanking() {
     [callEnableBankingFunction]
   );
 
-  // Debug transactions - diagnostic action to test different API parameter combinations
   const debugTransactions = useCallback(
     async (accountId: string): Promise<DebugTransactionsResult> => {
       setIsLoading(true);
       try {
-        const data = await callEnableBankingFunction("debug_transactions", {
-          account_id: accountId,
-        });
+        const data = await callEnableBankingFunction("debug_transactions", { account_id: accountId });
         return data as DebugTransactionsResult;
       } finally {
         setIsLoading(false);
@@ -316,17 +228,5 @@ export function useEnableBanking() {
     [callEnableBankingFunction]
   );
 
-  return {
-    isLoading,
-    accounts,
-    transactions,
-    createSession,
-    completeSession,
-    fetchAccounts,
-    syncAccount,
-    fetchTransactions,
-    removeAccount,
-    getASPSPs,
-    debugTransactions,
-  };
+  return { isLoading, accounts, transactions, createSession, completeSession, fetchAccounts, syncAccount, fetchTransactions, removeAccount, getASPSPs, debugTransactions };
 }
