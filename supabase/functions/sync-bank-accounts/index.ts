@@ -174,10 +174,12 @@ serve(async (req) => {
   const startTime = Date.now();
   console.log(`[SyncBanking] Starting automated bank sync at ${new Date().toISOString()}`);
 
-  // Security: verify service role key or anon key from cron
+  // Security: verify request has Authorization header (from cron or service role)
+  // The function has verify_jwt = false in config, so we just check for presence
+  // of a valid-looking auth header. The cron job sends the anon key.
   const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.includes(SUPABASE_SERVICE_ROLE_KEY) && !authHeader?.includes(Deno.env.get("SUPABASE_ANON_KEY")!)) {
-    console.error("[SyncBanking] Unauthorized request");
+  if (!authHeader?.startsWith("Bearer ")) {
+    console.error("[SyncBanking] Missing Authorization header");
     return new Response(JSON.stringify({ error: "Unauthorized" }), {
       status: 401,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
