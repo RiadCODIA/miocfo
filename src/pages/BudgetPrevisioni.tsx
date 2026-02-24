@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Plus, Save, TrendingUp, TrendingDown, ArrowUpCircle, ArrowDownCircle } from "lucide-react";
+import { Plus, Save, TrendingUp, TrendingDown, ArrowUpCircle, ArrowDownCircle, Info } from "lucide-react";
 import { CreateBudgetModal } from "@/components/budget/CreateBudgetModal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -12,21 +12,32 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
+import {
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip as RechartsTooltip,
+  ResponsiveContainer,
+  Legend,
+  ReferenceLine,
+  Cell,
+} from "recharts";
 import { cn } from "@/lib/utils";
-import { useBudgets, useBudgetComparison, useBudgetVarianceSummary, useUpdateBudget } from "@/hooks/useBudgets";
+import { useBudgets, useBudgetChartData, useBudgetVarianceSummary, useUpdateBudget } from "@/hooks/useBudgets";
 import { toast } from "sonner";
 
 export default function BudgetPrevisioni() {
   const { data: budgets, isLoading: loadingBudgets } = useBudgets();
-  const { data: comparison, isLoading: loadingComparison } = useBudgetComparison();
+  const { data: chartData, isLoading: loadingChart } = useBudgetChartData();
   const { data: variance, isLoading: loadingVariance } = useBudgetVarianceSummary();
   const updateBudget = useUpdateBudget();
 
   const [editedValues] = useState<Record<string, { income?: number; expenses?: number }>>({});
   const [createModalOpen, setCreateModalOpen] = useState(false);
 
-  const formatCurrency = (value: number) => `€${value.toLocaleString("it-IT")}`;
+  const formatCurrency = (value: number) => `€${value.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
   const handleSave = async () => {
     try {
@@ -37,6 +48,30 @@ export default function BudgetPrevisioni() {
   };
 
   const hasChanges = Object.keys(editedValues).length > 0;
+
+  // Custom tooltip for the chart
+  const CustomTooltip = ({ active, payload, label }: any) => {
+    if (!active || !payload) return null;
+    return (
+      <div className="bg-card border border-border rounded-lg p-3 shadow-lg text-sm space-y-1">
+        <p className="font-semibold text-foreground mb-2">{label}</p>
+        {payload.map((entry: any, i: number) => (
+          <div key={i} className="flex items-center gap-2">
+            <div
+              className="w-3 h-3 rounded-sm"
+              style={{
+                backgroundColor: entry.color || entry.fill,
+                opacity: entry.name?.includes("Previsti") ? 0.5 : 1,
+                border: entry.name?.includes("Previsti") ? "1px dashed" : "none",
+              }}
+            />
+            <span className="text-muted-foreground">{entry.name}:</span>
+            <span className="font-medium text-foreground">{formatCurrency(entry.value)}</span>
+          </div>
+        ))}
+      </div>
+    );
+  };
 
   return (
     <div className="space-y-6">
@@ -72,7 +107,7 @@ export default function BudgetPrevisioni() {
       <div className="glass rounded-xl overflow-hidden">
         <div className="p-5 border-b border-border">
           <h3 className="text-lg font-semibold text-foreground">Budget Previsionale</h3>
-          <p className="text-sm text-muted-foreground">Ricavi e costi previsti per periodo</p>
+          <p className="text-sm text-muted-foreground">Ricavi e costi previsti inseriti manualmente per periodo</p>
         </div>
         <Table>
           <TableHeader>
@@ -128,57 +163,100 @@ export default function BudgetPrevisioni() {
         </Table>
       </div>
 
-      {/* Summary cards */}
+      {/* Summary cards with explanation */}
       {!loadingVariance && variance && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="glass rounded-xl p-5">
             <div className="flex items-center gap-2">
               <TrendingUp className="h-5 w-5 text-success" />
-              <p className="text-sm text-muted-foreground">Ricavi Previsti</p>
+              <p className="text-sm text-muted-foreground">Ricavi Attesi</p>
             </div>
             <p className="text-2xl font-bold text-success mt-2">+{formatCurrency(variance.totalRicaviPrevisti || 0)}</p>
+            <div className="mt-2 space-y-0.5">
+              {variance.ricaviDaBudget > 0 && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Info className="h-3 w-3" />
+                  {formatCurrency(variance.ricaviDaBudget)} da {variance.budgetCount} budget inseriti
+                </p>
+              )}
+              {variance.ricaviDaFatture > 0 && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Info className="h-3 w-3" />
+                  {formatCurrency(variance.ricaviDaFatture)} da fatture emesse non incassate
+                </p>
+              )}
+              {variance.totalRicaviPrevisti === 0 && (
+                <p className="text-xs text-muted-foreground">Nessun ricavo previsto o fattura in attesa</p>
+              )}
+            </div>
           </div>
           <div className="glass rounded-xl p-5">
             <div className="flex items-center gap-2">
               <TrendingDown className="h-5 w-5 text-destructive" />
-              <p className="text-sm text-muted-foreground">Costi Previsti</p>
+              <p className="text-sm text-muted-foreground">Costi Attesi</p>
             </div>
             <p className="text-2xl font-bold text-destructive mt-2">-{formatCurrency(variance.totalCostiPrevisti || 0)}</p>
+            <div className="mt-2 space-y-0.5">
+              {variance.costiDaBudget > 0 && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Info className="h-3 w-3" />
+                  {formatCurrency(variance.costiDaBudget)} da budget inseriti
+                </p>
+              )}
+              {variance.costiDaFatture > 0 && (
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Info className="h-3 w-3" />
+                  {formatCurrency(variance.costiDaFatture)} da fatture ricevute non pagate
+                </p>
+              )}
+              {variance.totalCostiPrevisti === 0 && (
+                <p className="text-xs text-muted-foreground">Nessun costo previsto o fattura in attesa</p>
+              )}
+            </div>
           </div>
           <div className="glass rounded-xl p-5">
             <p className="text-sm text-muted-foreground">Cashflow Netto Previsto</p>
             <p className={cn("text-2xl font-bold mt-2", (variance.cashflowNettoPrevisto || 0) >= 0 ? "text-success" : "text-destructive")}>
               {(variance.cashflowNettoPrevisto || 0) >= 0 ? "+" : ""}{formatCurrency(variance.cashflowNettoPrevisto || 0)}
             </p>
-            <p className="text-xs text-muted-foreground mt-1">
-              {variance.variancePercent?.toFixed(1) || 0}% vs consuntivo
+            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+              <Info className="h-3 w-3" />
+              Somma di budget manuali + fatture in attesa di pagamento
             </p>
           </div>
         </div>
       )}
 
-      {/* Comparison Chart */}
+      {/* Chart: Actual vs Expected from invoices */}
       <div className="glass rounded-xl p-5">
         <div className="mb-4">
-          <h3 className="text-lg font-semibold text-foreground">Consuntivo vs Previsionale</h3>
-          <p className="text-sm text-muted-foreground">Scostamenti budget ultimi 6 mesi</p>
+          <h3 className="text-lg font-semibold text-foreground">Ricavi e Costi — Effettivi vs Previsti</h3>
+          <p className="text-sm text-muted-foreground">
+            Barre piene: movimenti bancari effettivi · Barre trasparenti: importi attesi dalle scadenze fatture non pagate
+          </p>
         </div>
-        <div className="h-[320px]">
-          {loadingComparison ? (
+        <div className="h-[380px]">
+          {loadingChart ? (
             <Skeleton className="w-full h-full" />
-          ) : !comparison || comparison.length === 0 ? (
+          ) : !chartData || chartData.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-              <p className="text-sm">Nessun dato di confronto</p>
-              <p className="text-xs mt-1">Inserisci i budget per vedere il confronto</p>
+              <p className="text-sm">Nessun dato disponibile</p>
+              <p className="text-xs mt-1">I dati appariranno quando ci saranno transazioni o fatture con scadenza</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={comparison} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }} barGap={2} barSize={14}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="mese" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
+                <XAxis
+                  dataKey="mese"
+                  stroke="hsl(var(--muted-foreground))"
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                />
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
-                  fontSize={12}
+                  fontSize={11}
                   tickLine={false}
                   axisLine={false}
                   tickFormatter={(value) => {
@@ -188,19 +266,54 @@ export default function BudgetPrevisioni() {
                     return `€${value.toLocaleString("it-IT")}`;
                   }}
                 />
-                <RechartsTooltip
-                  contentStyle={{
-                    backgroundColor: "hsl(var(--card))",
-                    border: "1px solid hsl(var(--border))",
-                    borderRadius: "8px",
-                    color: "hsl(var(--foreground))",
-                  }}
-                  formatter={(value: number) => formatCurrency(value)}
+                <RechartsTooltip content={<CustomTooltip />} />
+                <Legend
+                  wrapperStyle={{ paddingTop: "16px" }}
+                  formatter={(value: string) => (
+                    <span className="text-xs text-muted-foreground">{value}</span>
+                  )}
                 />
-                <Legend wrapperStyle={{ paddingTop: "20px" }} />
                 <ReferenceLine y={0} stroke="hsl(var(--border))" />
-                <Bar dataKey="consuntivo" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Consuntivo" />
-                <Bar dataKey="previsionale" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} name="Cashflow Netto Previsto" opacity={0.5} />
+
+                {/* Actual income - solid green */}
+                <Bar
+                  dataKey="ricaviEffettivi"
+                  fill="hsl(142, 71%, 45%)"
+                  radius={[2, 2, 0, 0]}
+                  name="Ricavi Effettivi"
+                />
+
+                {/* Expected income - transparent green with dashed effect */}
+                <Bar
+                  dataKey="ricaviPrevisti"
+                  fill="hsl(142, 71%, 45%)"
+                  radius={[2, 2, 0, 0]}
+                  name="Ricavi Previsti (da fatture)"
+                  fillOpacity={0.25}
+                  stroke="hsl(142, 71%, 45%)"
+                  strokeDasharray="4 2"
+                  strokeWidth={1.5}
+                />
+
+                {/* Actual expenses - solid red */}
+                <Bar
+                  dataKey="costiEffettivi"
+                  fill="hsl(0, 84%, 60%)"
+                  radius={[2, 2, 0, 0]}
+                  name="Costi Effettivi"
+                />
+
+                {/* Expected expenses - transparent red with dashed effect */}
+                <Bar
+                  dataKey="costiPrevisti"
+                  fill="hsl(0, 84%, 60%)"
+                  radius={[2, 2, 0, 0]}
+                  name="Costi Previsti (da fatture)"
+                  fillOpacity={0.25}
+                  stroke="hsl(0, 84%, 60%)"
+                  strokeDasharray="4 2"
+                  strokeWidth={1.5}
+                />
               </BarChart>
             </ResponsiveContainer>
           )}

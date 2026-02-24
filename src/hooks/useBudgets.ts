@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, startOfMonth, subMonths } from "date-fns";
+import { format, startOfMonth, subMonths, addMonths } from "date-fns";
 import { it } from "date-fns/locale";
 
 export interface Budget {
@@ -15,13 +15,13 @@ export interface Budget {
   isActive: boolean;
 }
 
-export interface BudgetComparison {
+export interface ChartMonthData {
   mese: string;
-  consuntivo: number;
-  previsionale: number;
-  previsionaleRicavi: number;
-  previsionaleCosti: number;
-  scostamento: number;
+  monthKey: string;
+  ricaviEffettivi: number;
+  costiEffettivi: number;
+  ricaviPrevisti: number;
+  costiPrevisti: number;
 }
 
 export function useBudgets() {
@@ -51,67 +51,74 @@ export function useBudgets() {
   });
 }
 
-export function useBudgetComparison() {
+export function useBudgetChartData() {
   return useQuery({
-    queryKey: ["budget-comparison"],
-    queryFn: async (): Promise<BudgetComparison[]> => {
+    queryKey: ["budget-chart-data"],
+    queryFn: async (): Promise<ChartMonthData[]> => {
       const now = new Date();
-      const sixMonthsAgo = subMonths(now, 5);
+      // Show 6 past months + 6 future months
+      const rangeStart = subMonths(startOfMonth(now), 5);
+      const rangeEnd = addMonths(startOfMonth(now), 6);
 
-      const { data: transactions, error } = await supabase
+      // Fetch bank transactions for actuals
+      const { data: transactions } = await supabase
         .from("bank_transactions")
-        .select("*")
-        .gte("date", format(startOfMonth(sixMonthsAgo), "yyyy-MM-dd"))
-        .lte("date", format(now, "yyyy-MM-dd"));
+        .select("amount, date")
+        .gte("date", format(rangeStart, "yyyy-MM-dd"))
+        .lte("date", format(rangeEnd, "yyyy-MM-dd"));
 
-      if (error) throw error;
+      // Fetch invoices with due_date for expected (previsionale)
+      const { data: invoices } = await supabase
+        .from("invoices")
+        .select("amount, total_amount, invoice_type, due_date, payment_status")
+        .not("due_date", "is", null)
+        .gte("due_date", format(rangeStart, "yyyy-MM-dd"))
+        .lte("due_date", format(rangeEnd, "yyyy-MM-dd"));
 
-      const { data: budgets } = await supabase
-        .from("budgets")
-        .select("*")
-        .eq("is_active", true);
-
-      if (!budgets || budgets.length === 0) {
-        return [];
-      }
-
-      // Build monthly cashflow from transactions
-      const monthlyData: Record<string, { income: number; expenses: number }> = {};
-      transactions?.forEach(tx => {
-        const month = format(new Date(tx.date), "yyyy-MM");
-        if (!monthlyData[month]) monthlyData[month] = { income: 0, expenses: 0 };
-        const amount = Number(tx.amount);
-        if (amount > 0) monthlyData[month].income += amount;
-        else monthlyData[month].expenses += Math.abs(amount);
-      });
-
-      // Separate budget totals by type
-      const totalRicavi = budgets
-        .filter(b => (b as any).budget_type === "income" || Number(b.amount) > 0)
-        .reduce((s, b) => s + Math.abs(Number(b.amount)), 0);
-
-      const totalCosti = budgets
-        .filter(b => (b as any).budget_type === "expense" || Number(b.amount) < 0)
-        .reduce((s, b) => s + Math.abs(Number(b.amount)), 0);
-
-      const cashflowNetto = totalRicavi - totalCosti;
-
-      // Build result for last 6 months
-      const months = Array.from({ length: 6 }, (_, i) => {
+      // Build 12 months
+      const months = Array.from({ length: 12 }, (_, i) => {
         const date = subMonths(now, 5 - i);
         return format(startOfMonth(date), "yyyy-MM");
       });
 
-      return months.map((month) => {
-        const data = monthlyData[month] || { income: 0, expenses: 0 };
-        const consuntivo = data.income - data.expenses;
+      const monthlyActuals: Record<string, { income: number; expenses: number }> = {};
+      transactions?.forEach(tx => {
+        const month = format(new Date(tx.date), "yyyy-MM");
+        if (!monthlyActuals[month]) monthlyActuals[month] = { income: 0, expenses: 0 };
+        const amount = Number(tx.amount);
+        if (amount > 0) monthlyActuals[month].income += amount;
+        else monthlyActuals[month].expenses += Math.abs(amount);
+      });
+
+      const monthlyExpected: Record<string, { income: number; expenses: number }> = {};
+      invoices?.forEach(inv => {
+        if (!inv.due_date) return;
+        const month = format(new Date(inv.due_date), "yyyy-MM");
+        if (!monthlyExpected[month]) monthlyExpected[month] = { income: 0, expenses: 0 };
+        const amount = Number(inv.total_amount || inv.amount);
+        // emessa = issued invoice = expected revenue; ricevuta = received = expected expense
+        if (inv.invoice_type === "emessa") {
+          // Only count pending/unpaid as "expected"
+          if (inv.payment_status !== "paid") {
+            monthlyExpected[month].income += amount;
+          }
+        } else {
+          if (inv.payment_status !== "paid") {
+            monthlyExpected[month].expenses += amount;
+          }
+        }
+      });
+
+      return months.map((monthKey) => {
+        const actuals = monthlyActuals[monthKey] || { income: 0, expenses: 0 };
+        const expected = monthlyExpected[monthKey] || { income: 0, expenses: 0 };
         return {
-          mese: format(new Date(month + "-01"), "MMM", { locale: it }),
-          consuntivo,
-          previsionale: cashflowNetto,
-          previsionaleRicavi: totalRicavi,
-          previsionaleCosti: totalCosti,
-          scostamento: consuntivo - cashflowNetto,
+          mese: format(new Date(monthKey + "-01"), "MMM yy", { locale: it }),
+          monthKey,
+          ricaviEffettivi: actuals.income,
+          costiEffettivi: actuals.expenses,
+          ricaviPrevisti: expected.income,
+          costiPrevisti: expected.expenses,
         };
       });
     },
@@ -122,62 +129,56 @@ export function useBudgetVarianceSummary() {
   return useQuery({
     queryKey: ["budget-variance-summary"],
     queryFn: async () => {
-      const now = new Date();
-      const sixMonthsAgo = subMonths(now, 5);
-
-      const { data: transactions, error } = await supabase
-        .from("bank_transactions")
-        .select("amount, date")
-        .gte("date", format(startOfMonth(sixMonthsAgo), "yyyy-MM-dd"));
-
-      if (error) throw error;
-
       const { data: budgets } = await supabase
         .from("budgets")
-        .select("amount, budget_type")
+        .select("amount, budget_type, name")
         .eq("is_active", true);
 
-      if (!budgets || budgets.length === 0) {
-        return {
-          positiveVariance: 0,
-          negativeVariance: 0,
-          netVariance: 0,
-          positiveMonths: 0,
-          negativeMonths: 0,
-          variancePercent: 0,
-          totalRicaviPrevisti: 0,
-          totalCostiPrevisti: 0,
-          cashflowNettoPrevisto: 0,
-        };
-      }
+      // Fetch invoices with due dates for expected totals
+      const { data: invoices } = await supabase
+        .from("invoices")
+        .select("amount, total_amount, invoice_type, due_date, payment_status")
+        .not("due_date", "is", null);
 
-      const totalRicaviPrevisti = budgets
-        .filter(b => (b as any).budget_type === "income" || Number(b.amount) > 0)
-        .reduce((s, b) => s + Math.abs(Number(b.amount)), 0);
+      const totalRicaviPrevistiBudget = budgets
+        ?.filter(b => (b as any).budget_type === "income")
+        .reduce((s, b) => s + Math.abs(Number(b.amount)), 0) || 0;
 
-      const totalCostiPrevisti = budgets
-        .filter(b => (b as any).budget_type === "expense" || Number(b.amount) < 0)
-        .reduce((s, b) => s + Math.abs(Number(b.amount)), 0);
+      const totalCostiPrevistiBudget = budgets
+        ?.filter(b => (b as any).budget_type === "expense")
+        .reduce((s, b) => s + Math.abs(Number(b.amount)), 0) || 0;
 
+      // Expected from pending invoices
+      const pendingInvoices = invoices?.filter(i => i.payment_status !== "paid") || [];
+      const ricaviDaFatture = pendingInvoices
+        .filter(i => i.invoice_type === "emessa")
+        .reduce((s, i) => s + Number(i.total_amount || i.amount), 0);
+      const costiDaFatture = pendingInvoices
+        .filter(i => i.invoice_type === "ricevuta")
+        .reduce((s, i) => s + Number(i.total_amount || i.amount), 0);
+
+      const totalRicaviPrevisti = totalRicaviPrevistiBudget + ricaviDaFatture;
+      const totalCostiPrevisti = totalCostiPrevistiBudget + costiDaFatture;
       const cashflowNettoPrevisto = totalRicaviPrevisti - totalCostiPrevisti;
 
-      const totalActual = transactions?.reduce((sum, tx) => sum + Number(tx.amount), 0) || 0;
-      const netVariance = totalActual - cashflowNettoPrevisto;
-      const variancePercent = cashflowNettoPrevisto !== 0 ? (netVariance / cashflowNettoPrevisto) * 100 : 0;
-
       return {
-        positiveVariance: netVariance > 0 ? netVariance : 0,
-        negativeVariance: netVariance < 0 ? Math.abs(netVariance) : 0,
-        netVariance,
-        positiveMonths: 0,
-        negativeMonths: 0,
-        variancePercent,
         totalRicaviPrevisti,
         totalCostiPrevisti,
         cashflowNettoPrevisto,
+        ricaviDaBudget: totalRicaviPrevistiBudget,
+        costiDaBudget: totalCostiPrevistiBudget,
+        ricaviDaFatture,
+        costiDaFatture,
+        budgetCount: budgets?.length || 0,
+        pendingInvoiceCount: pendingInvoices.length,
       };
     },
   });
+}
+
+// Keep old hook name for compatibility
+export function useBudgetComparison() {
+  return useBudgetChartData();
 }
 
 export function useUpdateBudget() {
@@ -206,7 +207,7 @@ export function useUpdateBudget() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["budgets"] });
-      queryClient.invalidateQueries({ queryKey: ["budget-comparison"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-chart-data"] });
       queryClient.invalidateQueries({ queryKey: ["budget-variance-summary"] });
     },
   });
@@ -234,7 +235,6 @@ export function useCreateBudget() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
-      // Store income as positive, expense as negative
       const storedAmount = budgetType === "expense" ? -Math.abs(amount) : Math.abs(amount);
 
       const { error } = await supabase.from("budgets").insert({
@@ -252,7 +252,7 @@ export function useCreateBudget() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["budgets"] });
-      queryClient.invalidateQueries({ queryKey: ["budget-comparison"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-chart-data"] });
       queryClient.invalidateQueries({ queryKey: ["budget-variance-summary"] });
     },
   });
