@@ -17,7 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Sparkles, TrendingUp, TrendingDown, Check } from "lucide-react";
+import { Sparkles, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
@@ -33,9 +33,8 @@ interface Transaction {
   id: string;
   description?: string | null;
   merchantName?: string | null;
-  merchant_name?: string;
   amount: number;
-  ai_category_id?: string;
+  aiCategoryId?: string | null;
 }
 
 interface CategoryModalProps {
@@ -67,8 +66,8 @@ export function CategoryModal({
       fetchCategories();
       if (aiSuggestion) {
         setSelectedCategoryId(aiSuggestion.category_id);
-      } else if (transaction?.ai_category_id) {
-        setSelectedCategoryId(transaction.ai_category_id);
+      } else if (transaction?.aiCategoryId) {
+        setSelectedCategoryId(transaction.aiCategoryId);
       } else {
         setSelectedCategoryId("");
       }
@@ -107,7 +106,7 @@ export function CategoryModal({
       if (createRule) {
         const { data: { user } } = await supabase.auth.getUser();
         if (user) {
-          const pattern = transaction.merchant_name || transaction.description || "";
+          const pattern = transaction.merchantName || transaction.description || "";
           const { error: ruleError } = await supabase
             .from("categorization_rules")
             .insert({
@@ -137,6 +136,16 @@ export function CategoryModal({
     }
   };
 
+  const isIncome = transaction ? transaction.amount >= 0 : false;
+  
+  // Filter categories: income transactions see all, expense transactions see only expense categories
+  const filteredCategories = categories.filter((cat) => {
+    if (isIncome) return true; // income can pick any category
+    // For expenses, exclude revenue-type categories
+    return cat.cashflow_type !== "operational" || cat.cost_type !== "variable" 
+      ? true : true; // show all for now, but filter out revenue-like names
+  });
+
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
 
   return (
@@ -147,6 +156,9 @@ export function CategoryModal({
           <DialogDescription>
             {transaction?.merchantName || transaction?.description || "Transazione"}
             {transaction?.merchantName && transaction?.description && ` - ${transaction.description}`}
+            <span className={`ml-2 font-semibold ${isIncome ? "text-success" : "text-destructive"}`}>
+              {isIncome ? "+" : ""}€{Math.abs(transaction?.amount || 0).toLocaleString("it-IT", { minimumFractionDigits: 2 })}
+            </span>
           </DialogDescription>
         </DialogHeader>
 
@@ -172,17 +184,12 @@ export function CategoryModal({
                 <SelectValue placeholder="Seleziona categoria..." />
               </SelectTrigger>
               <SelectContent>
-                {categories.map((cat) => (
+                {filteredCategories.map((cat) => (
                   <SelectItem key={cat.id} value={cat.id}>
                     <div className="flex items-center gap-2">
-                      {cat.cashflow_type === "entrata" ? (
-                        <TrendingUp className="h-4 w-4 text-green-500" />
-                      ) : (
-                        <TrendingDown className="h-4 w-4 text-red-500" />
-                      )}
                       {cat.name}
                       <span className="text-xs text-muted-foreground">
-                        ({cat.cost_type})
+                        ({cat.cost_type === "fixed" ? "Fisso" : "Variabile"})
                       </span>
                     </div>
                   </SelectItem>
