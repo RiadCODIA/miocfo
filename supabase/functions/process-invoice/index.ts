@@ -13,7 +13,7 @@ interface ExtractedInvoice {
   sender_name: string;
   recipient_name: string;
   invoice_direction: "emessa" | "ricevuta";
-  subject: string;
+  category_name: string;
   taxable_amount: number;
   vat_rate: number;
   vat_amount: number;
@@ -22,42 +22,50 @@ interface ExtractedInvoice {
   raw_data?: Record<string, unknown>;
 }
 
-// Subject-to-category mapping
-const SUBJECT_CATEGORY_MAP: Record<string, string> = {
-  'consulting': 'Servizi professionali',
-  'services': 'Servizi professionali',
-  'fees': 'Servizi professionali',
-  'goods': 'Forniture',
-  'transport': 'Viaggi e trasferte',
-  'insurance': 'Assicurazioni',
-  'utilities': 'Affitto e utenze',
-  'rent': 'Affitto e utenze',
-  'maintenance': 'Tecnologia e software',
-  'marketing': 'Marketing',
-  'other': 'Altro',
-};
+interface DBCategory {
+  id: string;
+  name: string;
+}
 
-// Auto-assign category_id based on subject
-async function resolveCategoryId(
-  supabaseAdmin: ReturnType<typeof createClient>,
-  subject: string,
+// Fetch all active cost categories from the database
+async function fetchCategories(supabaseAdmin: ReturnType<typeof createClient>): Promise<DBCategory[]> {
+  const { data, error } = await supabaseAdmin
+    .from('cost_categories')
+    .select('id, name')
+    .eq('is_active', true)
+    .order('sort_order');
+  
+  if (error) {
+    console.error('Error fetching categories:', error);
+    return [];
+  }
+  return data || [];
+}
+
+// Resolve category_id from AI-suggested category name
+function resolveCategoryId(
+  categories: DBCategory[],
+  categoryName: string,
   invoiceDirection: string
-): Promise<string | null> {
-  // Revenue invoices (emessa) don't need cost category assignment
+): string | null {
   if (invoiceDirection === 'emessa') return null;
-
-  const categoryName = SUBJECT_CATEGORY_MAP[subject?.toLowerCase()] || SUBJECT_CATEGORY_MAP['other'];
   if (!categoryName) return null;
 
-  const { data } = await supabaseAdmin
-    .from('cost_categories')
-    .select('id')
-    .eq('name', categoryName)
-    .eq('is_active', true)
-    .limit(1)
-    .single();
+  const normalizedName = categoryName.trim().toLowerCase();
+  
+  // Exact match first
+  const exact = categories.find(c => c.name.toLowerCase() === normalizedName);
+  if (exact) return exact.id;
 
-  return data?.id || null;
+  // Partial/contains match
+  const partial = categories.find(c => 
+    c.name.toLowerCase().includes(normalizedName) || normalizedName.includes(c.name.toLowerCase())
+  );
+  if (partial) return partial.id;
+
+  // Fallback to "Altro" if available
+  const altro = categories.find(c => c.name.toLowerCase() === 'altro');
+  return altro?.id || null;
 }
 
 // Parse CSV content into invoice records
@@ -108,7 +116,7 @@ function parseCSV(content: string): ExtractedInvoice[] {
         sender_name: isEmessa ? '' : (values[colMap.supplier] || 'Fornitore Sconosciuto'),
         recipient_name: isEmessa ? (values[colMap.client] || '') : '',
         invoice_direction: isEmessa ? 'emessa' : 'ricevuta',
-        subject: '',
+        category_name: '',
         taxable_amount: taxableAmount,
         vat_rate: taxableAmount > 0 ? Math.round((vatAmount / taxableAmount) * 100) : 0,
         vat_amount: vatAmount,
@@ -166,7 +174,7 @@ function applyVATFallback(invoice: ExtractedInvoice): ExtractedInvoice {
 }
 
 // Extract invoice data using Lovable AI Gateway (Google Gemini)
-async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, userCompanyName?: string): Promise<ExtractedInvoice> {
+async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, userCompanyName?: string, categoryNames?: string[]): Promise<ExtractedInvoice> {
   const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
   
   if (!lovableApiKey) {
@@ -177,7 +185,7 @@ async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, user
       sender_name: 'Fornitore Sconosciuto',
       recipient_name: '',
       invoice_direction: 'ricevuta',
-      subject: '',
+      category_name: '',
       taxable_amount: 0,
       vat_rate: 0,
       vat_amount: 0,
@@ -201,6 +209,12 @@ async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, user
       ? `\nL'azienda dell'utente si chiama: "${userCompanyName}". Se questa azienda appare come MITTENTE/EMITTENTE della fattura, allora la fattura è "emessa". Se appare come DESTINATARIO/CLIENTE, allora è "ricevuta".`
       : '';
 
+    const categoryList = categoryNames && categoryNames.length > 0
+      ? categoryNames.join(', ')
+      : 'Affitto e utenze, Marketing, Forniture, Servizi professionali, Tecnologia e software, Viaggi e trasferte, Assicurazioni, Imposte e tasse, Altro';
+
+    const categoryInstruction = `"category_name": "Scegli la categoria di costo PIÙ ADATTA tra queste opzioni: [${categoryList}]. Analizza la descrizione delle righe, l'oggetto e il tipo di servizio/prodotto nella fattura per determinare la categoria corretta. Se nessuna categoria corrisponde bene, usa 'Altro'. Per fatture emesse (invoice_direction='emessa') lascia stringa vuota."`;
+
     const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -222,7 +236,7 @@ async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, user
   "sender_name": "ragione sociale completa di chi EMETTE la fattura (mittente, in alto nel documento)",
   "recipient_name": "ragione sociale completa di chi RICEVE la fattura (destinatario, spesso dopo 'Spett.le', 'Destinatario', 'Cliente')",
   "invoice_direction": "emessa" oppure "ricevuta" (vedi istruzioni sotto),
-  "subject": "categoria merceologica della fattura: goods, services, consulting, transport, maintenance, insurance, fees, utilities, rent, marketing, other",
+  ${categoryInstruction},
   "taxable_amount": importo IMPONIBILE (base imponibile PRIMA dell'IVA, solo numero decimale),
   "vat_rate": aliquota IVA applicata (es. 22, 10, 4, 0 per esente),
   "vat_amount": importo IVA in euro (solo numero decimale),
@@ -246,7 +260,7 @@ ISTRUZIONI CRITICHE PER UN CONTABILE ESPERTO:
    - Se trovi solo il totale SENZA aliquota, ASSUMI IVA al 22%: taxable_amount = total / 1.22, vat_amount = total - taxable_amount.
    - NON restituire MAI vat_amount = 0 se c'è un'aliquota IVA > 0 nel documento.
 5. ALIQUOTA IVA: Identifica la percentuale IVA (4%, 10%, 22%, esente, ecc.). Se ci sono più aliquote, usa quella predominante.
-6. OGGETTO: Determina la categoria della fattura dal contenuto (descrizione righe, oggetto).
+6. CATEGORIA: Analizza le descrizioni delle righe della fattura (servizi, prodotti, consulenze, affitti, ecc.) e scegli la categoria più appropriata dalla lista fornita.
 
 Rispondi SOLO con il JSON valido, nessun altro testo o spiegazione.`
             },
@@ -314,7 +328,7 @@ Rispondi SOLO con il JSON valido, nessun altro testo o spiegazione.`
       sender_name: extracted.sender_name || 'Sconosciuto',
       recipient_name: extracted.recipient_name || '',
       invoice_direction: direction,
-      subject: extracted.subject || 'other',
+      category_name: extracted.category_name || '',
       taxable_amount: taxableAmount,
       vat_rate: vatRate,
       vat_amount: vatAmount,
@@ -338,7 +352,7 @@ Rispondi SOLO con il JSON valido, nessun altro testo o spiegazione.`
       sender_name: 'Fornitore Sconosciuto',
       recipient_name: '',
       invoice_direction: 'ricevuta',
-      subject: 'other',
+      category_name: '',
       taxable_amount: 0,
       vat_rate: 0,
       vat_amount: 0,
@@ -438,11 +452,13 @@ serve(async (req) => {
         fileData = new Uint8Array(await downloadData.arrayBuffer());
         
         console.log(`Reprocessing file: ${fileName}`);
-        const extracted = await extractInvoiceWithAI(fileData, fileName, userCompanyName);
         
-        // Auto-assign category
-        const categoryId = await resolveCategoryId(supabaseAdmin, extracted.subject, extracted.invoice_direction);
-        console.log(`Auto-category for reprocess: subject=${extracted.subject}, categoryId=${categoryId}`);
+        // Fetch categories and extract with AI in one pass
+        const categories = await fetchCategories(supabaseAdmin);
+        const categoryNames = categories.map(c => c.name);
+        const extracted = await extractInvoiceWithAI(fileData, fileName, userCompanyName, categoryNames);
+        const categoryId = resolveCategoryId(categories, extracted.category_name, extracted.invoice_direction);
+        console.log(`Auto-category for reprocess: category_name=${extracted.category_name}, categoryId=${categoryId}`);
 
         // Update the existing invoice record with full data
         const { error: updateError } = await supabaseAdmin
@@ -461,7 +477,7 @@ serve(async (req) => {
               ...(extracted.raw_data as Record<string, unknown> ?? {}),
               sender_name: extracted.sender_name,
               recipient_name: extracted.recipient_name,
-              subject: extracted.subject,
+              category_name: extracted.category_name,
               vat_rate: extracted.vat_rate,
             },
             updated_at: new Date().toISOString()
@@ -547,7 +563,7 @@ serve(async (req) => {
         sender_name: fileName.replace('.zip', '').replace(/[_-]/g, ' '),
         recipient_name: '',
         invoice_direction: 'ricevuta',
-        subject: 'other',
+        category_name: '',
         taxable_amount: 0,
         vat_rate: 0,
         vat_amount: 0,
@@ -558,23 +574,30 @@ serve(async (req) => {
 
     } else if (fileType === 'application/pdf' || fileName.endsWith('.pdf')) {
       console.log('Using AI extraction for PDF');
-      const invoice = await extractInvoiceWithAI(fileData, fileName, userCompanyName);
+      const categories = await fetchCategories(supabaseAdmin);
+      const catNames = categories.map(c => c.name);
+      const invoice = await extractInvoiceWithAI(fileData, fileName, userCompanyName, catNames);
       extractedInvoices = [invoice];
 
     } else if (fileType?.startsWith('image/') || /\.(jpg|jpeg|png|gif)$/i.test(fileName)) {
       console.log('Using AI extraction for image');
-      const invoice = await extractInvoiceWithAI(fileData, fileName, userCompanyName);
+      const categories = await fetchCategories(supabaseAdmin);
+      const catNames = categories.map(c => c.name);
+      const invoice = await extractInvoiceWithAI(fileData, fileName, userCompanyName, catNames);
       extractedInvoices = [invoice];
 
     } else {
       throw new Error(`Tipo file non supportato: ${fileType}`);
     }
 
+    // Fetch categories once for insert loop
+    const allCategories = await fetchCategories(supabaseAdmin);
+
     // Insert invoices into database with full extracted data + auto-categorization
     for (const invoice of extractedInvoices) {
-      // Auto-assign category based on subject
-      const categoryId = await resolveCategoryId(supabaseAdmin, invoice.subject, invoice.invoice_direction);
-      console.log(`Auto-category: subject=${invoice.subject}, direction=${invoice.invoice_direction}, categoryId=${categoryId}`);
+      // Auto-assign category from AI-suggested name
+      const categoryId = resolveCategoryId(allCategories, invoice.category_name, invoice.invoice_direction);
+      console.log(`Auto-category: category_name=${invoice.category_name}, direction=${invoice.invoice_direction}, categoryId=${categoryId}`);
 
       const { error: insertError } = await supabaseAdmin
         .from('invoices')
@@ -595,7 +618,7 @@ serve(async (req) => {
             ...(invoice.raw_data as Record<string, unknown> ?? {}),
             sender_name: invoice.sender_name,
             recipient_name: invoice.recipient_name,
-            subject: invoice.subject,
+            category_name: invoice.category_name,
             vat_rate: invoice.vat_rate,
           },
           payment_status: 'pending'

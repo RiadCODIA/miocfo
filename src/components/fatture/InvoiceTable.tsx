@@ -221,9 +221,9 @@ export function InvoiceTable({
                       )}
                     </TableCell>
 
-                    {/* Inline category dropdown */}
+                    {/* Inline category dropdown — only for ricevuta/autofattura */}
                     <TableCell>
-                      {onCategoryChange && categories.length > 0 ? (
+                      {onCategoryChange && categories.length > 0 && normalizedType !== 'emessa' ? (
                         <Select
                           value={invoice.categoryId || "none"}
                           onValueChange={(val) =>
