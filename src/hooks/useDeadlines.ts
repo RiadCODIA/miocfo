@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, addDays, startOfMonth, endOfMonth, subMonths, addMonths } from "date-fns";
+import { useDateRange } from "@/contexts/DateRangeContext";
 
 export interface Deadline {
   id: string;
@@ -176,16 +177,21 @@ export function useDeadlines(filters?: DeadlineFilters) {
 }
 
 export function useDeadlinesSummary() {
+  const { dateRange } = useDateRange();
+  const from = format(dateRange.from, "yyyy-MM-dd");
+  const to = format(dateRange.to, "yyyy-MM-dd");
+
   return useQuery({
-    queryKey: ["deadlines-summary"],
+    queryKey: ["deadlines-summary", from, to],
     queryFn: async () => {
-      // Fetch manual deadlines
+      // Fetch manual deadlines within date range
       const { data: deadlinesData, error: deadlinesError } = await supabase
         .from("deadlines")
         .select("deadline_type, amount, status, invoice_id")
-        .in("status", ["pending", "overdue"]);
+        .in("status", ["pending", "overdue"])
+        .gte("due_date", from)
+        .lte("due_date", to);
       if (deadlinesError) throw deadlinesError;
-
       const linkedInvoiceIds = (deadlinesData || [])
         .filter((d) => d.invoice_id)
         .map((d) => d.invoice_id as string);
@@ -258,8 +264,12 @@ export interface AccrualMonth {
 }
 
 export function useAccrualForecast() {
+  const { dateRange } = useDateRange();
+  const from = format(dateRange.from, "yyyy-MM-dd");
+  const to = format(dateRange.to, "yyyy-MM-dd");
+
   return useQuery({
-    queryKey: ["accrual-forecast"],
+    queryKey: ["accrual-forecast", from, to],
     queryFn: async (): Promise<AccrualMonth[]> => {
       const { data: invoices, error } = await supabase
         .from("invoices")
@@ -267,16 +277,16 @@ export function useAccrualForecast() {
         .order("invoice_date", { ascending: true });
       if (error) throw error;
 
-      // Build a map: monthKey -> { ricaviPagati, ricaviDaPagare, costiPagati, costiDaPagare }
       const monthMap = new Map<string, AccrualMonth>();
 
-      // Determine range: 6 months back, 6 months forward
-      const now = new Date();
-      for (let i = -6; i <= 6; i++) {
-        const d = i < 0 ? subMonths(now, -i) : addMonths(now, i);
-        const key = format(d, "yyyy-MM");
-        const label = format(d, "MMM yyyy");
+      // Build months from dateRange
+      let cursor = startOfMonth(dateRange.from);
+      const end = startOfMonth(dateRange.to);
+      while (cursor <= end) {
+        const key = format(cursor, "yyyy-MM");
+        const label = format(cursor, "MMM yyyy");
         monthMap.set(key, { month: label, ricaviPagati: 0, ricaviDaPagare: 0, costiPagati: 0, costiDaPagare: 0 });
+        cursor = addMonths(cursor, 1);
       }
 
       (invoices || []).forEach((inv) => {

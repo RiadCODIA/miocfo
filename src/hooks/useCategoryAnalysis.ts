@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { format } from "date-fns";
+import { useDateRange } from "@/contexts/DateRangeContext";
 
 export interface CategoryData {
   name: string;
@@ -19,14 +21,20 @@ const COLORS = [
 ];
 
 export function useCategoryAnalysis() {
+  const { dateRange } = useDateRange();
+  const from = format(dateRange.from, "yyyy-MM-dd");
+  const to = format(dateRange.to, "yyyy-MM-dd");
+
   return useQuery({
-    queryKey: ["category-analysis"],
+    queryKey: ["category-analysis", from, to],
     queryFn: async (): Promise<CategoryData[]> => {
       const { data, error } = await supabase
         .from("bank_transactions")
         .select("amount, ai_category_id, cost_categories(name)")
         .lt("amount", 0)
-        .not("ai_category_id", "is", null);
+        .not("ai_category_id", "is", null)
+        .gte("date", from)
+        .lte("date", to);
 
       if (error) throw error;
       if (!data?.length) return [];

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { startOfMonth, endOfMonth, subMonths, format } from "date-fns";
+import { format, subDays, differenceInDays } from "date-fns";
+import { useDateRange } from "@/contexts/DateRangeContext";
 
 interface KPIData {
   id: string;
@@ -77,25 +78,36 @@ export function useUpdateKPITargets() {
 
 export function useKPIData() {
   const { data: targets } = useKPITargets();
+  const { dateRange } = useDateRange();
+  const from = format(dateRange.from, "yyyy-MM-dd");
+  const to = format(dateRange.to, "yyyy-MM-dd");
+
+  // Previous period of same length
+  const periodDays = differenceInDays(dateRange.to, dateRange.from);
+  const prevFrom = format(subDays(dateRange.from, periodDays + 1), "yyyy-MM-dd");
+  const prevTo = format(subDays(dateRange.from, 1), "yyyy-MM-dd");
 
   return useQuery({
-    queryKey: ["kpi-data", targets],
+    queryKey: ["kpi-data", targets, from, to],
     enabled: !!targets,
     queryFn: async () => {
       const t = targets || DEFAULT_TARGETS;
       const now = new Date();
-      const currentMonthStart = startOfMonth(now);
-      const currentMonthEnd = endOfMonth(now);
-      const lastMonthStart = startOfMonth(subMonths(now, 1));
-      const lastMonthEnd = endOfMonth(subMonths(now, 1));
-      const sixMonthsAgo = subMonths(now, 6);
 
-      // Get transactions for calculations
+      // Get transactions for current period
       const { data: transactions } = await supabase
         .from("bank_transactions")
         .select("*")
-        .gte("date", format(sixMonthsAgo, "yyyy-MM-dd"))
+        .gte("date", from)
+        .lte("date", to)
         .order("date", { ascending: false });
+
+      // Get transactions for previous period
+      const { data: prevTransactions } = await supabase
+        .from("bank_transactions")
+        .select("*")
+        .gte("date", prevFrom)
+        .lte("date", prevTo);
 
       // Get bank accounts for balance
       const { data: accounts } = await supabase
@@ -107,7 +119,14 @@ export function useKPIData() {
       const { data: invoices } = await supabase
         .from("invoices")
         .select("*")
-        .gte("invoice_date", format(sixMonthsAgo, "yyyy-MM-dd"));
+        .gte("invoice_date", from)
+        .lte("invoice_date", to);
+
+      const { data: prevInvoices } = await supabase
+        .from("invoices")
+        .select("*")
+        .gte("invoice_date", prevFrom)
+        .lte("invoice_date", prevTo);
 
       // Get deadlines for receivables
       const { data: deadlines } = await supabase
@@ -118,50 +137,30 @@ export function useKPIData() {
 
       const currentBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0) || 0;
 
-      // Current month transactions
-      const currentMonthTx = transactions?.filter(tx => {
-        const txDate = new Date(tx.date);
-        return txDate >= currentMonthStart && txDate <= currentMonthEnd;
-      }) || [];
+      // Current period
+      const currentIncome = (transactions || []).filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
+      const currentExpenses = Math.abs((transactions || []).filter(tx => tx.amount < 0).reduce((sum, tx) => sum + tx.amount, 0));
+      const currentProfit = currentIncome - currentExpenses;
 
-      const currentMonthIncome = currentMonthTx.filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
-      const currentMonthExpenses = Math.abs(currentMonthTx.filter(tx => tx.amount < 0).reduce((sum, tx) => sum + tx.amount, 0));
-      const currentMonthProfit = currentMonthIncome - currentMonthExpenses;
-
-      // Last month transactions
-      const lastMonthTx = transactions?.filter(tx => {
-        const txDate = new Date(tx.date);
-        return txDate >= lastMonthStart && txDate <= lastMonthEnd;
-      }) || [];
-
-      const lastMonthIncome = lastMonthTx.filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
-      const lastMonthExpenses = Math.abs(lastMonthTx.filter(tx => tx.amount < 0).reduce((sum, tx) => sum + tx.amount, 0));
-      const lastMonthProfit = lastMonthIncome - lastMonthExpenses;
+      // Previous period
+      const prevIncome = (prevTransactions || []).filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
+      const prevExpensesVal = Math.abs((prevTransactions || []).filter(tx => tx.amount < 0).reduce((sum, tx) => sum + tx.amount, 0));
+      const prevProfit = prevIncome - prevExpensesVal;
 
       // ---- ROS (Return on Sales) from invoices ----
-      const currentMonthInvoices = invoices?.filter(inv => {
-        const d = new Date(inv.invoice_date || "");
-        return d >= currentMonthStart && d <= currentMonthEnd;
-      }) || [];
-
-      const lastMonthInvoices = invoices?.filter(inv => {
-        const d = new Date(inv.invoice_date || "");
-        return d >= lastMonthStart && d <= lastMonthEnd;
-      }) || [];
-
-      const ricaviCurrent = currentMonthInvoices
+      const ricaviCurrent = (invoices || [])
         .filter(inv => inv.invoice_type === "emessa" || inv.invoice_type === "income")
         .reduce((s, inv) => s + Number(inv.amount), 0);
-      const costiCurrent = currentMonthInvoices
+      const costiCurrent = (invoices || [])
         .filter(inv => inv.invoice_type === "ricevuta" || inv.invoice_type === "expense")
         .reduce((s, inv) => s + Number(inv.amount), 0);
       const ebitdaCurrent = ricaviCurrent - costiCurrent;
       const ros = ricaviCurrent > 0 ? (ebitdaCurrent / ricaviCurrent) * 100 : 0;
 
-      const ricaviLast = lastMonthInvoices
+      const ricaviLast = (prevInvoices || [])
         .filter(inv => inv.invoice_type === "emessa" || inv.invoice_type === "income")
         .reduce((s, inv) => s + Number(inv.amount), 0);
-      const costiLast = lastMonthInvoices
+      const costiLast = (prevInvoices || [])
         .filter(inv => inv.invoice_type === "ricevuta" || inv.invoice_type === "expense")
         .reduce((s, inv) => s + Number(inv.amount), 0);
       const ebitdaLast = ricaviLast - costiLast;
@@ -171,29 +170,29 @@ export function useKPIData() {
 
       // DSO
       const pendingReceivables = deadlines?.reduce((sum, d) => sum + Number(d.amount), 0) || 0;
-      const avgDailyRevenue = currentMonthIncome / 30 || 1;
+      const avgDailyRevenue = currentIncome / (periodDays || 1) || 1;
       const dso = Math.round(pendingReceivables / avgDailyRevenue);
       const dsoTarget = t.dso;
 
       // Current Ratio
-      const currentLiabilities = currentMonthExpenses || 1;
+      const currentLiabilities = currentExpenses || 1;
       const currentRatio = currentBalance / currentLiabilities;
       const currentRatioTarget = t.current_ratio;
 
       // Operating Margin
-      const operatingMargin = currentMonthIncome > 0 ? ((currentMonthProfit / currentMonthIncome) * 100) : 0;
-      const lastOperatingMargin = lastMonthIncome > 0 ? ((lastMonthProfit / lastMonthIncome) * 100) : 0;
+      const operatingMargin = currentIncome > 0 ? ((currentProfit / currentIncome) * 100) : 0;
+      const lastOperatingMargin = prevIncome > 0 ? ((prevProfit / prevIncome) * 100) : 0;
       const operatingMarginTarget = t.margine_operativo;
       const operatingMarginTrend = operatingMargin - lastOperatingMargin;
 
       // Burn Rate
-      const burnRate = currentMonthExpenses;
-      const lastBurnRate = lastMonthExpenses;
+      const burnRate = currentExpenses;
+      const lastBurnRate = prevExpensesVal;
       const burnRateTarget = t.burn_rate;
       const burnRateTrend = burnRate - lastBurnRate;
 
       // Revenue Growth
-      const revenueGrowth = lastMonthIncome > 0 ? ((currentMonthIncome - lastMonthIncome) / lastMonthIncome * 100) : 0;
+      const revenueGrowth = prevIncome > 0 ? ((currentIncome - prevIncome) / prevIncome * 100) : 0;
       const revenueGrowthTarget = t.revenue_growth;
 
       const kpis: KPIData[] = [
@@ -272,36 +271,15 @@ export function useKPIData() {
       ];
 
       // Generate dynamic reports
-      const reports: ReportData[] = [];
-      reports.push({
-        id: `report-${format(now, "yyyy-MM")}`,
-        nome: `Report Mensile ${format(now, "MMMM yyyy")}`,
-        tipo: "Mensile",
-        dataCreazione: format(currentMonthStart, "dd/MM/yyyy"),
-        stato: "in elaborazione",
-      });
-      reports.push({
-        id: `report-${format(subMonths(now, 1), "yyyy-MM")}`,
-        nome: `Report Mensile ${format(subMonths(now, 1), "MMMM yyyy")}`,
-        tipo: "Mensile",
-        dataCreazione: format(lastMonthStart, "dd/MM/yyyy"),
-        stato: "completato",
-      });
-      reports.push({
-        id: `report-${format(subMonths(now, 2), "yyyy-MM")}`,
-        nome: `Report Mensile ${format(subMonths(now, 2), "MMMM yyyy")}`,
-        tipo: "Mensile",
-        dataCreazione: format(startOfMonth(subMonths(now, 2)), "dd/MM/yyyy"),
-        stato: "completato",
-      });
-      const quarter = Math.floor(now.getMonth() / 3) + 1;
-      reports.push({
-        id: `report-q${quarter}-${now.getFullYear()}`,
-        nome: `Report Trimestrale Q${quarter} ${now.getFullYear()}`,
-        tipo: "Trimestrale",
-        dataCreazione: format(startOfMonth(subMonths(now, now.getMonth() % 3)), "dd/MM/yyyy"),
-        stato: quarter === Math.floor(now.getMonth() / 3) + 1 ? "in elaborazione" : "completato",
-      });
+      const reports: ReportData[] = [
+        {
+          id: `report-${format(now, "yyyy-MM")}`,
+          nome: `Report ${format(dateRange.from, "dd/MM")} - ${format(dateRange.to, "dd/MM/yyyy")}`,
+          tipo: "Periodo",
+          dataCreazione: format(now, "dd/MM/yyyy"),
+          stato: "in elaborazione",
+        },
+      ];
 
       return { kpis, reports, transactionCount: transactions?.length ?? 0 };
     },
