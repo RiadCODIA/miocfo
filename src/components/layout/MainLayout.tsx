@@ -34,7 +34,7 @@ export function MainLayout({ children }: MainLayoutProps) {
         <div className="min-h-screen bg-background">
           <AlertListener />
           <Sidebar />
-          <main className={`min-h-screen transition-all duration-300 ${collapsed ? "pl-16" : "pl-64"}`}>
+          <main className={`min-h-screen transition-all duration-300 pointer-events-auto ${collapsed ? "pl-16" : "pl-64"}`}>
             <div className="p-6 lg:p-8">
               <TopBar />
               <ErrorBoundary key={location.pathname}>
