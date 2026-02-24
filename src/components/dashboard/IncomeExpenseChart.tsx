@@ -25,8 +25,8 @@ export function IncomeExpenseChart() {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 47% 22%)" vertical={false} />
+            <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={4}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 47% 18%)" vertical={false} />
               <XAxis
                 dataKey="mese"
                 stroke="hsl(215 20% 45%)"
@@ -56,19 +56,22 @@ export function IncomeExpenseChart() {
                 formatter={(value: number) => `€${value.toLocaleString("it-IT")}`}
               />
               <Legend
-                wrapperStyle={{ paddingTop: "20px" }}
+                verticalAlign="top"
+                align="right"
+                wrapperStyle={{ paddingBottom: "12px" }}
                 formatter={(value) => (
                   <span className="text-muted-foreground text-sm capitalize">{value}</span>
                 )}
               />
-              <Bar dataKey="incassi" name="Incassi" fill="hsl(142 76% 46%)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="pagamenti" name="Pagamenti" fill="hsl(0 72% 51%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="incassi" name="Incassi" fill="hsl(160 64% 52%)" radius={[3, 3, 0, 0]} barSize={14} />
+              <Bar dataKey="pagamenti" name="Pagamenti" fill="hsl(0 70% 68%)" radius={[3, 3, 0, 0]} barSize={14} />
               <Line
                 type="monotone"
                 dataKey="saldo"
-                stroke="hsl(217 91% 60%)"
+                stroke="hsl(330 70% 60%)"
                 strokeWidth={2}
-                dot={{ r: 4, fill: "hsl(217 91% 60%)" }}
+                strokeDasharray="6 4"
+                dot={{ r: 3, fill: "hsl(330 70% 60%)" }}
                 name="Saldo Netto"
               />
             </ComposedChart>
