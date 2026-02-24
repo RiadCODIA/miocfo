@@ -166,12 +166,6 @@ export default function Transazioni() {
     setCategoryModalOpen(true);
   };
 
-  const getStatoBadge = (pending: boolean) => {
-    if (pending) {
-      return <Badge className="bg-warning/10 text-warning border-warning/20 hover:bg-warning/20">In attesa</Badge>;
-    }
-    return <Badge className="bg-success/10 text-success border-success/20 hover:bg-success/20">Completata</Badge>;
-  };
 
   return (
     <div className="space-y-6">
@@ -383,7 +377,6 @@ export default function Transazioni() {
               <TableHead className="text-muted-foreground text-right">Importo</TableHead>
               <TableHead className="text-muted-foreground">Conto</TableHead>
               <TableHead className="text-muted-foreground">Categoria</TableHead>
-              <TableHead className="text-muted-foreground">Stato</TableHead>
               <TableHead className="text-muted-foreground w-[100px]">Azioni</TableHead>
             </TableRow>
           </TableHeader>
@@ -396,13 +389,12 @@ export default function Transazioni() {
                   <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16" /></TableCell>
-                  <TableCell><Skeleton className="h-6 w-20" /></TableCell>
                   <TableCell><Skeleton className="h-8 w-8" /></TableCell>
                 </TableRow>
               ))
             ) : transactions?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} className="h-40 text-center">
+                <TableCell colSpan={6} className="h-40 text-center">
                   <div className="text-muted-foreground space-y-3">
                     <p className="font-medium">Nessuna transazione importata</p>
                     <p className="text-sm">
@@ -446,9 +438,6 @@ export default function Transazioni() {
                       categoryName={getCategoryName(tx.aiCategoryId)}
                       confirmed={tx.categoryConfirmed}
                     />
-                  </TableCell>
-                  <TableCell>
-                    {getStatoBadge(!tx.categoryConfirmed && !tx.aiCategoryId)}
                   </TableCell>
                   <TableCell>
                     <Button
