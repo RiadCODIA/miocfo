@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.ai-assistant]
 verify_jwt = false
+
+[functions.sync-bank-accounts]
+verify_jwt = false
