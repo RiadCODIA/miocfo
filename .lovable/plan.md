@@ -1,76 +1,64 @@
 
-# Fix: White Screen Freeze After Any Action
 
-## Root Cause Analysis
+# Fix: Invisible Toast Notifications (Post-Previous Fix)
 
-After thorough investigation, I identified **3 interacting bugs** that together cause the screen to freeze white after user actions:
+## Problem
 
-### Bug 1: `useToast` Listener Memory Leak (PRIMARY CAUSE)
-In `src/hooks/use-toast.ts` (line 177), the `useEffect` that registers the toast state listener has `[state]` in its dependency array. This means:
-- Every time a toast fires, `state` changes
-- The effect re-runs, removing and re-adding the listener
-- During the gap between remove/add, dispatched events can be lost
-- This creates a cascade where the Radix Toast Provider never properly cleans up its `pointer-events: none` style on the viewport, blocking all clicks
+When the Radix `<Toaster />` was removed in the previous fix to resolve the white screen freeze, **15 files still use the old Radix toast system** (`useToast`/`toast` from `@/hooks/use-toast`). Since no Radix `<Toaster />` renders anymore, all those notifications are now **invisible** -- including critical ones like login error messages on the Auth page.
 
-### Bug 2: Dual Toast Systems Conflict
-Both `<Toaster />` (Radix) and `<Sonner />` are mounted in `App.tsx`. The codebase uses Sonner (`toast` from `sonner`) for most notifications, but the Radix `<Toaster />` is still rendered. The Radix ToastProvider applies `pointer-events: none` to its viewport container, and if any state desync occurs (due to Bug 1), it can permanently block interaction.
+## Affected Files (13 files to migrate)
 
-### Bug 3: Route Conflict on `/piani`
-In `App.tsx`, there are TWO routes for `/piani`:
-- Line 79: Public `<PianiPricing />` 
-- Lines 147-155: Protected `<Piani />` (Super Admin)
+1. `src/pages/Auth.tsx` -- Login/signup error and success messages
+2. `src/pages/Fatture.tsx` -- Invoice-related notifications
+3. `src/pages/Collegamenti.tsx` -- Integration connection messages
+4. `src/pages/AIAssistant.tsx` -- AI assistant feedback
+5. `src/components/conti-bancari/UploadStatementModal.tsx` -- File upload feedback
+6. `src/components/conti-bancari/ConnectBankModal.tsx` -- Bank connection messages
+7. `src/components/fatture/CassettoFiscaleModal.tsx` -- Fiscal drawer messages
+8. `src/components/fatture/InvoiceUploadZone.tsx` -- Invoice upload feedback
+9. `src/components/scadenzario/DeadlineList.tsx` -- Deadline action feedback
+10. `src/components/scadenzario/DeadlineModal.tsx` -- Deadline create/edit feedback
+11. `src/components/area-economica/ContoEconomicoTab.tsx` -- Economic analysis feedback
+12. `src/hooks/useBankingIntegration.ts` -- Banking integration feedback
+13. `src/hooks/useEnableBanking.ts` -- Enable banking feedback
 
-React Router matches the first one, so the sidebar "Piani" link for super admins loads the public pricing page outside `MainLayout`, causing a layout break (white screen).
+Two files are toast system infrastructure and don't need migration:
+- `src/components/ui/use-toast.ts` (re-export file)
+- `src/components/ui/toaster.tsx` (unused Radix renderer)
 
-## Fix Plan
+## Migration Pattern
 
-### 1. Fix `useToast` listener leak
-**File:** `src/hooks/use-toast.ts`
-- Change the `useEffect` dependency from `[state]` to `[]` (empty array)
-- The listener should only be registered once on mount and cleaned up on unmount
+The Radix toast API uses an object-based call:
+```typescript
+// OLD (Radix) - no longer renders
+const { toast } = useToast();
+toast({ title: "Error", description: "Something failed", variant: "destructive" });
+```
 
-### 2. Remove the unused Radix Toaster
-**File:** `src/App.tsx`
-- Remove `<Toaster />` (Radix) since the app exclusively uses Sonner for notifications
-- Remove the import of `Toaster` from `@/components/ui/toaster`
-- This eliminates the `pointer-events` conflict entirely
+The Sonner API uses a simpler function call:
+```typescript
+// NEW (Sonner) - renders correctly
+import { toast } from "sonner";
+toast.error("Something failed");
+toast.success("Done!");
+toast("Info message", { description: "Details here" });
+```
 
-### 3. Fix the `/piani` route conflict
-**File:** `src/App.tsx`
-- Rename the public pricing route from `/piani` to `/pricing` (or keep as-is and rename the admin one)
-- Update the super admin sidebar link to `/admin-piani`
-- Update `LandingHeader.tsx` and `LandingFooter.tsx` if needed
+## Migration Rules
 
-**File:** `src/components/layout/Sidebar.tsx`
-- Update the super admin "Piani" nav item path accordingly
+For each file:
+1. Replace `import { useToast } from "@/hooks/use-toast"` with `import { toast } from "sonner"`
+2. Remove the `const { toast } = useToast()` line
+3. Convert each toast call:
+   - `variant: "destructive"` becomes `toast.error(title, { description })`
+   - Success messages become `toast.success(title, { description })`
+   - Info/default messages become `toast(title, { description })`
 
-### 4. Safety: Add `pointer-events: auto` guard to MainLayout
-**File:** `src/components/layout/MainLayout.tsx`
-- Add a `pointer-events-auto` class to the main content area as a defensive measure, so even if a portal overlay misbehaves, the main content stays interactive
+## Additional Fix
+
+The `/piani` link in `LandingFooter.tsx` was already verified -- it doesn't contain a `/piani` link, so no change needed there.
 
 ## Technical Details
 
-```text
-useEffect dependency fix:
+No new dependencies needed. Sonner is already installed and the `<Sonner />` component is already rendered in `App.tsx`. This is purely a find-and-replace migration across 13 files, converting from one toast API to another.
 
-Before:  useEffect(() => { ... }, [state]);   // re-runs on every toast
-After:   useEffect(() => { ... }, []);         // runs once on mount
-```
-
-```text
-Route conflict resolution:
-
-Before:  /piani -> PianiPricing (public)     [WINS - first match]
-         /piani -> Piani (protected admin)   [NEVER REACHED]
-
-After:   /pricing -> PianiPricing (public)
-         /piani   -> Piani (protected admin)
-```
-
-## Files to Modify
-1. `src/hooks/use-toast.ts` - Fix listener dependency
-2. `src/App.tsx` - Remove Radix Toaster, fix route conflict
-3. `src/components/layout/Sidebar.tsx` - No change needed (already points to `/piani`)
-4. `src/components/landing/LandingHeader.tsx` - Update pricing link to `/pricing`
-5. `src/components/landing/LandingFooter.tsx` - Update pricing link to `/pricing`
-6. `src/components/layout/MainLayout.tsx` - Add `pointer-events-auto` safety class
