@@ -9,6 +9,10 @@ import { MainLayout } from "@/components/layout/MainLayout";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Landing from "./pages/Landing";
+import ChiSiamo from "./pages/ChiSiamo";
+import PianiPricing from "./pages/PianiPricing";
+import FAQLanding from "./pages/FAQLanding";
+import ContattiPage from "./pages/Contatti";
 import Privacy from "./pages/Privacy";
 import Terms from "./pages/Terms";
 import Cookies from "./pages/Cookies";
@@ -71,6 +75,10 @@ const App = () => (
             {/* Landing page - root */}
             <Route path="/" element={<Landing />} />
             <Route path="/landing" element={<Landing />} />
+            <Route path="/chi-siamo" element={<ChiSiamo />} />
+            <Route path="/piani" element={<PianiPricing />} />
+            <Route path="/faq" element={<FAQLanding />} />
+            <Route path="/contatti" element={<ContattiPage />} />
             
             {/* Auth route - no layout */}
             <Route path="/auth" element={<Auth />} />
