@@ -67,13 +67,13 @@ export function useBudgetChartData() {
         .gte("date", format(rangeStart, "yyyy-MM-dd"))
         .lte("date", format(rangeEnd, "yyyy-MM-dd"));
 
-      // Fetch invoices with due_date for expected (previsionale)
+      // Fetch ALL unpaid invoices with a due_date (no date filter)
+      // Overdue invoices are still expected cash movements
       const { data: invoices } = await supabase
         .from("invoices")
         .select("amount, total_amount, invoice_type, due_date, payment_status")
         .not("due_date", "is", null)
-        .gte("due_date", format(rangeStart, "yyyy-MM-dd"))
-        .lte("due_date", format(rangeEnd, "yyyy-MM-dd"));
+        .neq("payment_status", "paid");
 
       // Build 12 months
       const months = Array.from({ length: 12 }, (_, i) => {
@@ -90,22 +90,21 @@ export function useBudgetChartData() {
         else monthlyActuals[month].expenses += Math.abs(amount);
       });
 
+      const currentMonth = format(startOfMonth(now), "yyyy-MM");
       const monthlyExpected: Record<string, { income: number; expenses: number }> = {};
       invoices?.forEach(inv => {
         if (!inv.due_date) return;
-        const month = format(new Date(inv.due_date), "yyyy-MM");
+        const dueDate = new Date(inv.due_date);
+        // Overdue invoices (due_date < today) go into the current month
+        const month = dueDate < now ? currentMonth : format(dueDate, "yyyy-MM");
+        // Only include months within our chart range
+        if (!months.includes(month)) return;
         if (!monthlyExpected[month]) monthlyExpected[month] = { income: 0, expenses: 0 };
         const amount = Number(inv.total_amount || inv.amount);
-        // emessa = issued invoice = expected revenue; ricevuta = received = expected expense
         if (inv.invoice_type === "emessa") {
-          // Only count pending/unpaid as "expected"
-          if (inv.payment_status !== "paid") {
-            monthlyExpected[month].income += amount;
-          }
+          monthlyExpected[month].income += amount;
         } else {
-          if (inv.payment_status !== "paid") {
-            monthlyExpected[month].expenses += amount;
-          }
+          monthlyExpected[month].expenses += amount;
         }
       });
 
