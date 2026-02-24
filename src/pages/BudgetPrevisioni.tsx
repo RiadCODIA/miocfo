@@ -28,6 +28,27 @@ import { cn } from "@/lib/utils";
 import { useBudgets, useBudgetChartData, useBudgetVarianceSummary, useUpdateBudget } from "@/hooks/useBudgets";
 import { toast } from "sonner";
 
+// Custom bar shape for dashed "expected" candles
+const DashedBar = (props: any) => {
+  const { x, y, width, height, color } = props;
+  if (!height || height === 0) return null;
+  return (
+    <rect
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      fill={color}
+      fillOpacity={0.18}
+      stroke={color}
+      strokeWidth={1.5}
+      strokeDasharray="6 3"
+      rx={2}
+      ry={2}
+    />
+  );
+};
+
 export default function BudgetPrevisioni() {
   const { data: budgets, isLoading: loadingBudgets } = useBudgets();
   const { data: chartData, isLoading: loadingChart } = useBudgetChartData();
@@ -245,7 +266,7 @@ export default function BudgetPrevisioni() {
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }} barGap={2} barSize={14}>
+              <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }} barGap={4} barSize={11}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
                 <XAxis
                   dataKey="mese"
@@ -283,16 +304,11 @@ export default function BudgetPrevisioni() {
                   name="Ricavi Effettivi"
                 />
 
-                {/* Expected income - transparent green with dashed effect */}
+                {/* Expected income - transparent green with dashed border */}
                 <Bar
                   dataKey="ricaviPrevisti"
-                  fill="hsl(142, 71%, 45%)"
-                  radius={[2, 2, 0, 0]}
                   name="Ricavi Previsti (da fatture)"
-                  fillOpacity={0.25}
-                  stroke="hsl(142, 71%, 45%)"
-                  strokeDasharray="4 2"
-                  strokeWidth={1.5}
+                  shape={<DashedBar color="hsl(142, 71%, 45%)" />}
                 />
 
                 {/* Actual expenses - solid red */}
@@ -303,16 +319,11 @@ export default function BudgetPrevisioni() {
                   name="Costi Effettivi"
                 />
 
-                {/* Expected expenses - transparent red with dashed effect */}
+                {/* Expected expenses - transparent red with dashed border */}
                 <Bar
                   dataKey="costiPrevisti"
-                  fill="hsl(0, 84%, 60%)"
-                  radius={[2, 2, 0, 0]}
                   name="Costi Previsti (da fatture)"
-                  fillOpacity={0.25}
-                  stroke="hsl(0, 84%, 60%)"
-                  strokeDasharray="4 2"
-                  strokeWidth={1.5}
+                  shape={<DashedBar color="hsl(0, 84%, 60%)" />}
                 />
               </BarChart>
             </ResponsiveContainer>
