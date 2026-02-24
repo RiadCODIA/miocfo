@@ -2,6 +2,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfMonth, subMonths, addMonths } from "date-fns";
 import { it } from "date-fns/locale";
+import { useDateRange } from "@/contexts/DateRangeContext";
 
 export interface Budget {
   id: string;
@@ -52,34 +53,45 @@ export function useBudgets() {
 }
 
 export function useBudgetChartData() {
+  const { dateRange } = useDateRange();
+  const from = format(dateRange.from, "yyyy-MM-dd");
+  const to = format(dateRange.to, "yyyy-MM-dd");
+
   return useQuery({
-    queryKey: ["budget-chart-data"],
+    queryKey: ["budget-chart-data", from, to],
     queryFn: async (): Promise<ChartMonthData[]> => {
       const now = new Date();
-      // Show 6 past months + 6 future months
-      const rangeStart = subMonths(startOfMonth(now), 5);
-      const rangeEnd = addMonths(startOfMonth(now), 6);
 
-      // Fetch bank transactions for actuals
+      // Build month keys from dateRange
+      const rangeStart = startOfMonth(dateRange.from);
+      const rangeEnd = startOfMonth(dateRange.to);
+      const months: string[] = [];
+      let cursor = rangeStart;
+      while (cursor <= rangeEnd) {
+        months.push(format(cursor, "yyyy-MM"));
+        cursor = addMonths(cursor, 1);
+      }
+      // Ensure at least current month + a few future months for expected
+      const futureEnd = addMonths(rangeEnd, 3);
+      cursor = addMonths(rangeEnd, 1);
+      while (cursor <= futureEnd) {
+        months.push(format(cursor, "yyyy-MM"));
+        cursor = addMonths(cursor, 1);
+      }
+
+      // Fetch bank transactions for actuals within dateRange
       const { data: transactions } = await supabase
         .from("bank_transactions")
         .select("amount, date")
-        .gte("date", format(rangeStart, "yyyy-MM-dd"))
-        .lte("date", format(rangeEnd, "yyyy-MM-dd"));
+        .gte("date", from)
+        .lte("date", to);
 
       // Fetch ALL unpaid invoices with a due_date (no date filter)
-      // Overdue invoices are still expected cash movements
       const { data: invoices } = await supabase
         .from("invoices")
         .select("amount, total_amount, invoice_type, due_date, payment_status")
         .not("due_date", "is", null)
         .neq("payment_status", "paid");
-
-      // Build 12 months
-      const months = Array.from({ length: 12 }, (_, i) => {
-        const date = subMonths(now, 5 - i);
-        return format(startOfMonth(date), "yyyy-MM");
-      });
 
       const monthlyActuals: Record<string, { income: number; expenses: number }> = {};
       transactions?.forEach(tx => {
@@ -97,7 +109,6 @@ export function useBudgetChartData() {
         const dueDate = new Date(inv.due_date);
         // Overdue invoices (due_date < today) go into the current month
         const month = dueDate < now ? currentMonth : format(dueDate, "yyyy-MM");
-        // Only include months within our chart range
         if (!months.includes(month)) return;
         if (!monthlyExpected[month]) monthlyExpected[month] = { income: 0, expenses: 0 };
         const amount = Number(inv.total_amount || inv.amount);
@@ -125,19 +136,27 @@ export function useBudgetChartData() {
 }
 
 export function useBudgetVarianceSummary() {
+  const { dateRange } = useDateRange();
+  const from = format(dateRange.from, "yyyy-MM-dd");
+  const to = format(dateRange.to, "yyyy-MM-dd");
+
   return useQuery({
-    queryKey: ["budget-variance-summary"],
+    queryKey: ["budget-variance-summary", from, to],
     queryFn: async () => {
       const { data: budgets } = await supabase
         .from("budgets")
         .select("amount, budget_type, name")
-        .eq("is_active", true);
+        .eq("is_active", true)
+        .gte("start_date", from)
+        .lte("start_date", to);
 
-      // Fetch invoices with due dates for expected totals
+      // Fetch invoices with due dates within range for expected totals
       const { data: invoices } = await supabase
         .from("invoices")
         .select("amount, total_amount, invoice_type, due_date, payment_status")
-        .not("due_date", "is", null);
+        .not("due_date", "is", null)
+        .gte("due_date", from)
+        .lte("due_date", to);
 
       const totalRicaviPrevistiBudget = budgets
         ?.filter(b => (b as any).budget_type === "income")
