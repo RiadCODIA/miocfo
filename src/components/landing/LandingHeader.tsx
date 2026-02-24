@@ -6,7 +6,7 @@ import miocfoLogo from "@/assets/miocfo-logo.png";
 
 const navLinks = [
   { label: "Chi Siamo", to: "/chi-siamo" },
-  { label: "Piani", to: "/piani" },
+  { label: "Piani", to: "/pricing" },
   { label: "FAQ", to: "/faq" },
   { label: "Contatti", to: "/contatti" },
 ];
