@@ -1,72 +1,34 @@
 
 
-# Fix Invoice Category Suggestions
+## Plan: Cleaner Bar Chart Style for "Incassi vs Pagamenti"
 
-## Problem
+### Reference Analysis
 
-Two issues with invoice categorization:
+The reference image shows a "Flusso di cassa" chart with these key visual characteristics:
 
-1. **AI auto-categorization uses a hardcoded English keyword map** (`consulting` -> `Servizi professionali`, `goods` -> `Forniture`, etc.) instead of reading the actual categories from the database and intelligently matching based on invoice content. This produces incorrect or missing categories.
+- **Thin, narrow bars** (not wide/chunky) side-by-side for Entrate (green) and Uscite (coral/salmon)
+- **Softer, more pastel colors**: mint green for income, soft coral/salmon for expenses
+- **Dashed/striped bars** for projected data (Entrate previste, Uscite previste)
+- **Clean horizontal grid lines** with no vertical grid lines
+- **Pink dashed line** for the net cash flow trend
+- **Light background**, minimal chrome
+- **Legend at the top** with colored indicators
 
-2. **The category dropdown shows all expense categories for every invoice type**, including "emessa" (issued/revenue) invoices which should not have expense categories assigned.
+### Changes to `src/components/dashboard/IncomeExpenseChart.tsx`
 
-## Solution
+1. **Narrower bars**: Set `barSize={14}` (or similar small value) and increase `barGap` for spacing between paired bars
+2. **Softer colors**: Change from saturated green/red to softer mint green (`#2dd4a0` / `hsl(160, 64%, 52%)`) and soft coral (`#f87171` / salmon-ish tone) matching the reference
+3. **Bar radius**: Keep rounded tops `[3, 3, 0, 0]` for a polished look
+4. **Grid**: Keep `vertical={false}`, use lighter grid stroke color
+5. **Saldo line**: Change to a pink/magenta dashed line (`strokeDasharray="6 4"`) matching the reference's trend line style
+6. **Legend positioning**: Move legend above the chart or keep at bottom but style consistently
 
-### 1. Edge Function: Smart AI Categorization (`supabase/functions/process-invoice/index.ts`)
+### Technical Details
 
-**Remove** the hardcoded `SUBJECT_CATEGORY_MAP` and the generic `subject` field from the AI prompt.
+- Modify `<Bar>` components: add `barSize={14}`, update `fill` colors
+- Modify `<Line>` for saldo: change stroke to pink/magenta, add `strokeDasharray`
+- Adjust `CartesianGrid` stroke to be lighter
+- Optionally add `barCategoryGap` on `ComposedChart` for better spacing
 
-**Instead**, fetch all active `cost_categories` from the database (with their IDs and names), and include them directly in the AI prompt. Ask the AI to pick the best matching category by name based on what it reads in the invoice.
-
-```text
-Current flow:
-  AI extracts subject="consulting" -> map to "Servizi professionali" -> lookup ID
-
-New flow:
-  Fetch categories from DB -> include in AI prompt as a list ->
-  AI returns category_name="Servizi professionali" directly -> lookup ID
-```
-
-Changes to `resolveCategoryId`:
-- Accept a list of categories instead of using the hardcoded map
-- Match by name from AI response
-
-Changes to the AI prompt:
-- Remove the `subject` field with English keywords
-- Add a `category_name` field with instruction: "Pick the best match from this list: [Affitto e utenze, Marketing, Forniture, Servizi professionali, Tecnologia e software, Viaggi e trasferte, Assicurazioni, Imposte e tasse, Altro]. If none match well, use 'Altro'."
-- Only ask for category on "ricevuta" invoices
-
-### 2. Frontend: Filter Categories by Invoice Type (`src/components/fatture/InvoiceTable.tsx`)
-
-- For "ricevuta" and "autofattura" invoices: show all expense categories (current behavior)
-- For "emessa" invoices: hide the category dropdown entirely (revenue doesn't need expense categorization -- revenue is tracked as a total from issued invoices in the Conto Economico)
-
-### 3. Frontend: Pass Categories to Edge Function (`src/pages/Fatture.tsx`)
-
-No changes needed here -- the edge function will fetch categories server-side.
-
-## Technical Details
-
-### Edge Function Changes
-
-```text
-1. Remove SUBJECT_CATEGORY_MAP constant
-2. Update resolveCategoryId to accept category list and AI-suggested name
-3. Before calling AI, fetch cost_categories from DB
-4. Update AI prompt to include actual category names as options
-5. Parse category_name from AI response instead of subject
-```
-
-### InvoiceTable Changes
-
-```text
-1. Pass invoice type info to category cell rendering
-2. Only show category Select for ricevuta/autofattura invoices
-3. For emessa invoices, show "--" or nothing
-```
-
-## Files to Modify
-
-- `supabase/functions/process-invoice/index.ts` -- AI prompt and category resolution
-- `src/components/fatture/InvoiceTable.tsx` -- filter category dropdown by invoice type
+No new files or dependencies needed. Single file edit to `IncomeExpenseChart.tsx`.
 
