@@ -34,7 +34,7 @@ export function LandingHeader() {
     >
       <div className="container mx-auto px-4 flex items-center justify-between">
         {/* Logo */}
-        <Link to="/landing" className="flex items-center">
+        <Link to="/" className="flex items-center">
           <img src={miocfoLogo} alt="mioCFO" className="h-8 md:h-9" />
         </Link>
 
