@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Plus, Landmark, AlertCircle, RefreshCw, Upload, ArrowDownUp } from "lucide-react";
 import { BankAccountCard } from "@/components/conti-bancari/BankAccountCard";
@@ -14,6 +14,7 @@ export default function ContiBancari() {
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const { syncAccount, removeAccount } = useBankingIntegration();
   const { data: accounts = [], isLoading, refetch } = useBankAccountsQuery();
+  const queryClient = useQueryClient();
 
   const { data: txCount = 0 } = useQuery({
     queryKey: ["bank-transactions-count"],
@@ -28,6 +29,8 @@ export default function ContiBancari() {
 
   const handleSync = async (id: string) => {
     await syncAccount(id);
+    await queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+    await queryClient.invalidateQueries({ queryKey: ["bank-transactions-count"] });
   };
 
   const handleTest = async (id: string) => {
@@ -36,6 +39,8 @@ export default function ContiBancari() {
 
   const handleRemove = async (id: string) => {
     await removeAccount(id);
+    await queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+    await queryClient.invalidateQueries({ queryKey: ["bank-transactions-count"] });
   };
 
   const handleDebug = async (id: string) => {
