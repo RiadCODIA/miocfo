@@ -2,7 +2,7 @@ import { useCallback, useState } from "react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Upload, FileText, X, Loader2, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 const MAX_FILE_SIZE = 50 * 1024 * 1024; // 50MB limit per Supabase Storage
 
@@ -29,7 +29,7 @@ interface InvoiceUploadZoneProps {
 
 export function InvoiceUploadZone({ onUpload, uploadingFiles, onRemoveFile }: InvoiceUploadZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
-  const { toast } = useToast();
+  
 
   const validateFiles = (files: File[]): File[] => {
     const validFiles: File[] = [];
@@ -44,11 +44,7 @@ export function InvoiceUploadZone({ onUpload, uploadingFiles, onRemoveFile }: In
     });
 
     if (invalidFiles.length > 0) {
-      toast({
-        title: "File troppo grandi",
-        description: `${invalidFiles.map(f => f.name).join(", ")} supera il limite di 50MB.`,
-        variant: "destructive",
-      });
+      toast.error("File troppo grandi", { description: `${invalidFiles.map(f => f.name).join(", ")} supera il limite di 50MB.` });
     }
 
     return validFiles;

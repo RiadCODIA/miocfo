@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 import { z } from "zod";
 import miocfoLogo from "@/assets/miocfo-logo.png";
 import { Eye, EyeOff, Mail, Lock, User, Building2, FlaskConical, ShieldCheck, Crown } from "lucide-react";
@@ -32,7 +32,6 @@ const signupSchema = z.object({
 export default function Auth() {
   const { user, loading, signIn, signUp, signInAsDemo, signInAsDemoAdmin, signInAsDemoSuperAdmin } = useAuth();
   const navigate = useNavigate();
-  const { toast } = useToast();
   
   const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
   const [showPassword, setShowPassword] = useState(false);
@@ -79,10 +78,8 @@ export default function Auth() {
     setIsSubmitting(false);
     
     if (error) {
-      toast({
-        title: "Errore Demo",
+      toast.error("Errore Demo", {
         description: "Account demo utente non disponibile. Contatta l'amministratore.",
-        variant: "destructive",
       });
     }
   };
@@ -93,10 +90,8 @@ export default function Auth() {
     setIsSubmitting(false);
     
     if (error) {
-      toast({
-        title: "Errore Demo",
+      toast.error("Errore Demo", {
         description: "Account demo super admin non disponibile. Contatta l'amministratore.",
-        variant: "destructive",
       });
     }
   };
@@ -110,10 +105,8 @@ export default function Auth() {
     });
 
     if (!validation.success) {
-      toast({
-        title: "Errore di validazione",
+      toast.error("Errore di validazione", {
         description: validation.error.errors[0].message,
-        variant: "destructive",
       });
       return;
     }
@@ -131,10 +124,8 @@ export default function Auth() {
         errorMessage = "Email non confermata. Controlla la tua casella di posta";
       }
       
-      toast({
-        title: "Errore di accesso",
+      toast.error("Errore di accesso", {
         description: errorMessage,
-        variant: "destructive",
       });
     }
   };
@@ -152,10 +143,8 @@ export default function Auth() {
     });
 
     if (!validation.success) {
-      toast({
-        title: "Errore di validazione",
+      toast.error("Errore di validazione", {
         description: validation.error.errors[0].message,
-        variant: "destructive",
       });
       return;
     }
@@ -178,16 +167,13 @@ export default function Auth() {
         errorMessage = "La password non rispetta i requisiti di sicurezza";
       }
       
-      toast({
-        title: "Errore di registrazione",
+      toast.error("Errore di registrazione", {
         description: errorMessage,
-        variant: "destructive",
       });
       return;
     }
 
-    toast({
-      title: "Registrazione completata!",
+    toast.success("Registrazione completata!", {
       description: "Controlla la tua email per confermare l'account",
     });
   };

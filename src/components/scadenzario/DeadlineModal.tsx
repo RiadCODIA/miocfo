@@ -11,7 +11,7 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import { useCreateDeadline, useUpdateDeadline, useInvoicesForDeadlines, Deadline, CreateDeadlineInput } from "@/hooks/useDeadlines";
-import { useToast } from "@/hooks/use-toast";
+import { toast } from "sonner";
 
 interface DeadlineModalProps {
   open: boolean;
@@ -20,7 +20,6 @@ interface DeadlineModalProps {
 }
 
 export function DeadlineModal({ open, onOpenChange, deadline }: DeadlineModalProps) {
-  const { toast } = useToast();
   const createMutation = useCreateDeadline();
   const updateMutation = useUpdateDeadline();
   const { data: invoices } = useInvoicesForDeadlines();
@@ -33,7 +32,6 @@ export function DeadlineModal({ open, onOpenChange, deadline }: DeadlineModalPro
   const [dueDate, setDueDate] = useState<Date | undefined>(undefined);
   const [invoiceId, setInvoiceId] = useState<string | null>(null);
 
-  // Reset form when modal opens/closes or deadline changes
   useEffect(() => {
     if (open && deadline) {
       setDescription(deadline.description);
@@ -54,18 +52,18 @@ export function DeadlineModal({ open, onOpenChange, deadline }: DeadlineModalPro
     e.preventDefault();
 
     if (!description.trim()) {
-      toast({ title: "Errore", description: "Inserisci una descrizione", variant: "destructive" });
+      toast.error("Errore", { description: "Inserisci una descrizione" });
       return;
     }
 
     const parsedAmount = parseFloat(amount.replace(",", "."));
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      toast({ title: "Errore", description: "Inserisci un importo valido", variant: "destructive" });
+      toast.error("Errore", { description: "Inserisci un importo valido" });
       return;
     }
 
     if (!dueDate) {
-      toast({ title: "Errore", description: "Seleziona una data di scadenza", variant: "destructive" });
+      toast.error("Errore", { description: "Seleziona una data di scadenza" });
       return;
     }
 
@@ -79,7 +77,7 @@ export function DeadlineModal({ open, onOpenChange, deadline }: DeadlineModalPro
           dueDate: format(dueDate, "yyyy-MM-dd"),
           invoiceId,
         });
-        toast({ title: "Scadenza aggiornata", description: "La scadenza è stata modificata con successo." });
+        toast.success("Scadenza aggiornata", { description: "La scadenza è stata modificata con successo." });
       } else {
         const input: CreateDeadlineInput = {
           description: description.trim(),
@@ -89,14 +87,12 @@ export function DeadlineModal({ open, onOpenChange, deadline }: DeadlineModalPro
           invoiceId,
         };
         await createMutation.mutateAsync(input);
-        toast({ title: "Scadenza creata", description: "La nuova scadenza è stata aggiunta." });
+        toast.success("Scadenza creata", { description: "La nuova scadenza è stata aggiunta." });
       }
       onOpenChange(false);
     } catch (error) {
-      toast({
-        title: "Errore",
+      toast.error("Errore", {
         description: error instanceof Error ? error.message : "Errore durante il salvataggio",
-        variant: "destructive",
       });
     }
   };
