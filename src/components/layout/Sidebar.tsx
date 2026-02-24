@@ -63,7 +63,7 @@ const userNavGroups: NavGroup[] = [
   {
     label: "NAVIGAZIONE",
     items: [
-      { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/" },
+      { id: "dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
       { id: "collegamenti", label: "Collegamenti", icon: Link2, path: "/collegamenti" },
     ],
   },
@@ -104,7 +104,7 @@ const superAdminNavGroups: NavGroup[] = [
   {
     label: "SISTEMA",
     items: [
-      { id: "system_dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/" },
+      { id: "system_dashboard", label: "Dashboard", icon: LayoutDashboard, path: "/dashboard" },
       { id: "global_users", label: "Utenti", icon: Users, path: "/utenti-globali" },
       { id: "plans_limits", label: "Piani", icon: CreditCard, path: "/piani" },
       { id: "fatturazione", label: "Fatturazione", icon: Receipt, path: "/fatturazione" },
