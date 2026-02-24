@@ -196,7 +196,16 @@ async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, user
   }
 
   try {
-    const base64Data = btoa(String.fromCharCode(...fileData));
+    // Convert Uint8Array to base64 without spreading (avoids stack overflow on large files)
+    let binaryStr = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < fileData.length; i += chunkSize) {
+      const chunk = fileData.subarray(i, i + chunkSize);
+      for (let j = 0; j < chunk.length; j++) {
+        binaryStr += String.fromCharCode(chunk[j]);
+      }
+    }
+    const base64Data = btoa(binaryStr);
     
     const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
     const mimeType = isImage 
