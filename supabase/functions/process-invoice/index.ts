@@ -22,6 +22,44 @@ interface ExtractedInvoice {
   raw_data?: Record<string, unknown>;
 }
 
+// Subject-to-category mapping
+const SUBJECT_CATEGORY_MAP: Record<string, string> = {
+  'consulting': 'Servizi professionali',
+  'services': 'Servizi professionali',
+  'fees': 'Servizi professionali',
+  'goods': 'Forniture',
+  'transport': 'Viaggi e trasferte',
+  'insurance': 'Assicurazioni',
+  'utilities': 'Affitto e utenze',
+  'rent': 'Affitto e utenze',
+  'maintenance': 'Tecnologia e software',
+  'marketing': 'Marketing',
+  'other': 'Altro',
+};
+
+// Auto-assign category_id based on subject
+async function resolveCategoryId(
+  supabaseAdmin: ReturnType<typeof createClient>,
+  subject: string,
+  invoiceDirection: string
+): Promise<string | null> {
+  // Revenue invoices (emessa) don't need cost category assignment
+  if (invoiceDirection === 'emessa') return null;
+
+  const categoryName = SUBJECT_CATEGORY_MAP[subject?.toLowerCase()] || SUBJECT_CATEGORY_MAP['other'];
+  if (!categoryName) return null;
+
+  const { data } = await supabaseAdmin
+    .from('cost_categories')
+    .select('id')
+    .eq('name', categoryName)
+    .eq('is_active', true)
+    .limit(1)
+    .single();
+
+  return data?.id || null;
+}
+
 // Parse CSV content into invoice records
 function parseCSV(content: string): ExtractedInvoice[] {
   const lines = content.trim().split('\n');
@@ -91,6 +129,42 @@ function parseCSV(content: string): ExtractedInvoice[] {
   return invoices;
 }
 
+// Apply VAT fallback logic after AI extraction
+function applyVATFallback(invoice: ExtractedInvoice): ExtractedInvoice {
+  let { taxable_amount, vat_amount, vat_rate, total_amount } = invoice;
+
+  // Case 1: vat_amount=0 but total > taxable → compute VAT as difference
+  if (vat_amount === 0 && total_amount > taxable_amount && taxable_amount > 0) {
+    vat_amount = Math.round((total_amount - taxable_amount) * 100) / 100;
+    if (vat_rate === 0 && taxable_amount > 0) {
+      vat_rate = Math.round((vat_amount / taxable_amount) * 100);
+    }
+    console.log(`VAT fallback (total-taxable): vat_amount=€${vat_amount}, vat_rate=${vat_rate}%`);
+  }
+
+  // Case 2: vat_amount=0, vat_rate>0, taxable>0 → compute VAT from rate
+  if (vat_amount === 0 && vat_rate > 0 && taxable_amount > 0) {
+    vat_amount = Math.round((taxable_amount * vat_rate / 100) * 100) / 100;
+    total_amount = taxable_amount + vat_amount;
+    console.log(`VAT fallback (rate): vat_amount=€${vat_amount}, total=€${total_amount}`);
+  }
+
+  // Case 3: taxable == total and vat_rate > 0 → scorporo IVA
+  if (taxable_amount === total_amount && vat_rate > 0 && vat_amount === 0) {
+    taxable_amount = Math.round((total_amount / (1 + vat_rate / 100)) * 100) / 100;
+    vat_amount = Math.round((total_amount - taxable_amount) * 100) / 100;
+    console.log(`VAT fallback (scorporo): taxable=€${taxable_amount}, vat_amount=€${vat_amount}`);
+  }
+
+  return {
+    ...invoice,
+    taxable_amount,
+    vat_amount,
+    vat_rate,
+    total_amount,
+  };
+}
+
 // Extract invoice data using Lovable AI Gateway (Google Gemini)
 async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, userCompanyName?: string): Promise<ExtractedInvoice> {
   const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
@@ -148,7 +222,7 @@ async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, user
   "sender_name": "ragione sociale completa di chi EMETTE la fattura (mittente, in alto nel documento)",
   "recipient_name": "ragione sociale completa di chi RICEVE la fattura (destinatario, spesso dopo 'Spett.le', 'Destinatario', 'Cliente')",
   "invoice_direction": "emessa" oppure "ricevuta" (vedi istruzioni sotto),
-  "subject": "categoria merceologica della fattura: goods, services, consulting, transport, maintenance, insurance, fees, utilities, rent, other",
+  "subject": "categoria merceologica della fattura: goods, services, consulting, transport, maintenance, insurance, fees, utilities, rent, marketing, other",
   "taxable_amount": importo IMPONIBILE (base imponibile PRIMA dell'IVA, solo numero decimale),
   "vat_rate": aliquota IVA applicata (es. 22, 10, 4, 0 per esente),
   "vat_amount": importo IVA in euro (solo numero decimale),
@@ -164,7 +238,13 @@ ISTRUZIONI CRITICHE PER UN CONTABILE ESPERTO:
    - Se trovi "FATTURA DI ACQUISTO", "Fattura ricevuta" → "ricevuta"  
    - Di DEFAULT, se non riesci a determinare la direzione, usa "ricevuta" (fattura passiva/di acquisto)
    ${companyContext}
-4. IMPONIBILE vs TOTALE: Distingui SEMPRE tra imponibile (base imponibile) e totale documento. Se c'è un solo importo senza distinzione IVA, metti lo stesso valore sia in taxable_amount che total_amount e vat_amount=0.
+4. SEPARAZIONE IMPONIBILE E IVA - OBBLIGATORIA:
+   DEVI SEMPRE separare l'imponibile dall'IVA, anche se nel documento non sono chiaramente distinti.
+   - Cerca "Imponibile", "Base imponibile", "Totale imponibile" per trovare la base.
+   - Cerca "IVA", "Imposta", "Tot. imposta" per l'importo IVA.
+   - Se trovi solo il totale e l'aliquota, CALCOLA: taxable_amount = total / (1 + aliquota/100), vat_amount = total - taxable_amount.
+   - Se trovi solo il totale SENZA aliquota, ASSUMI IVA al 22%: taxable_amount = total / 1.22, vat_amount = total - taxable_amount.
+   - NON restituire MAI vat_amount = 0 se c'è un'aliquota IVA > 0 nel documento.
 5. ALIQUOTA IVA: Identifica la percentuale IVA (4%, 10%, 22%, esente, ecc.). Se ci sono più aliquote, usa quella predominante.
 6. OGGETTO: Determina la categoria della fattura dal contenuto (descrizione righe, oggetto).
 
@@ -228,7 +308,7 @@ Rispondi SOLO con il JSON valido, nessun altro testo o spiegazione.`
 
     const direction = (extracted.invoice_direction === 'emessa') ? 'emessa' : 'ricevuta';
 
-    const result_invoice: ExtractedInvoice = {
+    let result_invoice: ExtractedInvoice = {
       invoice_number: extracted.invoice_number || `PDF-${Date.now()}`,
       invoice_date: extracted.invoice_date || new Date().toISOString().split('T')[0],
       sender_name: extracted.sender_name || 'Sconosciuto',
@@ -243,7 +323,10 @@ Rispondi SOLO con il JSON valido, nessun altro testo o spiegazione.`
       raw_data: { ai_extracted: true, original_filename: fileName, ai_response: extracted }
     };
 
-    console.log(`Successfully extracted: direction=${direction}, sender=${result_invoice.sender_name}, recipient=${result_invoice.recipient_name}, taxable=€${taxableAmount}, VAT=€${vatAmount} (${vatRate}%), total=€${result_invoice.total_amount}`);
+    // Apply VAT fallback logic
+    result_invoice = applyVATFallback(result_invoice);
+
+    console.log(`Successfully extracted: direction=${direction}, sender=${result_invoice.sender_name}, recipient=${result_invoice.recipient_name}, taxable=€${result_invoice.taxable_amount}, VAT=€${result_invoice.vat_amount} (${result_invoice.vat_rate}%), total=€${result_invoice.total_amount}`);
 
     return result_invoice;
 
@@ -357,6 +440,10 @@ serve(async (req) => {
         console.log(`Reprocessing file: ${fileName}`);
         const extracted = await extractInvoiceWithAI(fileData, fileName, userCompanyName);
         
+        // Auto-assign category
+        const categoryId = await resolveCategoryId(supabaseAdmin, extracted.subject, extracted.invoice_direction);
+        console.log(`Auto-category for reprocess: subject=${extracted.subject}, categoryId=${categoryId}`);
+
         // Update the existing invoice record with full data
         const { error: updateError } = await supabaseAdmin
           .from('invoices')
@@ -369,6 +456,7 @@ serve(async (req) => {
             vat_amount: extracted.vat_amount,
             total_amount: extracted.total_amount,
             invoice_type: extracted.invoice_direction,
+            category_id: categoryId,
             extracted_data: {
               ...(extracted.raw_data as Record<string, unknown> ?? {}),
               sender_name: extracted.sender_name,
@@ -384,7 +472,7 @@ serve(async (req) => {
           throw new Error(`Errore aggiornamento: ${updateError.message}`);
         }
         
-        console.log(`Reprocessed: direction=${extracted.invoice_direction}, taxable=€${extracted.taxable_amount}, VAT=€${extracted.vat_amount}`);
+        console.log(`Reprocessed: direction=${extracted.invoice_direction}, taxable=€${extracted.taxable_amount}, VAT=€${extracted.vat_amount}, category=${categoryId}`);
         
         return new Response(
           JSON.stringify({
@@ -482,8 +570,12 @@ serve(async (req) => {
       throw new Error(`Tipo file non supportato: ${fileType}`);
     }
 
-    // Insert invoices into database with full extracted data
+    // Insert invoices into database with full extracted data + auto-categorization
     for (const invoice of extractedInvoices) {
+      // Auto-assign category based on subject
+      const categoryId = await resolveCategoryId(supabaseAdmin, invoice.subject, invoice.invoice_direction);
+      console.log(`Auto-category: subject=${invoice.subject}, direction=${invoice.invoice_direction}, categoryId=${categoryId}`);
+
       const { error: insertError } = await supabaseAdmin
         .from('invoices')
         .insert({
@@ -498,6 +590,7 @@ serve(async (req) => {
           invoice_type: invoice.invoice_direction,
           file_name: fileName,
           file_path: storagePath,
+          category_id: categoryId,
           extracted_data: {
             ...(invoice.raw_data as Record<string, unknown> ?? {}),
             sender_name: invoice.sender_name,
