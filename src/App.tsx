@@ -68,7 +68,8 @@ const App = () => (
       <BrowserRouter>
         <AuthProvider>
           <Routes>
-            {/* Landing page - public */}
+            {/* Landing page - root */}
+            <Route path="/" element={<Landing />} />
             <Route path="/landing" element={<Landing />} />
             
             {/* Auth route - no layout */}
@@ -81,7 +82,7 @@ const App = () => (
             
             {/* Protected routes with MainLayout */}
             <Route
-              path="/"
+              path="/dashboard"
               element={
                 <ProtectedRoute>
                   <MainLayout>

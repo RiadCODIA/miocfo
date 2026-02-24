@@ -28,7 +28,7 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
 
   // Allow temporary access if OAuth callback is in progress (session may still be restoring)
   if (!user && !isDemoMode && !hasOAuthCode) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/auth" replace state={{ from: location }} />;
   }
 
   return <>{children}</>;
