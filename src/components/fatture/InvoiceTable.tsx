@@ -39,6 +39,7 @@ export interface Invoice {
 export interface CostCategory {
   id: string;
   name: string;
+  category_type?: string;
 }
 
 interface InvoiceTableProps {
@@ -221,32 +222,39 @@ export function InvoiceTable({
                       )}
                     </TableCell>
 
-                    {/* Inline category dropdown — only for ricevuta/autofattura */}
+                    {/* Inline category dropdown — filtered by invoice type */}
                     <TableCell>
-                      {onCategoryChange && categories.length > 0 && normalizedType !== 'emessa' ? (
-                        <Select
-                          value={invoice.categoryId || "none"}
-                          onValueChange={(val) =>
-                            onCategoryChange(invoice.id, val === "none" ? null : val)
-                          }
-                        >
-                          <SelectTrigger className="h-7 text-xs min-w-[140px] max-w-[180px]">
-                            <SelectValue placeholder="Categoria..." />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="none">
-                              <span className="text-muted-foreground">Nessuna</span>
-                            </SelectItem>
-                            {categories.map((cat) => (
-                              <SelectItem key={cat.id} value={cat.id}>
-                                {cat.name}
+                      {(() => {
+                        const filteredCategories = categories.filter(cat =>
+                          normalizedType === 'emessa'
+                            ? cat.category_type === 'revenue'
+                            : cat.category_type === 'expense'
+                        );
+                        return onCategoryChange && filteredCategories.length > 0 ? (
+                          <Select
+                            value={invoice.categoryId || "none"}
+                            onValueChange={(val) =>
+                              onCategoryChange(invoice.id, val === "none" ? null : val)
+                            }
+                          >
+                            <SelectTrigger className="h-7 text-xs min-w-[140px] max-w-[180px]">
+                              <SelectValue placeholder="Categoria..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="none">
+                                <span className="text-muted-foreground">Nessuna</span>
                               </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
+                              {filteredCategories.map((cat) => (
+                                <SelectItem key={cat.id} value={cat.id}>
+                                  {cat.name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        );
+                      })()}
                     </TableCell>
 
                     <TableCell className="text-right font-medium">
