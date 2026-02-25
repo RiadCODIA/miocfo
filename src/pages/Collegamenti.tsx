@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ShieldCheck, CheckCircle2, Circle, FileText, Loader2, Landmark, Link, Download } from "lucide-react";
+import { ShieldCheck, CheckCircle2, Circle, FileText, Loader2, Landmark, Link, Download, Trash2 } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
 
 const EDGE_URL = "https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/acube-cassetto-fiscale";
 
@@ -23,6 +24,25 @@ export default function Collegamenti() {
   const [cassettoModalOpen, setCassettoModalOpen] = useState(false);
   const [bankModalOpen, setBankModalOpen] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
+
+  const handleDeleteBankAccount = async (accountId: string) => {
+    setDeletingAccountId(accountId);
+    try {
+      // Delete related transactions first
+      await supabase.from("bank_transactions").delete().eq("bank_account_id", accountId);
+      // Delete the bank account
+      const { error } = await supabase.from("bank_accounts").delete().eq("id", accountId);
+      if (error) throw error;
+      toast.success("Conto rimosso", { description: "Il conto bancario è stato eliminato con successo." });
+      queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+      queryClient.invalidateQueries({ queryKey: ["bank-transactions"] });
+    } catch (err) {
+      toast.error("Errore", { description: err instanceof Error ? err.message : "Impossibile eliminare il conto." });
+    } finally {
+      setDeletingAccountId(null);
+    }
+  };
 
   // Check localStorage for a configured fiscal_id — shows "connected" badge immediately after setup
   const savedFiscalId = localStorage.getItem("cassetto_fiscal_id");
@@ -165,6 +185,7 @@ export default function Collegamenti() {
                       <TableHead className="text-right">Saldo</TableHead>
                       <TableHead>Stato</TableHead>
                       <TableHead>Ultima sincr.</TableHead>
+                      <TableHead className="text-right">Azioni</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
@@ -188,6 +209,41 @@ export default function Collegamenti() {
                           {acc.last_sync_at
                             ? format(new Date(acc.last_sync_at), "dd MMM HH:mm", { locale: it })
                             : "Mai"}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                disabled={deletingAccountId === acc.id}
+                              >
+                                {deletingAccountId === acc.id ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Rimuovere questo conto?</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Verranno eliminate anche tutte le transazioni associate a "{acc.name}". Questa azione non può essere annullata.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Annulla</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDeleteBankAccount(acc.id)}
+                                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                                >
+                                  Elimina
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
                         </TableCell>
                       </TableRow>
                     ))}
