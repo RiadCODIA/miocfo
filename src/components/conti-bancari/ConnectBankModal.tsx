@@ -279,20 +279,20 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            {provider === "choose" && "Scegli il metodo di collegamento"}
-            {provider !== "choose" && step === "select_bank" && "Seleziona la tua banca"}
-            {step === "redirecting" && "Reindirizzamento..."}
-            {step === "connecting" && "Collegamento in corso..."}
-            {step === "success" && "Connessione riuscita!"}
-            {step === "error" && "Errore di connessione"}
+            {step === "connecting" ? "Collegamento in corso..." :
+             step === "redirecting" ? "Reindirizzamento..." :
+             step === "success" ? "Connessione riuscita!" :
+             step === "error" ? "Errore di connessione" :
+             provider === "choose" ? "Scegli il metodo di collegamento" :
+             "Seleziona la tua banca"}
           </DialogTitle>
           <DialogDescription>
-            {provider === "choose" && "Seleziona come vuoi collegare il tuo conto bancario"}
-            {provider !== "choose" && step === "select_bank" && "Cerca e seleziona la tua banca per collegare i conti"}
-            {step === "redirecting" && `Stai per essere reindirizzato a ${selectedBank?.name || "la tua banca"}...`}
-            {step === "connecting" && "Stiamo salvando i tuoi dati..."}
-            {step === "success" && `${connectedAccounts.length} conto/i collegati con successo`}
-            {step === "error" && "Si è verificato un errore durante il collegamento"}
+            {step === "connecting" ? "Stiamo salvando i tuoi dati..." :
+             step === "redirecting" ? `Stai per essere reindirizzato a ${selectedBank?.name || "la tua banca"}...` :
+             step === "success" ? `${connectedAccounts.length} conto/i collegati con successo` :
+             step === "error" ? "Si è verificato un errore durante il collegamento" :
+             provider === "choose" ? "Seleziona come vuoi collegare il tuo conto bancario" :
+             "Cerca e seleziona la tua banca per collegare i conti"}
           </DialogDescription>
         </DialogHeader>
 
