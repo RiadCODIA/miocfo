@@ -1,57 +1,33 @@
 
 
-## Fix: Enable Revenue Category Selection for Issued Invoices (Emessa)
+## Fix: IVA Section in Conto Economico
 
-### Problem
-The invoice table currently hides the category dropdown for "emessa" (issued) invoices (line 226 of `InvoiceTable.tsx`: `normalizedType !== 'emessa'`). This means users cannot categorize their revenue invoices. The Income Statement (Conto Economico) already supports revenue categories ("Ricavi delle vendite", "Ricavi delle prestazioni", "Altri ricavi e proventi") but invoices cannot be assigned to them from the Fatture page.
+### Issues Identified
 
-### Current State
-- Database has 3 revenue categories: Ricavi delle vendite, Ricavi delle prestazioni, Altri ricavi e proventi
-- The Conto Economico hook already falls back uncategorized emessa invoices to "Altri ricavi e proventi"
-- The Fatture page fetches ALL categories without distinguishing revenue vs expense
-- The InvoiceTable completely hides the dropdown for emessa invoices
+1. **VAT not calculated when `vat_amount` is missing**: The hook uses `inv.vat_amount` directly, but many invoices may have `vat_amount = 0` or `null` while having both `total_amount` and `amount` populated. VAT should be computed as `total_amount - amount` as a fallback.
 
-### Plan
+2. **Column labels**: "A credito" and "A debito" must become "IVA a credito" and "IVA a debito".
 
-**File: `src/pages/Fatture.tsx`** -- Split the category query into two: one for expense, one for revenue categories, and pass both to the table with `category_type` info.
+3. **Remove redundant columns**: "Ricavi", "Costi", and "Differenza" columns should be removed from the table — the table should only show "IVA a credito", "IVA a debito", and "IVA netta".
 
-- Modify the `cost-categories-for-invoices` query to include `category_type` in the SELECT
-- Pass the full category list (with type) to `InvoiceTable`
+### Changes
 
-**File: `src/components/fatture/InvoiceTable.tsx`** -- Enable the category dropdown for all invoice types, filtering options by type.
+**File: `src/hooks/useContoEconomico.ts`**
 
-- Update the `CostCategory` interface to include `category_type`
-- Remove the `normalizedType !== 'emessa'` guard on line 226
-- Filter displayed categories: show only `category_type === 'revenue'` for emessa invoices, only `category_type === 'expense'` for ricevuta/autofattura
+Update the query to also fetch `total_amount` alongside `amount` and `vat_amount`. Then compute VAT as:
 
-### Technical Details
-
-**InvoiceTable.tsx changes:**
 ```typescript
-// Updated interface
-export interface CostCategory {
-  id: string;
-  name: string;
-  category_type?: string;
-}
-
-// In the category cell, replace the emessa guard with type-based filtering:
-const filteredCategories = categories.filter(cat => 
-  normalizedType === 'emessa' 
-    ? cat.category_type === 'revenue' 
-    : cat.category_type === 'expense'
-);
-// Show dropdown if filteredCategories.length > 0
+const vat = Number(inv.vat_amount || 0) || (Number(inv.total_amount || 0) - Number(inv.amount || 0));
 ```
 
-**Fatture.tsx changes:**
-```typescript
-// Add category_type to the query SELECT
-.select('id, name, category_type')
-```
+This applies to both the emesse query (line 47 → add `total_amount`) and ricevute query (line 53 → add `total_amount`), and the VAT accumulation lines (99, 133).
 
-This ensures:
-- Emessa invoices show: Ricavi delle vendite, Ricavi delle prestazioni, Altri ricavi e proventi
-- Ricevuta/Autofattura invoices show: only expense categories
-- Uncategorized emessa invoices continue to fall back to "Altri ricavi e proventi" in the Conto Economico
+**File: `src/components/area-economica/IVASection.tsx`**
+
+- Remove the table columns: "Ricavi", "Costi", "Differenza" (and their data cells)
+- Rename "A credito" → "IVA a credito"
+- Rename "A debito" → "IVA a debito"
+- Keep "IVA netta" as is
+
+The resulting table will have 3 columns: **IVA a credito** | **IVA a debito** | **IVA netta**
 
