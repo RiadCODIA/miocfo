@@ -9,7 +9,7 @@ interface UpdateProfileData {
 
 export function useUpdateProfile() {
   const queryClient = useQueryClient();
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
 
   return useMutation({
     mutationFn: async (data: UpdateProfileData) => {
@@ -28,6 +28,7 @@ export function useUpdateProfile() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["profile"] });
+      refreshProfile();
     },
   });
 }
