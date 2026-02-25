@@ -25,17 +25,17 @@ export function LiquidityForecastChart({ data, isLoading }: LiquidityForecastCha
 
   return (
     <ResponsiveContainer width="100%" height="100%">
-      <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+      <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barSize={11} barGap={4}>
         <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 47% 22%)" vertical={false} />
         <XAxis
           dataKey="month"
-          stroke="hsl(215 20% 45%)"
+          stroke="hsl(var(--muted-foreground))"
           fontSize={11}
           tickLine={false}
           axisLine={false}
         />
         <YAxis
-          stroke="hsl(215 20% 45%)"
+          stroke="hsl(var(--muted-foreground))"
           fontSize={11}
           tickLine={false}
           axisLine={false}
@@ -77,35 +77,35 @@ export function LiquidityForecastChart({ data, isLoading }: LiquidityForecastCha
         <Bar
           dataKey="ricaviPagati"
           stackId="revenue"
-          fill="hsl(142 72% 40%)"
+          fill="hsl(142, 71%, 45%)"
           radius={[0, 0, 0, 0]}
         />
         <Bar
           dataKey="ricaviDaPagare"
           stackId="revenue"
-          fill="hsl(142 72% 40%)"
-          fillOpacity={0.3}
-          radius={[4, 4, 0, 0]}
-          strokeDasharray="4 2"
-          stroke="hsl(142 72% 40%)"
-          strokeWidth={1}
+          fill="hsl(142, 71%, 45%)"
+          fillOpacity={0.18}
+          radius={[2, 2, 0, 0]}
+          strokeDasharray="6 3"
+          stroke="hsl(142, 71%, 45%)"
+          strokeWidth={1.5}
         />
-        {/* Cost bars - red tones (shown as negative visually but data is positive) */}
+        {/* Cost bars - red tones */}
         <Bar
           dataKey="costiPagati"
           stackId="costs"
-          fill="hsl(0 72% 51%)"
+          fill="hsl(0, 84%, 60%)"
           radius={[0, 0, 0, 0]}
         />
         <Bar
           dataKey="costiDaPagare"
           stackId="costs"
-          fill="hsl(0 72% 51%)"
-          fillOpacity={0.3}
-          radius={[4, 4, 0, 0]}
-          strokeDasharray="4 2"
-          stroke="hsl(0 72% 51%)"
-          strokeWidth={1}
+          fill="hsl(0, 84%, 60%)"
+          fillOpacity={0.18}
+          radius={[2, 2, 0, 0]}
+          strokeDasharray="6 3"
+          stroke="hsl(0, 84%, 60%)"
+          strokeWidth={1.5}
         />
       </BarChart>
     </ResponsiveContainer>

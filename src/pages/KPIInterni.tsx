@@ -267,8 +267,8 @@ export default function KPIInterni() {
                     type="monotone" 
                     dataKey="income" 
                     stackId="1"
-                    stroke="hsl(var(--chart-2))" 
-                    fill="hsl(var(--chart-2))"
+                    stroke="hsl(142, 71%, 45%)" 
+                    fill="hsl(142, 71%, 45%)"
                     fillOpacity={0.6}
                     name="Incassi"
                   />
@@ -276,8 +276,8 @@ export default function KPIInterni() {
                     type="monotone" 
                     dataKey="expenses" 
                     stackId="2"
-                    stroke="hsl(var(--chart-1))" 
-                    fill="hsl(var(--chart-1))"
+                    stroke="hsl(0, 84%, 60%)" 
+                    fill="hsl(0, 84%, 60%)"
                     fillOpacity={0.6}
                     name="Pagamenti"
                   />

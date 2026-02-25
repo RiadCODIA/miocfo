@@ -7,6 +7,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend, ReferenceLine } from "recharts";
+import DashedBar from "@/components/charts/DashedBar";
 import { cn } from "@/lib/utils";
 import { useBudgets, useBudgetComparison, useBudgetVarianceSummary, useUpdateBudget } from "@/hooks/useBudgets";
 import { supabase } from "@/integrations/supabase/client";
@@ -185,15 +186,15 @@ export function PrevisioniTab() {
             <p className="text-sm text-muted-foreground text-center pt-20">Nessun dato di confronto disponibile</p>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={comparison}>
-                <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis dataKey="mese" stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} />
-                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={12} tickLine={false} axisLine={false} tickFormatter={(v) => `€${(v / 1000).toFixed(0)}k`} />
-                <Tooltip contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))", borderRadius: "8px", color: "hsl(var(--foreground))" }} formatter={(v: number) => formatCurrency(v)} />
-                <Legend />
+              <BarChart data={comparison} barSize={11} barGap={4}>
+                <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 47% 22%)" vertical={false} />
+                <XAxis dataKey="mese" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
+                <YAxis stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} tickFormatter={(v) => `€${(v / 1000).toFixed(0)}k`} />
+                <Tooltip contentStyle={{ backgroundColor: "hsl(222 47% 14%)", border: "1px solid hsl(222 47% 22%)", borderRadius: "8px", color: "hsl(210 40% 98%)" }} formatter={(v: number) => formatCurrency(v)} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
                 <ReferenceLine y={0} stroke="hsl(var(--border))" />
-                <Bar dataKey="consuntivo" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Consuntivo" />
-                <Bar dataKey="previsionale" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} name="Cashflow Netto Previsto" opacity={0.5} />
+                <Bar dataKey="consuntivo" fill="hsl(142, 71%, 45%)" radius={[2, 2, 0, 0]} name="Consuntivo" />
+                <Bar dataKey="previsionale" name="Cashflow Netto Previsto" shape={<DashedBar color="hsl(142, 71%, 45%)" />} />
               </BarChart>
             </ResponsiveContainer>
           )}

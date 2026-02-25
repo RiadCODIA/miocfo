@@ -9,6 +9,7 @@ import {
   Legend,
   ReferenceLine,
 } from "recharts";
+import DashedBar from "@/components/charts/DashedBar";
 
 interface BudgetComparisonChartProps {
   data: {
@@ -53,18 +54,20 @@ export function BudgetComparisonChart({ data }: BudgetComparisonChartProps) {
 
       <div className="h-[250px]">
         <ResponsiveContainer width="100%" height="100%">
-          <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+          <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barSize={11} barGap={4}>
+            <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 47% 22%)" vertical={false} />
             <XAxis
               dataKey="mese"
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-              axisLine={{ stroke: "hsl(var(--border))" }}
+              stroke="hsl(var(--muted-foreground))"
+              fontSize={11}
               tickLine={false}
+              axisLine={false}
             />
             <YAxis
-              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 12 }}
-              axisLine={{ stroke: "hsl(var(--border))" }}
+              stroke="hsl(var(--muted-foreground))"
+              fontSize={11}
               tickLine={false}
+              axisLine={false}
               tickFormatter={(value) => {
                 const abs = Math.abs(value);
                 if (abs >= 1000000) return `€${(value / 1000000).toFixed(1)}M`;
@@ -74,9 +77,10 @@ export function BudgetComparisonChart({ data }: BudgetComparisonChartProps) {
             />
             <Tooltip
               contentStyle={{
-                backgroundColor: "hsl(var(--card))",
-                border: "1px solid hsl(var(--border))",
+                backgroundColor: "hsl(222 47% 14%)",
+                border: "1px solid hsl(222 47% 22%)",
                 borderRadius: "8px",
+                color: "hsl(210 40% 98%)",
               }}
               formatter={(value: number, name: string) => [
                 formatCurrency(value),
@@ -85,10 +89,11 @@ export function BudgetComparisonChart({ data }: BudgetComparisonChartProps) {
             />
             <Legend
               formatter={(value) => (value === "consuntivo" ? "Consuntivo" : "Budget")}
+              wrapperStyle={{ fontSize: 11 }}
             />
             <ReferenceLine y={0} stroke="hsl(var(--border))" />
-            <Bar dataKey="consuntivo" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="previsionale" fill="hsl(var(--muted-foreground))" radius={[4, 4, 0, 0]} opacity={0.5} />
+            <Bar dataKey="consuntivo" fill="hsl(142, 71%, 45%)" radius={[2, 2, 0, 0]} />
+            <Bar dataKey="previsionale" name="previsionale" shape={<DashedBar color="hsl(142, 71%, 45%)" />} />
           </BarChart>
         </ResponsiveContainer>
       </div>
