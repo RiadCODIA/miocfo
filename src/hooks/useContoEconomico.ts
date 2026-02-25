@@ -44,13 +44,13 @@ export function useContoEconomico(year: number) {
       const [emesseRes, ricevuteRes, expenseCatsRes, revenueCatsRes] = await Promise.all([
         supabase
           .from("invoices")
-          .select("amount, vat_amount, invoice_date, category_id")
+          .select("amount, total_amount, vat_amount, invoice_date, category_id")
           .in("invoice_type", ["emessa", "active", "income"])
           .gte("invoice_date", startDate)
           .lte("invoice_date", endDate),
         supabase
           .from("invoices")
-          .select("amount, vat_amount, invoice_date, category_id")
+          .select("amount, total_amount, vat_amount, invoice_date, category_id")
           .in("invoice_type", ["ricevuta", "passive", "expense"])
           .gte("invoice_date", startDate)
           .lte("invoice_date", endDate),
@@ -96,7 +96,8 @@ export function useContoEconomico(year: number) {
       emesseRes.data?.forEach((inv) => {
         if (!inv.invoice_date) return;
         const month = new Date(inv.invoice_date).getMonth();
-        ivaRicavi[month] = (ivaRicavi[month] || 0) + Number(inv.vat_amount || 0);
+        const vatRicavi = Number(inv.vat_amount || 0) || (Number(inv.total_amount || 0) - Number(inv.amount || 0));
+        ivaRicavi[month] = (ivaRicavi[month] || 0) + vatRicavi;
 
         let targetId: string;
         if (inv.category_id && revenueCatById[inv.category_id]) {
@@ -130,7 +131,8 @@ export function useContoEconomico(year: number) {
       ricevuteRes.data?.forEach((inv) => {
         if (!inv.invoice_date) return;
         const month = new Date(inv.invoice_date).getMonth();
-        ivaCosti[month] = (ivaCosti[month] || 0) + Number(inv.vat_amount || 0);
+        const vatCosti = Number(inv.vat_amount || 0) || (Number(inv.total_amount || 0) - Number(inv.amount || 0));
+        ivaCosti[month] = (ivaCosti[month] || 0) + vatCosti;
 
         if (!inv.category_id || !expenseCatById[inv.category_id]) {
           costiNonCategorizzati[month] = (costiNonCategorizzati[month] || 0) + Number(inv.amount);
