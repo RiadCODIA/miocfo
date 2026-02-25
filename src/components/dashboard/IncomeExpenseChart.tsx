@@ -25,18 +25,18 @@ export function IncomeExpenseChart() {
           </div>
         ) : (
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={4}>
-              <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 47% 18%)" vertical={false} />
+            <ComposedChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 0 }} barCategoryGap="30%" barGap={4} barSize={11}>
+              <CartesianGrid strokeDasharray="3 3" stroke="hsl(222 47% 22%)" vertical={false} />
               <XAxis
                 dataKey="mese"
-                stroke="hsl(215 20% 45%)"
-                fontSize={12}
+                stroke="hsl(var(--muted-foreground))"
+                fontSize={11}
                 tickLine={false}
                 axisLine={false}
               />
               <YAxis
-                stroke="hsl(215 20% 45%)"
-                fontSize={12}
+                stroke="hsl(var(--muted-foreground))"
+                fontSize={11}
                 tickLine={false}
                 axisLine={false}
                 tickFormatter={(value) => {
@@ -63,8 +63,8 @@ export function IncomeExpenseChart() {
                   <span className="text-muted-foreground text-sm capitalize">{value}</span>
                 )}
               />
-              <Bar dataKey="incassi" name="Incassi" fill="hsl(160 64% 52%)" radius={[3, 3, 0, 0]} barSize={14} />
-              <Bar dataKey="pagamenti" name="Pagamenti" fill="hsl(0 70% 68%)" radius={[3, 3, 0, 0]} barSize={14} />
+              <Bar dataKey="incassi" name="Incassi" fill="hsl(142, 71%, 45%)" radius={[2, 2, 0, 0]} />
+              <Bar dataKey="pagamenti" name="Pagamenti" fill="hsl(0, 84%, 60%)" radius={[2, 2, 0, 0]} />
               <Line
                 type="monotone"
                 dataKey="saldo"
