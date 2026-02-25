@@ -53,7 +53,7 @@ function invoiceToDeadline(inv: {
   payment_status: string | null;
   source: string | null;
 }): Deadline {
-  const isExpense = inv.invoice_type === "expense";
+  const isExpense = inv.invoice_type === "expense" || inv.invoice_type === "ricevuta";
   const today = format(new Date(), "yyyy-MM-dd");
 
   // Core logic: no due_date = already paid/collected
@@ -146,7 +146,7 @@ export function useDeadlines(filters?: DeadlineFilters) {
 
       // Apply type filter to invoices too
       if (filters?.type && filters.type !== "all") {
-        invQuery = invQuery.eq("invoice_type", filters.type === "incasso" ? "income" : "expense");
+        invQuery = invQuery.in("invoice_type", filters.type === "incasso" ? ["income", "emessa"] : ["expense", "ricevuta"]);
       }
       if (filters?.fromDate) {
         invQuery = invQuery.or(`due_date.gte.${filters.fromDate},and(due_date.is.null,invoice_date.gte.${filters.fromDate})`);
@@ -229,7 +229,7 @@ export function useDeadlinesSummary() {
           
           const isOverdue = inv.due_date < today;
           entries.push({
-            type: inv.invoice_type === "expense" ? "pagamento" : "incasso",
+            type: (inv.invoice_type === "expense" || inv.invoice_type === "ricevuta") ? "pagamento" : "incasso",
             amount: Number(inv.total_amount),
             isOverdue,
           });
@@ -299,7 +299,7 @@ export function useAccrualForecast() {
         if (!entry) return; // Outside our range
 
         const amount = Math.abs(Number(inv.total_amount));
-        const isIncome = inv.invoice_type === "income";
+        const isIncome = inv.invoice_type === "income" || inv.invoice_type === "emessa";
         
         // Determine if paid/collected
         const isPaidOrCollected = !inv.due_date || inv.payment_status === "paid" || inv.payment_status === "matched";
