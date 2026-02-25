@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { Brain, Loader2, AlertCircle, Users } from "lucide-react";
+import { Brain, Loader2, AlertCircle, Users, TrendingUp, TrendingDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -109,7 +109,18 @@ export function ContoEconomicoTab() {
         body: payload,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("AI invoke error:", error);
+        throw error;
+      }
+      
+      console.log("AI analysis result:", result);
+      
+      if (!result) {
+        toast.error("Errore AI", { description: "Nessuna risposta dall'analisi AI" });
+        return;
+      }
+      
       if (result?.error) {
         toast.error("Errore AI", { description: result.error });
         return;
@@ -219,10 +230,14 @@ export function ContoEconomicoTab() {
     </tr>
   );
 
-  const renderSectionHeader = (label: string) => (
+  const renderSectionHeader = (label: string, type?: "revenue" | "cost") => (
     <tr className="bg-muted/40">
       <td colSpan={14} className="py-1.5 px-3 text-[11px] font-bold text-muted-foreground uppercase tracking-wide sticky left-0">
-        {label}
+        <span className="flex items-center gap-1.5">
+          {type === "revenue" && <TrendingUp className="h-3.5 w-3.5 text-success" />}
+          {type === "cost" && <TrendingDown className="h-3.5 w-3.5 text-destructive" />}
+          {label}
+        </span>
       </td>
     </tr>
   );
@@ -337,12 +352,12 @@ export function ContoEconomicoTab() {
             </thead>
             <tbody>
               {/* ── RICAVI ── */}
-              {renderSectionHeader("Ricavi")}
+              {renderSectionHeader("Ricavi", "revenue")}
               {renderRow("Ricavi da fatture emesse", ricavi)}
               {renderSubtotal("TOTALE RICAVI", ricavi)}
 
               {/* ── COSTI VARIABILI ── */}
-              {renderSectionHeader("Costi Variabili")}
+              {renderSectionHeader("Costi Variabili", "cost")}
               {variableCategories.map((cat) =>
                 renderRow(cat.name, costiVariabili[cat.id] ?? {}, { indent: true })
               )}
@@ -356,7 +371,7 @@ export function ContoEconomicoTab() {
               {renderPercentRow("% sul fatturato", margineContribuzione)}
 
               {/* ── COSTI FISSI ── */}
-              {renderSectionHeader("Costi Fissi")}
+              {renderSectionHeader("Costi Fissi", "cost")}
               {fixedCategories.map((cat) =>
                 renderRow(cat.name, costiFissi[cat.id] ?? {}, { indent: true })
               )}

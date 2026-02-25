@@ -484,6 +484,7 @@ export type Database = {
       cost_categories: {
         Row: {
           cashflow_type: Database["public"]["Enums"]["cashflow_type"]
+          category_type: string
           cost_type: Database["public"]["Enums"]["cost_type"]
           created_at: string
           id: string
@@ -495,6 +496,7 @@ export type Database = {
         }
         Insert: {
           cashflow_type?: Database["public"]["Enums"]["cashflow_type"]
+          category_type?: string
           cost_type?: Database["public"]["Enums"]["cost_type"]
           created_at?: string
           id?: string
@@ -506,6 +508,7 @@ export type Database = {
         }
         Update: {
           cashflow_type?: Database["public"]["Enums"]["cashflow_type"]
+          category_type?: string
           cost_type?: Database["public"]["Enums"]["cost_type"]
           created_at?: string
           id?: string

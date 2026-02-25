@@ -49,8 +49,9 @@ export function useContoEconomico(year: number) {
           .lte("invoice_date", endDate),
         supabase
           .from("cost_categories")
-          .select("id, name, cost_type")
+          .select("id, name, cost_type, category_type")
           .eq("is_active", true)
+          .eq("category_type", "expense")
           .order("sort_order"),
       ]);
 
