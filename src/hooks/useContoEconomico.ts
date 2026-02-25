@@ -11,20 +11,27 @@ export interface CostCategory {
   id: string;
   name: string;
   cost_type: "fixed" | "variable";
+  category_type: string;
 }
 
 export interface ContoEconomicoData {
-  ricavi: MonthlyData;
-  costiVariabili: Record<string, MonthlyData>;
-  costiFissi: Record<string, MonthlyData>;
+  /** Revenue broken down by category_id */
+  ricaviPerCategoria: Record<string, MonthlyData>;
+  /** Total revenue across all categories */
+  ricaviTotali: MonthlyData;
+  /** Revenue categories ordered */
+  revenueCategories: CostCategory[];
+  /** Flat cost breakdown by category_id */
+  costi: Record<string, MonthlyData>;
+  /** Uncategorized costs */
   costiNonCategorizzati: MonthlyData;
-  costiVariabiliTotali: MonthlyData;
-  costiFissiTotali: MonthlyData;
+  /** Total costs (all categories + uncategorized) */
   costiTotali: MonthlyData;
+  /** Ordered expense categories */
+  orderedCostCategories: CostCategory[];
+  /** IVA */
   ivaRicavi: MonthlyData;
   ivaCosti: MonthlyData;
-  variableCategories: CostCategory[];
-  fixedCategories: CostCategory[];
 }
 
 export function useContoEconomico(year: number) {
@@ -34,10 +41,10 @@ export function useContoEconomico(year: number) {
       const startDate = `${year}-01-01`;
       const endDate = `${year}-12-31`;
 
-      const [emesseRes, ricevuteRes, categoriesRes] = await Promise.all([
+      const [emesseRes, ricevuteRes, expenseCatsRes, revenueCatsRes] = await Promise.all([
         supabase
           .from("invoices")
-          .select("amount, vat_amount, invoice_date")
+          .select("amount, vat_amount, invoice_date, category_id")
           .in("invoice_type", ["emessa", "active", "income"])
           .gte("invoice_date", startDate)
           .lte("invoice_date", endDate),
@@ -53,102 +60,107 @@ export function useContoEconomico(year: number) {
           .eq("is_active", true)
           .eq("category_type", "expense")
           .order("sort_order"),
+        supabase
+          .from("cost_categories")
+          .select("id, name, cost_type, category_type")
+          .eq("is_active", true)
+          .eq("category_type", "revenue")
+          .order("sort_order"),
       ]);
 
       if (emesseRes.error) throw emesseRes.error;
       if (ricevuteRes.error) throw ricevuteRes.error;
 
-      const allCategories: CostCategory[] = (categoriesRes.data || []).map((c) => ({
-        id: c.id,
-        name: c.name,
-        cost_type: c.cost_type as "fixed" | "variable",
+      const orderedCostCategories: CostCategory[] = (expenseCatsRes.data || []).map((c) => ({
+        id: c.id, name: c.name, cost_type: c.cost_type as "fixed" | "variable", category_type: c.category_type,
       }));
 
-      const variableCategories = allCategories.filter((c) => c.cost_type === "variable");
-      const fixedCategories = allCategories.filter((c) => c.cost_type === "fixed");
+      const revenueCategories: CostCategory[] = (revenueCatsRes.data || []).map((c) => ({
+        id: c.id, name: c.name, cost_type: c.cost_type as "fixed" | "variable", category_type: c.category_type,
+      }));
 
-      // Map category id → category object
-      const categoryById: Record<string, CostCategory> = {};
-      allCategories.forEach((c) => { categoryById[c.id] = c; });
+      const expenseCatById: Record<string, CostCategory> = {};
+      orderedCostCategories.forEach((c) => { expenseCatById[c.id] = c; });
 
-      // Aggregate ricavi by month (issued invoices)
-      const ricavi: MonthlyData = {};
+      const revenueCatById: Record<string, CostCategory> = {};
+      revenueCategories.forEach((c) => { revenueCatById[c.id] = c; });
+
+      // Find "Altri ricavi e proventi" for uncategorized revenue fallback
+      const altriRicaviCat = revenueCategories.find((c) => c.name.toLowerCase().includes("altri ricavi"));
+
+      // Revenue breakdown by category
+      const ricaviPerCategoria: Record<string, MonthlyData> = {};
       const ivaRicavi: MonthlyData = {};
+      revenueCategories.forEach((c) => { ricaviPerCategoria[c.id] = {}; });
+
       emesseRes.data?.forEach((inv) => {
         if (!inv.invoice_date) return;
         const month = new Date(inv.invoice_date).getMonth();
-        ricavi[month] = (ricavi[month] || 0) + Number(inv.amount);
         ivaRicavi[month] = (ivaRicavi[month] || 0) + Number(inv.vat_amount || 0);
+
+        let targetId: string;
+        if (inv.category_id && revenueCatById[inv.category_id]) {
+          targetId = inv.category_id;
+        } else if (altriRicaviCat) {
+          targetId = altriRicaviCat.id;
+        } else if (revenueCategories.length > 0) {
+          targetId = revenueCategories[revenueCategories.length - 1].id;
+        } else {
+          return; // no revenue categories at all
+        }
+
+        if (!ricaviPerCategoria[targetId]) ricaviPerCategoria[targetId] = {};
+        ricaviPerCategoria[targetId][month] = (ricaviPerCategoria[targetId][month] || 0) + Number(inv.amount);
       });
 
-      // Initialize cost buckets
-      const costiVariabili: Record<string, MonthlyData> = {};
-      const costiFissi: Record<string, MonthlyData> = {};
+      // Total revenue
+      const ricaviTotali: MonthlyData = {};
+      for (let m = 0; m < 12; m++) {
+        let total = 0;
+        revenueCategories.forEach((c) => { total += ricaviPerCategoria[c.id]?.[m] || 0; });
+        if (total > 0) ricaviTotali[m] = total;
+      }
+
+      // Costs: flat
+      const costi: Record<string, MonthlyData> = {};
       const costiNonCategorizzati: MonthlyData = {};
       const ivaCosti: MonthlyData = {};
+      orderedCostCategories.forEach((c) => { costi[c.id] = {}; });
 
-      variableCategories.forEach((c) => { costiVariabili[c.id] = {}; });
-      fixedCategories.forEach((c) => { costiFissi[c.id] = {}; });
-
-      // Aggregate received invoices
       ricevuteRes.data?.forEach((inv) => {
         if (!inv.invoice_date) return;
         const month = new Date(inv.invoice_date).getMonth();
         ivaCosti[month] = (ivaCosti[month] || 0) + Number(inv.vat_amount || 0);
 
-        if (!inv.category_id) {
-          // No category assigned at all → non categorizzato
+        if (!inv.category_id || !expenseCatById[inv.category_id]) {
           costiNonCategorizzati[month] = (costiNonCategorizzati[month] || 0) + Number(inv.amount);
           return;
         }
 
-        const cat = categoryById[inv.category_id];
-        if (!cat) {
-          // Category ID exists but not in active list → non categorizzato
-          costiNonCategorizzati[month] = (costiNonCategorizzati[month] || 0) + Number(inv.amount);
-          return;
-        }
-
-        if (cat.cost_type === "variable") {
-          if (!costiVariabili[cat.id]) costiVariabili[cat.id] = {};
-          costiVariabili[cat.id][month] = (costiVariabili[cat.id][month] || 0) + Number(inv.amount);
-        } else {
-          if (!costiFissi[cat.id]) costiFissi[cat.id] = {};
-          costiFissi[cat.id][month] = (costiFissi[cat.id][month] || 0) + Number(inv.amount);
-        }
+        const catId = inv.category_id;
+        if (!costi[catId]) costi[catId] = {};
+        costi[catId][month] = (costi[catId][month] || 0) + Number(inv.amount);
       });
 
-      // Compute totals
-      const costiVariabiliTotali: MonthlyData = {};
-      const costiFissiTotali: MonthlyData = {};
+      // Total costs
       const costiTotali: MonthlyData = {};
-
       for (let m = 0; m < 12; m++) {
-        let varTotal = 0;
-        variableCategories.forEach((c) => { varTotal += costiVariabili[c.id]?.[m] || 0; });
-        varTotal += costiNonCategorizzati[m] || 0; // non-cat goes to variable for now
-        if (varTotal > 0) costiVariabiliTotali[m] = varTotal;
-
-        let fixTotal = 0;
-        fixedCategories.forEach((c) => { fixTotal += costiFissi[c.id]?.[m] || 0; });
-        if (fixTotal > 0) costiFissiTotali[m] = fixTotal;
-
-        const total = varTotal + fixTotal;
+        let total = 0;
+        orderedCostCategories.forEach((c) => { total += costi[c.id]?.[m] || 0; });
+        total += costiNonCategorizzati[m] || 0;
         if (total > 0) costiTotali[m] = total;
       }
 
       return {
-        ricavi,
-        costiVariabili,
-        costiFissi,
+        ricaviPerCategoria,
+        ricaviTotali,
+        revenueCategories,
+        costi,
         costiNonCategorizzati,
-        costiVariabiliTotali,
-        costiFissiTotali,
         costiTotali,
+        orderedCostCategories,
         ivaRicavi,
         ivaCosti,
-        variableCategories,
-        fixedCategories,
       };
     },
   });
