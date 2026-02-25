@@ -118,11 +118,11 @@ export default function Fatture() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('cost_categories')
-        .select('id, name')
-        .eq('is_active', true)
-        .order('sort_order');
-      if (error) throw error;
-      return (data || []) as DbCategory[];
+      .select('id, name, category_type')
+      .eq('is_active', true)
+      .order('sort_order');
+    if (error) throw error;
+    return (data || []) as Array<{ id: string; name: string; category_type?: string }>;
     },
   });
 
