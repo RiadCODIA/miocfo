@@ -1,44 +1,49 @@
 
 
-## Fix: Data Not Appearing Without Refresh (Stale Cache After Auth/HMR)
+## Fix: Profile Name Not Updating in TopBar After Settings Save
 
 ### Root Cause
 
-When the app does a hot-module reload (HMR) after code changes, or when navigating between pages:
+The greeting in `TopBar.tsx` reads `profile?.first_name` from `AuthContext`. But `AuthContext` fetches the profile via a direct Supabase call and stores it in React state (`useState`). When the user saves their name in Settings, `useUpdateProfile` only invalidates the React Query cache key `["profile"]` — which nothing listens to. The `AuthContext` state is never refreshed.
 
-1. The `QueryClient` persists in memory with its 2-minute `staleTime` cache
-2. During HMR, the auth session briefly becomes unavailable while `AuthProvider` re-initializes
-3. React Query fires data fetches **before** the auth session is fully restored
-4. Supabase RLS returns **empty results** (no auth = no data)
-5. These empty results get cached with a 2-minute `staleTime`
-6. When auth restores moments later, React Query does NOT refetch because the cached data isn't "stale" yet
-7. Result: user sees empty pages until a full browser refresh clears the cache
+Result: the old `displayName` (email prefix fallback) persists until a full page refresh triggers `fetchProfile` again.
 
 ### Fix
 
 **File: `src/contexts/AuthContext.tsx`**
 
-Import `useQueryClient` from `@tanstack/react-query` and invalidate all cached queries whenever the auth state changes (login, logout, session restore). This ensures all data-fetching queries immediately re-run with the correct session token.
+1. Expose `refreshProfile` in the context value — a function that re-calls `fetchProfile` for the current user:
 
 ```typescript
-import { useQueryClient } from "@tanstack/react-query";
+// Add to the context interface:
+refreshProfile: () => Promise<void>;
 
-// Inside AuthProvider:
-const queryClient = useQueryClient();
+// In AuthProvider:
+const refreshProfile = async () => {
+  if (user) {
+    await fetchProfile(user.id);
+  }
+};
 
-// In onAuthStateChange callback, after setting user/session:
-queryClient.invalidateQueries();
-
-// In getSession().then(), after setting user/session:
-queryClient.invalidateQueries();
+// Add to the Provider value:
+refreshProfile,
 ```
 
-This single change forces all queries across the platform (transactions, invoices, dashboard KPIs, etc.) to refetch whenever auth state changes, eliminating stale empty caches.
+**File: `src/hooks/useProfile.ts`**
 
-### Why This Fixes the Whole Platform
+2. Call `refreshProfile()` in `onSuccess` of `useUpdateProfile` so the AuthContext state updates immediately:
 
-- `invalidateQueries()` with no arguments invalidates ALL cached queries
-- The realtime sync (`useRealtimeSync`) already handles data changes from the server side
-- This addition covers the client-side auth lifecycle (login, logout, HMR, tab focus with expired session)
-- No per-hook changes needed -- one fix in AuthContext propagates everywhere
+```typescript
+const { user, refreshProfile } = useAuth();
+
+onSuccess: () => {
+  queryClient.invalidateQueries({ queryKey: ["profile"] });
+  refreshProfile();
+},
+```
+
+### Summary
+- Adds a `refreshProfile` function to `AuthContext` that re-fetches the profile from Supabase
+- Calls it after a successful profile update in Settings
+- The TopBar greeting and any other component reading `profile` from AuthContext will update instantly without a page refresh
 
