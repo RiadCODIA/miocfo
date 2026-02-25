@@ -1,49 +1,57 @@
 
 
-## Fix: Profile Name Not Updating in TopBar After Settings Save
+## Fix: Enable Revenue Category Selection for Issued Invoices (Emessa)
 
-### Root Cause
+### Problem
+The invoice table currently hides the category dropdown for "emessa" (issued) invoices (line 226 of `InvoiceTable.tsx`: `normalizedType !== 'emessa'`). This means users cannot categorize their revenue invoices. The Income Statement (Conto Economico) already supports revenue categories ("Ricavi delle vendite", "Ricavi delle prestazioni", "Altri ricavi e proventi") but invoices cannot be assigned to them from the Fatture page.
 
-The greeting in `TopBar.tsx` reads `profile?.first_name` from `AuthContext`. But `AuthContext` fetches the profile via a direct Supabase call and stores it in React state (`useState`). When the user saves their name in Settings, `useUpdateProfile` only invalidates the React Query cache key `["profile"]` — which nothing listens to. The `AuthContext` state is never refreshed.
+### Current State
+- Database has 3 revenue categories: Ricavi delle vendite, Ricavi delle prestazioni, Altri ricavi e proventi
+- The Conto Economico hook already falls back uncategorized emessa invoices to "Altri ricavi e proventi"
+- The Fatture page fetches ALL categories without distinguishing revenue vs expense
+- The InvoiceTable completely hides the dropdown for emessa invoices
 
-Result: the old `displayName` (email prefix fallback) persists until a full page refresh triggers `fetchProfile` again.
+### Plan
 
-### Fix
+**File: `src/pages/Fatture.tsx`** -- Split the category query into two: one for expense, one for revenue categories, and pass both to the table with `category_type` info.
 
-**File: `src/contexts/AuthContext.tsx`**
+- Modify the `cost-categories-for-invoices` query to include `category_type` in the SELECT
+- Pass the full category list (with type) to `InvoiceTable`
 
-1. Expose `refreshProfile` in the context value — a function that re-calls `fetchProfile` for the current user:
+**File: `src/components/fatture/InvoiceTable.tsx`** -- Enable the category dropdown for all invoice types, filtering options by type.
 
+- Update the `CostCategory` interface to include `category_type`
+- Remove the `normalizedType !== 'emessa'` guard on line 226
+- Filter displayed categories: show only `category_type === 'revenue'` for emessa invoices, only `category_type === 'expense'` for ricevuta/autofattura
+
+### Technical Details
+
+**InvoiceTable.tsx changes:**
 ```typescript
-// Add to the context interface:
-refreshProfile: () => Promise<void>;
+// Updated interface
+export interface CostCategory {
+  id: string;
+  name: string;
+  category_type?: string;
+}
 
-// In AuthProvider:
-const refreshProfile = async () => {
-  if (user) {
-    await fetchProfile(user.id);
-  }
-};
-
-// Add to the Provider value:
-refreshProfile,
+// In the category cell, replace the emessa guard with type-based filtering:
+const filteredCategories = categories.filter(cat => 
+  normalizedType === 'emessa' 
+    ? cat.category_type === 'revenue' 
+    : cat.category_type === 'expense'
+);
+// Show dropdown if filteredCategories.length > 0
 ```
 
-**File: `src/hooks/useProfile.ts`**
-
-2. Call `refreshProfile()` in `onSuccess` of `useUpdateProfile` so the AuthContext state updates immediately:
-
+**Fatture.tsx changes:**
 ```typescript
-const { user, refreshProfile } = useAuth();
-
-onSuccess: () => {
-  queryClient.invalidateQueries({ queryKey: ["profile"] });
-  refreshProfile();
-},
+// Add category_type to the query SELECT
+.select('id, name, category_type')
 ```
 
-### Summary
-- Adds a `refreshProfile` function to `AuthContext` that re-fetches the profile from Supabase
-- Calls it after a successful profile update in Settings
-- The TopBar greeting and any other component reading `profile` from AuthContext will update instantly without a page refresh
+This ensures:
+- Emessa invoices show: Ricavi delle vendite, Ricavi delle prestazioni, Altri ricavi e proventi
+- Ricevuta/Autofattura invoices show: only expense categories
+- Uncategorized emessa invoices continue to fall back to "Altri ricavi e proventi" in the Conto Economico
 
