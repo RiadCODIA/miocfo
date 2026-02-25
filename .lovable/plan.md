@@ -1,34 +1,43 @@
 
 
-## Plan: Dashboard Improvements
+## Problem: Accrual Forecast Chart Not Reflecting Invoice Data
 
-### Issue 1: Add "MoM" label with info tooltip to the Liquidity Hero Card
+### Root Cause
 
-**Current state**: The percentage badge next to the total balance just shows e.g. `+2.5%` with no explanation of what it refers to.
+The `useAccrualForecast` function in `src/hooks/useDeadlines.ts` (line 302) checks:
 
-**Changes to `src/components/dashboard/LiquidityHeroCard.tsx`**:
-- Add a short "MoM" label next to the percentage badge
-- Add an info icon (`Info` from lucide-react) that, on hover, shows a tooltip explaining: *"Rappresenta la variazione percentuale del saldo complessivo dei conti correnti rispetto al mese precedente. Nello specifico: Liquidità Totale = Somma dei saldi di tutti i conti correnti."*
-- Use the existing `Tooltip` / `TooltipTrigger` / `TooltipContent` / `TooltipProvider` components from `src/components/ui/tooltip.tsx`
+```typescript
+const isIncome = inv.invoice_type === "income";
+```
 
-The result will look like: `+2.5% MoM (i)` where the `(i)` icon triggers the tooltip on hover.
+But the actual `invoice_type` values in the database are **`emessa`** (issued = income, 4 records) and **`ricevuta`** (received = expense, 14 records). None match `"income"` or `"expense"`, so **every single invoice is treated as a cost**, and the chart displays incorrectly.
 
-### Issue 2: "Conti Collegati" showing 0 instead of 3
+The same issue exists in `invoiceToDeadline` (line 56) which checks `inv.invoice_type === "expense"` -- this also doesn't match `ricevuta`.
 
-**Root cause**: The query in `Dashboard.tsx` uses a static `queryKey: ["connected-accounts-count"]` that does not depend on the authenticated user. When the app loads (or the query runs before auth is fully resolved), it caches the result as `0`. Subsequent navigations reuse the stale cache.
+### Fix
 
-**Changes to `src/pages/Dashboard.tsx`**:
-- Add the authenticated user's ID to the query key so it re-fetches when the user changes: `queryKey: ["connected-accounts-count", user?.id]`
-- Import and use `useAuth()` from `AuthContext` to get the current user
-- Add `enabled: !!user` to prevent the query from running before authentication is ready
+Update all three functions in `src/hooks/useDeadlines.ts` that reference `invoice_type` to handle both naming conventions:
 
-This ensures the query only runs when the user is authenticated, and re-runs if the user changes.
+1. **`invoiceToDeadline`** (line 56): Change `inv.invoice_type === "expense"` to also match `"ricevuta"`
+2. **`useDeadlinesSummary`** (line 221-236): Same fix for the summary calculation
+3. **`useAccrualForecast`** (line 302): Change `inv.invoice_type === "income"` to also match `"emessa"`
+
+The consistent pattern will be:
+
+```typescript
+const isIncome = inv.invoice_type === "income" || inv.invoice_type === "emessa";
+const isExpense = inv.invoice_type === "expense" || inv.invoice_type === "ricevuta";
+```
+
+This is applied in 3 places within the same file. No new files, no database changes, no new dependencies.
 
 ### Technical Details
 
-**Files modified**:
-1. `src/components/dashboard/LiquidityHeroCard.tsx` — Add "MoM" text + Info icon with Tooltip
-2. `src/pages/Dashboard.tsx` — Fix connected accounts query to depend on auth state
+**File**: `src/hooks/useDeadlines.ts`
 
-**No new files or dependencies needed.** Uses existing Tooltip UI components and AuthContext.
+- **Line 56** (`invoiceToDeadline`): `const isExpense = inv.invoice_type === "expense";` → add `|| inv.invoice_type === "ricevuta"`
+- **Line 222** (`useDeadlinesSummary`): The `.forEach` that determines type uses `inv.invoice_type === "expense"` → add `|| inv.invoice_type === "ricevuta"`  
+- **Line 302** (`useAccrualForecast`): `const isIncome = inv.invoice_type === "income";` → add `|| inv.invoice_type === "emessa"`
+
+Also update the type filter in invoice queries (lines 149 and similar) to send the correct filter values matching the actual DB data, or remove server-side type filtering and do it client-side.
 
