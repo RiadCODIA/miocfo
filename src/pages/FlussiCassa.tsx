@@ -10,17 +10,17 @@ import {
 } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
-import { useCashFlowData, useCashFlowKPIs, useCashFlowVsBudget, useCashFlowComposition } from "@/hooks/useCashFlowData";
+import { useCashFlowData, useCashFlowKPIs, useCashFlowComposition } from "@/hooks/useCashFlowData";
 import { useLiquidityForecast } from "@/hooks/useDeadlines";
 import { CashFlowChart } from "@/components/flussi-cassa/CashFlowChart";
-import { BudgetComparisonChart } from "@/components/flussi-cassa/BudgetComparisonChart";
+
 import { LiquidityProjection } from "@/components/flussi-cassa/LiquidityProjection";
 import { CashFlowCompositionChart } from "@/components/flussi-cassa/CashFlowCompositionChart";
 
 export default function FlussiCassa() {
   const { data: monthlyData = [], isLoading: isLoadingData } = useCashFlowData();
   const { data: kpis, isLoading: isLoadingKPIs } = useCashFlowKPIs();
-  const { data: budgetComparison = [], isLoading: isLoadingBudget } = useCashFlowVsBudget();
+  
   const { data: liquidityForecast, isLoading: isLoadingForecast } = useLiquidityForecast();
   const { data: compositionData = [], isLoading: isLoadingComposition } = useCashFlowComposition();
 
@@ -95,17 +95,11 @@ export default function FlussiCassa() {
       </div>
 
       {/* Charts Row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div>
         {isLoadingData ? (
-          <>
-            <Skeleton className="h-[380px]" />
-            <Skeleton className="h-[380px]" />
-          </>
+          <Skeleton className="h-[380px]" />
         ) : (
-          <>
-            <CashFlowChart data={chartData} />
-            <BudgetComparisonChart data={budgetComparison} />
-          </>
+          <CashFlowChart data={chartData} />
         )}
       </div>
 
