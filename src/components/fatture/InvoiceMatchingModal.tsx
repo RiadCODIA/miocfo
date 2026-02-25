@@ -34,6 +34,7 @@ interface DbCategory {
   id: string;
   name: string;
   cashflow_type: string;
+  category_type: string;
 }
 
 interface InvoiceMatchingModalProps {
@@ -66,7 +67,7 @@ export function InvoiceMatchingModal({
     const fetchCategories = async () => {
       const { data } = await supabase
         .from('cost_categories')
-        .select('id, name, cashflow_type')
+        .select('id, name, cashflow_type, category_type')
         .eq('is_active', true)
         .order('sort_order');
       
@@ -249,17 +250,22 @@ export function InvoiceMatchingModal({
             Categoria {isRevenue ? "(Ricavo)" : "(Costo)"}
           </Label>
           <Select value={selectedCategory || ""} onValueChange={setSelectedCategory}>
-            <SelectTrigger>
-              <SelectValue placeholder="Seleziona categoria..." />
+            <SelectTrigger className={cn(!selectedCategory && "border-destructive/50")}>
+              <SelectValue placeholder="Seleziona categoria... (obbligatorio)" />
             </SelectTrigger>
             <SelectContent>
-              {allCategories.map((cat) => (
-                <SelectItem key={cat.id} value={cat.id}>
-                  {cat.name}
-                </SelectItem>
-              ))}
+              {allCategories
+                .filter((cat) => isRevenue ? cat.category_type === "revenue" : cat.category_type === "expense")
+                .map((cat) => (
+                  <SelectItem key={cat.id} value={cat.id}>
+                    {cat.name}
+                  </SelectItem>
+                ))}
             </SelectContent>
           </Select>
+          {!selectedCategory && (
+            <p className="text-xs text-destructive">Seleziona una categoria per procedere</p>
+          )}
         </div>
 
         {/* Matching Arrow */}
@@ -337,7 +343,7 @@ export function InvoiceMatchingModal({
           <Button variant="outline" onClick={() => onOpenChange(false)}>
             Annulla
           </Button>
-          <Button onClick={handleMatch} disabled={!selectedTransaction}>
+          <Button onClick={handleMatch} disabled={!selectedTransaction || !selectedCategory}>
             <CheckCircle2 className="h-4 w-4 mr-2" />
             Conferma abbinamento
           </Button>
