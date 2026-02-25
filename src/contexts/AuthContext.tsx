@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
+import { useQueryClient } from "@tanstack/react-query";
 
 interface Profile {
   id: string;
@@ -106,6 +107,7 @@ const isDemoEmail = (email: string | undefined): boolean => {
 };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient();
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -165,6 +167,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setSession(session);
         setUser(session?.user ?? null);
         
+        // Invalidate all React Query caches so data refetches with new auth
+        queryClient.invalidateQueries();
+        
         // Defer profile and role fetch with setTimeout to avoid deadlock
         if (session?.user) {
           setTimeout(() => {
@@ -186,6 +191,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
+      
+      // Invalidate all React Query caches on session restore
+      queryClient.invalidateQueries();
       
       if (session?.user) {
         fetchProfile(session.user.id);
