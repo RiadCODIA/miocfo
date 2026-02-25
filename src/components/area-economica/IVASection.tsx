@@ -44,19 +44,13 @@ export function IVASection({ year, ivaRicavi, ivaCosti }: IVASectionProps) {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left py-2 px-3 text-muted-foreground font-medium">Ricavi</th>
-              <th className="text-left py-2 px-3 text-muted-foreground font-medium">Costi</th>
-              <th className="text-left py-2 px-3 text-muted-foreground font-medium">Differenza</th>
-              <th className="text-left py-2 px-3 text-muted-foreground font-medium">A credito</th>
-              <th className="text-left py-2 px-3 text-muted-foreground font-medium">A debito</th>
+              <th className="text-left py-2 px-3 text-muted-foreground font-medium">IVA a credito</th>
+              <th className="text-left py-2 px-3 text-muted-foreground font-medium">IVA a debito</th>
               <th className="text-left py-2 px-3 text-muted-foreground font-medium">IVA netta</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className="py-2 px-3 font-medium">{fmt(totalIvaRicavi)}</td>
-              <td className="py-2 px-3 font-medium">{fmt(totalIvaCosti)}</td>
-              <td className="py-2 px-3 font-medium">{fmt(differenza)}</td>
               <td className="py-2 px-3 font-medium text-success">{fmt(aCredito)}</td>
               <td className="py-2 px-3 font-medium text-destructive">{fmt(aDebito)}</td>
               <td className="py-2 px-3 font-bold">={fmt(ivaNetta)}</td>
