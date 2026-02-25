@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ArrowDownLeft, ArrowUpRight, AlertTriangle, Plus, Info } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Plus, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
@@ -8,6 +8,7 @@ import { DeadlineModal } from "@/components/scadenzario/DeadlineModal";
 import { DeadlineFilters } from "@/components/scadenzario/DeadlineFilters";
 import { DeadlineList } from "@/components/scadenzario/DeadlineList";
 import { LiquidityForecastChart } from "@/components/scadenzario/LiquidityForecastChart";
+import { OverdueTable } from "@/components/scadenzario/OverdueTable";
 
 export default function Scadenzario() {
   const [filters, setFilters] = useState<FilterType>({ status: "all", type: "all" });
@@ -67,7 +68,7 @@ export default function Scadenzario() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div className="glass rounded-xl p-5">
           <div className="flex items-center gap-2 mb-2">
             <ArrowDownLeft className="h-5 w-5 text-success" />
@@ -96,20 +97,24 @@ export default function Scadenzario() {
             </>
           )}
         </div>
-        <div className="glass rounded-xl p-5">
-          <div className="flex items-center gap-2 mb-2">
-            <AlertTriangle className="h-5 w-5 text-warning" />
-            <p className="text-sm text-muted-foreground">Scadenze Scadute</p>
-          </div>
-          {loadingSummary ? (
-            <Skeleton className="h-8 w-32" />
-          ) : (
-            <>
-              <p className="text-2xl font-bold text-warning">{formatCurrency(summary?.overdueAmount || 0)}</p>
-              <p className="text-xs text-muted-foreground mt-1">{summary?.overdueCount || 0} scadenze in ritardo</p>
-            </>
-          )}
-        </div>
+      </div>
+
+      {/* Overdue Tables */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <OverdueTable
+          title="Incassi Scaduti"
+          entries={summary?.overdueIncassi || []}
+          type="incasso"
+          emptyMessage="Nessun incasso scaduto"
+          isLoading={loadingSummary}
+        />
+        <OverdueTable
+          title="Pagamenti Scaduti"
+          entries={summary?.overduePagamenti || []}
+          type="pagamento"
+          emptyMessage="Nessun pagamento scaduto"
+          isLoading={loadingSummary}
+        />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
