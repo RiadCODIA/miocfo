@@ -27,6 +27,7 @@ interface CostCategory {
   name: string;
   cost_type: string;
   cashflow_type: string;
+  category_type: string;
 }
 
 interface Transaction {
@@ -77,7 +78,7 @@ export function CategoryModal({
   const fetchCategories = async () => {
     const { data, error } = await supabase
       .from("cost_categories")
-      .select("id, name, cost_type, cashflow_type")
+      .select("id, name, cost_type, cashflow_type, category_type")
       .eq("is_active", true)
       .order("name");
 
@@ -140,10 +141,8 @@ export function CategoryModal({
   
   // Filter categories: income transactions see all, expense transactions see only expense categories
   const filteredCategories = categories.filter((cat) => {
-    if (isIncome) return true; // income can pick any category
-    // For expenses, exclude revenue-type categories
-    return cat.cashflow_type !== "operational" || cat.cost_type !== "variable" 
-      ? true : true; // show all for now, but filter out revenue-like names
+    if (isIncome) return cat.category_type === "revenue";
+    return cat.category_type === "expense";
   });
 
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
@@ -186,12 +185,7 @@ export function CategoryModal({
               <SelectContent>
                 {filteredCategories.map((cat) => (
                   <SelectItem key={cat.id} value={cat.id}>
-                    <div className="flex items-center gap-2">
-                      {cat.name}
-                      <span className="text-xs text-muted-foreground">
-                        ({cat.cost_type === "fixed" ? "Fisso" : "Variabile"})
-                      </span>
-                    </div>
+                    {cat.name}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -215,8 +209,7 @@ export function CategoryModal({
           {/* Preview */}
           {selectedCategory && (
             <div className="text-sm text-muted-foreground bg-muted/30 rounded p-2">
-              <span className="font-medium">Tipo:</span> {selectedCategory.cost_type} •{" "}
-              <span className="font-medium">Flusso:</span> {selectedCategory.cashflow_type}
+              Categoria selezionata: <span className="font-medium">{selectedCategory.name}</span>
             </div>
           )}
         </div>
