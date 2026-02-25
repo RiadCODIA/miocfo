@@ -21,6 +21,7 @@ import { Invoice } from "./InvoiceTable";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { ALLOWED_INVOICE_CATEGORIES } from "@/lib/invoice-categories";
 
 interface Transaction {
   id: string;
@@ -255,7 +256,10 @@ export function InvoiceMatchingModal({
             </SelectTrigger>
             <SelectContent>
               {allCategories
-                .filter((cat) => isRevenue ? cat.category_type === "revenue" : cat.category_type === "expense")
+                .filter((cat) =>
+                  (isRevenue ? cat.category_type === "revenue" : cat.category_type === "expense") &&
+                  ALLOWED_INVOICE_CATEGORIES.has(cat.name)
+                )
                 .map((cat) => (
                   <SelectItem key={cat.id} value={cat.id}>
                     {cat.name}

@@ -40,7 +40,7 @@ function sumMonthly(data: MonthlyData): number {
 
 /** Tooltip descriptions for specific rows */
 const ROW_TOOLTIPS: Record<string, string> = {
-  "Acquisti": "Comprende l'acquisto di materie prime, materiali di consumo, merci, semilavorati e prodotti simili",
+  "Acquisto materie prime": "Comprende l'acquisto di materie prime, materiali di consumo, merci, semilavorati e prodotti simili",
   "Energia e combustibili": "Comprende canoni di energia elettrica, gas e acqua",
   "MARGINE PRIMA DEGLI STIPENDI": "È il margine di profitto generato prima di pagare eventuali compensi e costi del personale",
   "EBITDA": "È il Margine Operativo Lordo (MOL) ossia il profitto generato dall'attività operativa e caratteristica, prima di considerare eventuali Ammortamenti, Accantonamenti, Svalutazioni, Interessi e Tasse",
