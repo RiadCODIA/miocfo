@@ -59,6 +59,7 @@ interface AuthContextType {
   signInAsDemo: () => Promise<{ error: Error | null }>;
   signInAsDemoAdmin: () => Promise<{ error: Error | null }>;
   signInAsDemoSuperAdmin: () => Promise<{ error: Error | null }>;
+  refreshProfile: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -253,6 +254,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return signIn(DEMO_ACCOUNTS.superAdmin.email, DEMO_ACCOUNTS.superAdmin.password);
   };
 
+  const refreshProfile = async () => {
+    if (user) {
+      await fetchProfile(user.id);
+    }
+  };
+
   return (
     <AuthContext.Provider
       value={{
@@ -270,6 +277,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         signInAsDemo,
         signInAsDemoAdmin,
         signInAsDemoSuperAdmin,
+        refreshProfile,
       }}
     >
       {children}
