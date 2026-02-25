@@ -1,7 +1,8 @@
-import { TrendingUp, TrendingDown, ChevronDown } from "lucide-react";
+import { TrendingUp, TrendingDown, ChevronDown, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
+import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
 
 interface LiquidityHeroCardProps {
   totalBalance: number;
@@ -38,8 +39,23 @@ export function LiquidityHeroCard({ totalBalance, change, isLoading }: Liquidity
               )}>
                 {isPositive && <TrendingUp className="h-3.5 w-3.5" />}
                 {isNegative && <TrendingDown className="h-3.5 w-3.5" />}
-                {isPositive && "+"}{change?.toFixed(1)}%
+              {isPositive && "+"}{change?.toFixed(1)}%
+              <span className="ml-0.5">MoM</span>
               </span>
+            )}
+            {change !== undefined && !isLoading && (
+              <TooltipProvider delayDuration={200}>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <button className="ml-1 text-muted-foreground hover:text-foreground transition-colors">
+                      <Info className="h-3.5 w-3.5" />
+                    </button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom" className="max-w-xs text-xs">
+                    Rappresenta la variazione percentuale del saldo complessivo dei conti correnti rispetto al mese precedente. Nello specifico: Liquidità Totale = Somma dei saldi di tutti i conti correnti.
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
             )}
           </div>
           <p className="text-xs text-muted-foreground mt-2">

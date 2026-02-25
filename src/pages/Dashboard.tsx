@@ -7,12 +7,15 @@ import { IncomeExpenseChart } from "@/components/dashboard/IncomeExpenseChart";
 import { useDashboardKPIs } from "@/hooks/useDashboardData";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAuth } from "@/contexts/AuthContext";
 
 export default function Dashboard() {
+  const { user } = useAuth();
   const { data: kpis, isLoading } = useDashboardKPIs();
 
   const { data: accountsCount } = useQuery({
-    queryKey: ["connected-accounts-count"],
+    queryKey: ["connected-accounts-count", user?.id],
+    enabled: !!user,
     queryFn: async () => {
       const { count, error } = await supabase
         .from("bank_accounts")
