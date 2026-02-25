@@ -1,40 +1,63 @@
 
 
-## Testing Results: Conto Economico Changes
+## Fix: Transaction Categorization Crash in CategoryModal
 
-I thoroughly tested the Conto Economico implementation by reviewing all code, querying the database, and navigating the UI. Here are my findings:
+### Root Cause
 
-### What Works Correctly
+The crash occurs in `CategoryModal.tsx` because of two issues:
 
-- **Table structure**: Revenue 3 lines (Ricavi delle vendite, Ricavi delle prestazioni, Altri ricavi e proventi) → TOTALE RICAVI → 16 expense categories in correct order → TOTALE COSTI → MARGINE PRIMA DEGLI STIPENDI → Personnel inputs → EBITDA
-- **Info tooltips**: Working on Acquisti, Energia e combustibili, MARGINE PRIMA DEGLI STIPENDI, and EBITDA
-- **AI Analysis**: Edge function returns valid data (confirmed from network logs - healthScore: 45, full analysis text)
-- **Revenue fallback**: Emessa invoices without a revenue category correctly fall back to "Altri ricavi e proventi"
-- **Category filtering in invoice matching modal**: Correctly filters by revenue vs expense based on invoice type
-- **Personnel manual inputs**: Working with localStorage persistence and employee pre-population
-- **IVA section**: Rendering correctly with data from the hook
+1. **Complex children inside `SelectItem`** (lines 188-195): A `<div>` wrapper with nested `<span>` is used inside `SelectItem`. When a value is selected, Radix Select's `SelectValue` tries to clone and render this content in the trigger area, passing refs through. This triggers the "Function components cannot be given refs" warning and can cause a crash, especially when React tries to reconcile the DOM.
 
-### Issues Found
+2. **Missing `category_type` filtering**: The modal loads ALL active categories (both revenue and expense) but doesn't filter them based on the transaction's direction. The `filteredCategories` logic at lines 142-147 is a no-op (always returns `true`).
 
-**1. "Spese bancarie" and "Oneri diversi" are deactivated**
-These categories were deactivated in the second migration, but you originally requested them to be available in both the CE and the invoice matching dropdown. They currently won't appear anywhere. Fix: re-activate them and add them to the CE cost list (sort_order 17 and 18, before "Altre spese" which moves to 19).
+### Fix
 
-**2. Five invoices reference deactivated categories**
-Three invoices point to "Affitto e utenze" (deactivated) and two point to "Viaggi e trasferte" (deactivated). These appear as "Non categorizzato" in the CE with the amber warning banner. This is correct behavior -- the user should go to Fatture and re-assign them to the appropriate active category. No code fix needed, just user action.
+**File: `src/components/transazioni/CategoryModal.tsx`**
 
-**3. Badge ref warning (cosmetic)**
-The `AIReportSection` component triggers a React console warning because `Badge` is a function component that doesn't support refs. Non-blocking but should be cleaned up.
+**Change 1** — Add `category_type` to the interface (line 25-30):
+```typescript
+interface CostCategory {
+  id: string;
+  name: string;
+  cost_type: string;
+  cashflow_type: string;
+  category_type: string;
+}
+```
 
----
+**Change 2** — Add `category_type` to the query (line 80):
+```typescript
+.select("id, name, cost_type, cashflow_type, category_type")
+```
 
-### Plan
+**Change 3** — Fix the `filteredCategories` filter (lines 142-147):
+```typescript
+const filteredCategories = categories.filter((cat) => {
+  if (isIncome) return cat.category_type === "revenue";
+  return cat.category_type === "expense";
+});
+```
 
-**Database change**: Re-activate "Spese bancarie" and "Oneri diversi", update their sort_order to fit after "Commissioni" and before "Altre spese":
-- Spese bancarie: sort_order = 16
-- Oneri diversi: sort_order = 17
-- Altre spese: sort_order = 18 (was 16)
+**Change 4** — Replace the `<div>` inside `SelectItem` with plain text to fix the ref crash (lines 187-196):
+```tsx
+{filteredCategories.map((cat) => (
+  <SelectItem key={cat.id} value={cat.id}>
+    {cat.name}
+  </SelectItem>
+))}
+```
 
-**Code fix**: Update the `Badge` component in `src/components/ui/badge.tsx` to use `React.forwardRef` to eliminate the console warning.
+**Change 5** — Remove the "Tipo/Flusso" preview section that references `cost_type` and `cashflow_type` (lines 216-220), since this is no longer meaningful after the flat layout restructuring:
+```tsx
+{selectedCategory && (
+  <div className="text-sm text-muted-foreground bg-muted/30 rounded p-2">
+    Categoria selezionata: <span className="font-medium">{selectedCategory.name}</span>
+  </div>
+)}
+```
 
-No other code changes needed -- the table structure, data flow, AI analysis, and tooltip logic are all working correctly.
+### Summary
+- Removes the `<div>` inside `SelectItem` that caused the ref crash
+- Adds proper filtering so income transactions only see revenue categories and expense transactions only see expense categories
+- Simplifies the preview section
 
