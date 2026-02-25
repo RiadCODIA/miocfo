@@ -1,72 +1,81 @@
 
 
-## Scadenzario: Split Overdue Card into Two Tables + Chart Reactivity
+## Standardize Bar Charts Across the Platform
 
-### Current State
-- A single summary card "Scadenze Scadute" shows combined overdue count/amount
-- The chart already differentiates solid (paid/collected) vs transparent (pending) bars
-- The chart uses `useAccrualForecast` which reads `payment_status` from invoices
+The reference image is the **BudgetPrevisioni** chart ("Ricavi e Costi — Effettivi vs Previsti"). Several other bar-based charts across the platform use inconsistent colors, bar sizes, and styling. This plan aligns all bar charts to the same "thin candle" aesthetic.
 
-### Changes
+### Reference Style (from BudgetPrevisioni)
+- Thin bars: `barSize={11}`, `barGap={4}`
+- Solid green `hsl(142, 71%, 45%)` for income/revenue actuals
+- Solid red `hsl(0, 84%, 60%)` for expense/cost actuals
+- Dashed transparent bars for expected/forecasted values (`fillOpacity={0.18}`, `strokeDasharray="6 3"`)
+- Grid: horizontal only (`vertical={false}`)
+- Axes: `tickLine={false}`, `axisLine={false}`, muted foreground color
+- Dark tooltip: `backgroundColor: "hsl(222 47% 14%)"`, rounded 8px
+- Legend: small text, bottom-aligned
+- Pink dashed line for net/saldo: `hsl(330 70% 60%)`, `strokeDasharray="6 4"`
 
-#### 1. Replace "Scadenze Scadute" summary card with two overdue tables
+### Charts That Need Updating (bar-based charts only)
 
-**File: `src/pages/Scadenzario.tsx`**
+Area charts (LiquidityChart, CashFlowChart), line charts (LiquidityProjection), and pie charts (CashFlowComposition) are excluded — they have a different purpose and visual language.
 
-Replace the third summary card (lines 99-112, "Scadenze Scadute") with two side-by-side cards below the summary row:
-- **"Incassi Scaduti"** — lists overdue deadlines of type `incasso` (green icon, shows each entry with amount and due date)
-- **"Pagamenti Scaduti"** — lists overdue deadlines of type `pagamento` (red icon, shows each entry with amount and due date)
+---
 
-Each card will be a compact table/list showing: description, due date, and amount. Include a "complete" action button on each row.
+#### 1. `src/components/dashboard/IncomeExpenseChart.tsx`
+Currently uses `barSize={14}`, green `hsl(160 64% 52%)`, red `hsl(0 70% 68%)`, grid stroke `hsl(222 47% 18%)`.
 
-#### 2. Update `useDeadlinesSummary` to return split overdue data
+Changes:
+- `barSize={14}` to `barSize={11}`
+- Green fill from `hsl(160 64% 52%)` to `hsl(142, 71%, 45%)`
+- Red fill from `hsl(0 70% 68%)` to `hsl(0, 84%, 60%)`
+- Grid stroke to `hsl(222 47% 22%)` for consistency
+- Axis stroke to `hsl(var(--muted-foreground))` pattern
 
-**File: `src/hooks/useDeadlines.ts`**
+#### 2. `src/components/scadenzario/LiquidityForecastChart.tsx`
+Currently uses stacked bars with hardcoded green `hsl(142 72% 40%)` and red `hsl(0 72% 51%)`, no `barSize` set.
 
-Extend the summary return to include:
-- `overdueIncassi`: array of overdue receipt entries (type, amount, title/description, dueDate, id, source, invoiceId)
-- `overduePagamenti`: array of overdue payment entries
+Changes:
+- Add `barSize={11}` and `barGap={4}` to `<BarChart>`
+- Green from `hsl(142 72% 40%)` to `hsl(142, 71%, 45%)`
+- Red from `hsl(0 72% 51%)` to `hsl(0, 84%, 60%)`
+- Transparent bars: ensure `fillOpacity={0.18}` (currently 0.3) and `strokeDasharray="6 3"` (currently "4 2") to match the DashedBar style
 
-This replaces the simple `overdueCount` / `overdueAmount` with structured lists.
+#### 3. `src/components/flussi-cassa/BudgetComparisonChart.tsx`
+Currently uses generic `hsl(var(--primary))` and `hsl(var(--muted-foreground))` fills, no `barSize`.
 
-#### 3. Create new component for overdue tables
+Changes:
+- Add `barSize={11}` and `barGap={4}` to `<BarChart>`
+- "Consuntivo" bar: fill `hsl(142, 71%, 45%)` (solid green for actual)
+- "Budget" bar: use `DashedBar` shape with green color (since budget is "expected")
+- Grid: add `vertical={false}`
+- Tooltip: dark style matching reference
+- Axis: use `stroke` instead of `tick.fill`, remove `axisLine`
 
-**File: `src/components/scadenzario/OverdueTable.tsx`** (new)
+#### 4. `src/components/area-economica/PrevisioniTab.tsx` (lines 188-197)
+Currently uses `hsl(var(--primary))` and `hsl(var(--muted-foreground))` with `opacity={0.5}`.
 
-A reusable component that renders a compact list of overdue deadlines with:
-- Title/description column
-- Due date column
-- Amount column (green for incassi, red for pagamenti)
-- Complete button (checkmark) that calls `useCompleteDeadline`
+Changes:
+- Add `barSize={11}` and `barGap={4}` to `<BarChart>`
+- "Consuntivo" bar: fill `hsl(142, 71%, 45%)`
+- "Previsionale" bar: use DashedBar shape with green dashed transparent style
+- Tooltip: dark background style
 
-Props: `title`, `entries`, `type` ("incasso" | "pagamento"), `emptyMessage`
+#### 5. `src/pages/KPIInterni.tsx` (lines 253-284) — Area chart
+This is an AreaChart, not a bar chart. It will be excluded from bar chart standardization but will get color alignment:
+- Income area stroke/fill: `hsl(142, 71%, 45%)` instead of `hsl(var(--chart-2))`
+- Expense area stroke/fill: `hsl(0, 84%, 60%)` instead of `hsl(var(--chart-1))`
 
-#### 4. Chart reactivity
+### Shared DashedBar Component
+Extract the `DashedBar` component from `BudgetPrevisioni.tsx` into a shared utility file `src/components/charts/DashedBar.tsx` so it can be reused by BudgetComparisonChart, PrevisioniTab, and LiquidityForecastChart without duplication.
 
-The chart (`LiquidityForecastChart` + `useAccrualForecast`) already reads `payment_status` from invoices and splits data into solid (paid) vs transparent (pending) bars. When a user completes a deadline via the list or the overdue tables, the `useCompleteDeadline` mutation already invalidates `accrual-forecast` queries, so the chart updates automatically.
+### Files to Create
+- `src/components/charts/DashedBar.tsx` — shared dashed bar shape component
 
-The existing bar colors (green solid for collected revenue, green transparent for pending revenue, red solid for paid costs, red transparent for pending costs) match the requested "thin candle" style with solid = completed and transparent = to be completed. No chart code changes needed.
-
-### Layout
-
-```text
-┌─────────────────┐ ┌─────────────────┐ 
-│ Incassi Previsti│ │Pagamenti Progr. │
-└─────────────────┘ └─────────────────┘
-
-┌─────────────────┐ ┌─────────────────┐
-│ Incassi Scaduti │ │Pagamenti Scaduti│
-│ (overdue table) │ │ (overdue table) │
-└─────────────────┘ └─────────────────┘
-
-┌─────────────────┐ ┌─────────────────┐
-│ Scadenze (list) │ │ Previsione per  │
-│                 │ │ Competenza      │
-└─────────────────┘ └─────────────────┘
-```
-
-### Files to modify
-- `src/hooks/useDeadlines.ts` — extend summary to return overdue entries split by type
-- `src/pages/Scadenzario.tsx` — replace third card with two overdue table cards
-- `src/components/scadenzario/OverdueTable.tsx` — new compact overdue list component
+### Files to Modify
+- `src/components/dashboard/IncomeExpenseChart.tsx` — bar size, colors
+- `src/components/scadenzario/LiquidityForecastChart.tsx` — bar size, colors, opacity, dash pattern
+- `src/components/flussi-cassa/BudgetComparisonChart.tsx` — colors, bar size, dashed bar for budget, tooltip
+- `src/components/area-economica/PrevisioniTab.tsx` — colors, bar size, dashed bar for previsionale
+- `src/pages/BudgetPrevisioni.tsx` — import shared DashedBar instead of local definition
+- `src/pages/KPIInterni.tsx` — color alignment for income/expense areas
 
