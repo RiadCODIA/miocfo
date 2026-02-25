@@ -187,7 +187,7 @@ export function useDeadlinesSummary() {
       // Fetch manual deadlines within date range
       const { data: deadlinesData, error: deadlinesError } = await supabase
         .from("deadlines")
-        .select("deadline_type, amount, status, invoice_id")
+        .select("id, title, description, deadline_type, amount, status, invoice_id, due_date")
         .in("status", ["pending", "overdue"])
         .gte("due_date", from)
         .lte("due_date", to);
@@ -199,13 +199,13 @@ export function useDeadlinesSummary() {
       // Fetch ALL invoices (we apply the new logic client-side)
       const { data: invoicesData, error: invoicesError } = await supabase
         .from("invoices")
-        .select("id, invoice_type, total_amount, due_date, invoice_date, payment_status");
+        .select("id, invoice_type, total_amount, due_date, invoice_date, payment_status, invoice_number, vendor_name, client_name, source");
       if (invoicesError) throw invoicesError;
 
       const today = format(new Date(), "yyyy-MM-dd");
 
       // Combine - only count PENDING/OVERDUE entries
-      type Entry = { type: "incasso" | "pagamento"; amount: number; isOverdue: boolean };
+      type Entry = { type: "incasso" | "pagamento"; amount: number; isOverdue: boolean; id: string; title: string; dueDate: string; source: "manual" | "invoice"; invoiceId: string | null };
       const entries: Entry[] = [];
 
       // Manual deadlines are already filtered to pending/overdue
@@ -214,6 +214,11 @@ export function useDeadlinesSummary() {
           type: d.deadline_type === "income" ? "incasso" : "pagamento",
           amount: Number(d.amount),
           isOverdue: d.status === "overdue",
+          id: d.id,
+          title: d.title || d.description || "Scadenza manuale",
+          dueDate: d.due_date,
+          source: "manual",
+          invoiceId: d.invoice_id,
         });
       });
 
@@ -227,11 +232,22 @@ export function useDeadlinesSummary() {
           const isPaid = inv.payment_status === "paid" || inv.payment_status === "matched";
           if (isPaid) return; // Already completed, skip
           
+          const isExpense = inv.invoice_type === "expense" || inv.invoice_type === "ricevuta";
           const isOverdue = inv.due_date < today;
+          const counterpart = isExpense ? (inv as any).vendor_name : (inv as any).client_name;
+          const label = (inv as any).invoice_number
+            ? `Fatt. ${(inv as any).invoice_number}${counterpart ? ` - ${counterpart}` : ""}`
+            : counterpart || (isExpense ? "Fattura passiva" : "Fattura attiva");
+          
           entries.push({
-            type: (inv.invoice_type === "expense" || inv.invoice_type === "ricevuta") ? "pagamento" : "incasso",
+            type: isExpense ? "pagamento" : "incasso",
             amount: Number(inv.total_amount),
             isOverdue,
+            id: `inv-${inv.id}`,
+            title: label,
+            dueDate: inv.due_date,
+            source: "invoice",
+            invoiceId: inv.id,
           });
         });
 
@@ -242,6 +258,9 @@ export function useDeadlinesSummary() {
       const overdueCount = entries.filter((e) => e.isOverdue).length;
       const overdueAmount = entries.filter((e) => e.isOverdue).reduce((s, e) => s + e.amount, 0);
 
+      const overdueIncassi = entries.filter((e) => e.isOverdue && e.type === "incasso");
+      const overduePagamenti = entries.filter((e) => e.isOverdue && e.type === "pagamento");
+
       return {
         incassiTotali,
         pagamentiTotali,
@@ -249,6 +268,8 @@ export function useDeadlinesSummary() {
         pagamentiCount,
         overdueCount,
         overdueAmount,
+        overdueIncassi,
+        overduePagamenti,
         saldoNetto: incassiTotali - pagamentiTotali,
       };
     },
