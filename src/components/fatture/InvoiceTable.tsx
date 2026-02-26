@@ -20,7 +20,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search, Eye, Link2, CheckCircle2, Clock, AlertTriangle, RefreshCw, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { ALLOWED_INVOICE_CATEGORIES } from "@/lib/invoice-categories";
+
 
 export interface Invoice {
   id: string;
@@ -227,10 +227,9 @@ export function InvoiceTable({
                     <TableCell>
                       {(() => {
                         const filteredCategories = categories.filter(cat =>
-                          (normalizedType === 'emessa'
+                          normalizedType === 'emessa'
                             ? cat.category_type === 'revenue'
-                            : cat.category_type === 'expense') &&
-                          ALLOWED_INVOICE_CATEGORIES.has(cat.name)
+                            : cat.category_type === 'expense'
                         );
                         // Ensure the currently assigned category is always visible
                         const currentCat = invoice.categoryId
