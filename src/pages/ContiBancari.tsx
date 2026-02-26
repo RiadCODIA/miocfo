@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Plus, Landmark, AlertCircle, RefreshCw, Upload, ArrowDownUp } from "lucide-react";
@@ -11,6 +12,7 @@ import { useBankingIntegration, BankAccount, useBankAccountsQuery } from "@/hook
 
 export default function ContiBancari() {
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const { syncAccount, removeAccount } = useBankingIntegration();
   const { data: accounts = [], isLoading, refetch } = useBankAccountsQuery();
@@ -97,8 +99,37 @@ export default function ContiBancari() {
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button variant="outline" onClick={() => refetch()} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+          <Button
+            variant="outline"
+            disabled={isLoading || isSyncing}
+            onClick={async () => {
+              setIsSyncing(true);
+              try {
+                const connectedAccounts = accounts.filter(a => a.status === 'active' && a.provider === 'enable_banking');
+                if (connectedAccounts.length === 0) {
+                  await refetch();
+                  toast.info("Nessun conto collegato da sincronizzare");
+                  return;
+                }
+                let totalSynced = 0;
+                for (const account of connectedAccounts) {
+                  try {
+                    const result = await syncAccount(account.id);
+                    totalSynced += result.transactions_synced || 0;
+                  } catch (err) {
+                    console.error(`Sync failed for ${account.name}:`, err);
+                  }
+                }
+                await refetch();
+                toast.success("Sincronizzazione completata", { description: `${totalSynced} transazioni sincronizzate da ${connectedAccounts.length} conti` });
+              } catch (err) {
+                toast.error("Errore durante la sincronizzazione");
+              } finally {
+                setIsSyncing(false);
+              }
+            }}
+          >
+            <RefreshCw className={`h-4 w-4 mr-2 ${(isLoading || isSyncing) ? "animate-spin" : ""}`} />
             Aggiorna
           </Button>
           <Button variant="outline" onClick={() => setIsUploadModalOpen(true)}>
