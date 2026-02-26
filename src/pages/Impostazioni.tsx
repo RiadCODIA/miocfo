@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { User, Mail, Lock, Globe, Bell, Save, Loader2, Droplets, Calendar, Wallet, TrendingUp } from "lucide-react";
+import { User, Mail, Lock, Bell, Save, Loader2, Droplets, Calendar, Wallet, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -195,50 +195,6 @@ export default function Impostazioni() {
               )}
               Salva Profilo
             </Button>
-          </div>
-        </div>
-      </div>
-
-      {/* Preferences Section */}
-      <div className="glass rounded-xl p-6">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2 rounded-lg bg-primary/10">
-            <Globe className="h-5 w-5 text-primary" />
-          </div>
-          <div>
-            <h3 className="font-semibold text-foreground">Preferenze</h3>
-            <p className="text-sm text-muted-foreground">Personalizza la tua esperienza</p>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="space-y-2">
-            <Label className="text-muted-foreground">Lingua</Label>
-            <Select defaultValue="it">
-              <SelectTrigger className="bg-secondary border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-card border-border">
-                <SelectItem value="it">Italiano</SelectItem>
-                <SelectItem value="en">English</SelectItem>
-                <SelectItem value="de">Deutsch</SelectItem>
-                <SelectItem value="fr">Français</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="text-muted-foreground">Formato Data</Label>
-            <Select defaultValue="dd/mm/yyyy">
-              <SelectTrigger className="bg-secondary border-border">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent className="bg-card border-border">
-                <SelectItem value="dd/mm/yyyy">DD/MM/YYYY</SelectItem>
-                <SelectItem value="mm/dd/yyyy">MM/DD/YYYY</SelectItem>
-                <SelectItem value="yyyy-mm-dd">YYYY-MM-DD</SelectItem>
-              </SelectContent>
-            </Select>
           </div>
         </div>
       </div>
