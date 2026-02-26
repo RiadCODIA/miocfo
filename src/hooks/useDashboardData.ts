@@ -197,13 +197,17 @@ export function useIncomeExpenseChart() {
       });
 
       const sortedKeys = Array.from(monthlyData.keys()).sort();
+      const spanYears = sortedKeys.length > 0 &&
+        sortedKeys[0].slice(0, 4) !== sortedKeys[sortedKeys.length - 1].slice(0, 4);
+
       return sortedKeys.map(key => {
-        const data = monthlyData.get(key)!;
+        const d = monthlyData.get(key)!;
+        const label = spanYears ? `${d.label} ${key.slice(2, 4)}` : d.label;
         return {
-          mese: data.label,
-          incassi: data.incassi,
-          pagamenti: data.pagamenti,
-          saldo: data.incassi - data.pagamenti,
+          mese: label,
+          incassi: d.incassi,
+          pagamenti: d.pagamenti,
+          saldo: d.incassi - d.pagamenti,
         };
       });
     },
