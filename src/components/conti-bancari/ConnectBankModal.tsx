@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Dialog,
   DialogContent,
@@ -51,6 +52,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   
   const { getASPSPs, startAuth, completeSession, isLoading } = useBankingIntegration();
   const { isDemoMode } = useAuth();
+  const queryClient = useQueryClient();
   
 
   // Generate redirect URI
@@ -73,6 +75,17 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
 
       const complete = async (retries = 3) => {
         try {
+          // Wait for session restoration after redirect
+          let session = (await supabase.auth.getSession()).data.session;
+          if (!session?.access_token) {
+            for (let i = 0; i < 5; i++) {
+              await new Promise(r => setTimeout(r, 1000));
+              session = (await supabase.auth.getSession()).data.session;
+              if (session?.access_token) break;
+            }
+          }
+          if (!session?.access_token) throw new Error("Sessione non disponibile dopo il redirect");
+
           const accounts = await completeSession(code);
           setConnectedAccounts(accounts);
           setStep("success");
@@ -87,7 +100,13 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
           setStep("error");
         }
       };
-      complete();
+
+      // Add 15s timeout
+      const timeout = setTimeout(() => {
+        setErrorMessage("Timeout: il collegamento sta impiegando troppo tempo. Riprova.");
+        setStep("error");
+      }, 15000);
+      complete().finally(() => clearTimeout(timeout));
     } else if (acubeDone && acubeFiscalId) {
       // A-Cube callback after bank authorization
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -148,7 +167,12 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
           setStep("error");
         }
       };
-      completeAcube();
+      // Add 15s timeout for A-Cube too
+      const timeout = setTimeout(() => {
+        setErrorMessage("Timeout: il collegamento sta impiegando troppo tempo. Riprova.");
+        setStep("error");
+      }, 15000);
+      completeAcube().finally(() => clearTimeout(timeout));
     }
   }, [completeSession, onOpenChange]);
 
@@ -195,6 +219,9 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
   };
 
   const handleComplete = () => {
+    queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["bank-transactions-count"] });
+    queryClient.invalidateQueries({ queryKey: ["bank-accounts-balances"] });
     onConnect(connectedAccounts);
     handleClose();
   };
