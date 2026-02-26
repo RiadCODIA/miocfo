@@ -1,17 +1,22 @@
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from "recharts";
 import { useIncomeExpenseChart } from "@/hooks/useDashboardData";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useDateRange } from "@/contexts/DateRangeContext";
+import { format } from "date-fns";
+import { it } from "date-fns/locale";
 
 export function IncomeExpenseChart() {
   const { data, isLoading } = useIncomeExpenseChart();
+  const { dateRange } = useDateRange();
 
   const hasData = data && data.length > 0 && data.some(d => d.incassi > 0 || d.pagamenti > 0);
+  const periodLabel = `${format(dateRange.from, "d MMM yyyy", { locale: it })} – ${format(dateRange.to, "d MMM yyyy", { locale: it })}`;
 
   return (
     <div className="glass rounded-xl p-5">
       <div className="mb-4">
         <h3 className="text-lg font-semibold text-foreground">Incassi vs Pagamenti</h3>
-        <p className="text-sm text-muted-foreground">Confronto mensile ultimi 6 mesi</p>
+        <p className="text-sm text-muted-foreground">Confronto mensile · {periodLabel}</p>
       </div>
       <div className="h-[280px]">
         {isLoading ? (
