@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { ArrowDownLeft, ArrowUpRight, Landmark } from "lucide-react";
 import { KPICard } from "@/components/dashboard/KPICard";
 import { LiquidityHeroCard } from "@/components/dashboard/LiquidityHeroCard";
@@ -11,7 +12,8 @@ import { useAuth } from "@/contexts/AuthContext";
 
 export default function Dashboard() {
   const { user } = useAuth();
-  const { data: kpis, isLoading } = useDashboardKPIs();
+  const [selectedAccountId, setSelectedAccountId] = useState<string | null>(null);
+  const { data: kpis, isLoading } = useDashboardKPIs(selectedAccountId);
 
   const { data: accountsCount } = useQuery({
     queryKey: ["connected-accounts-count", user?.id],
@@ -23,6 +25,20 @@ export default function Dashboard() {
         .eq("is_connected", true);
       if (error) throw error;
       return count || 0;
+    },
+  });
+
+  // Fetch accounts for the filter dropdown
+  const { data: accounts } = useQuery({
+    queryKey: ["bank-accounts-balances"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("bank_accounts")
+        .select("id, name, bank_name")
+        .eq("is_connected", true)
+        .order("bank_name");
+      if (error) throw error;
+      return data;
     },
   });
 
@@ -47,6 +63,9 @@ export default function Dashboard() {
         totalBalance={kpis?.totalBalance || 0}
         change={isLoading ? undefined : Number(balanceChange.toFixed(1))}
         isLoading={isLoading}
+        accounts={accounts || []}
+        selectedAccountId={selectedAccountId}
+        onAccountChange={setSelectedAccountId}
       />
 
       {/* 3 KPI Cards */}
