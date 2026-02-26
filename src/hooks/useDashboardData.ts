@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, eachDayOfInterval, parseISO, subDays, differenceInDays } from "date-fns";
+import { format, eachDayOfInterval, parseISO, subDays, differenceInDays, startOfMonth, addMonths } from "date-fns";
 import { it } from "date-fns/locale";
 import { useDateRange } from "@/contexts/DateRangeContext";
 
@@ -169,7 +169,16 @@ export function useIncomeExpenseChart() {
 
       if (error) throw error;
 
+      // Pre-fill all months in the date range so empty months still appear
       const monthlyData = new Map<string, { incassi: number; pagamenti: number; label: string }>();
+      let cursor = startOfMonth(dateRange.from);
+      const end = startOfMonth(dateRange.to);
+      while (cursor <= end) {
+        const key = format(cursor, "yyyy-MM");
+        const label = format(cursor, "MMM", { locale: it });
+        monthlyData.set(key, { incassi: 0, pagamenti: 0, label });
+        cursor = addMonths(cursor, 1);
+      }
 
       transactions?.forEach(tx => {
         const txDate = parseISO(tx.date);
