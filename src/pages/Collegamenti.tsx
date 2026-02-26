@@ -26,12 +26,25 @@ export default function Collegamenti() {
   const [isDownloading, setIsDownloading] = useState(false);
   const [deletingAccountId, setDeletingAccountId] = useState<string | null>(null);
 
-  const handleDeleteBankAccount = async (accountId: string) => {
+   const handleDeleteBankAccount = async (accountId: string) => {
     setDeletingAccountId(accountId);
     try {
-      // Delete related transactions first
-      await supabase.from("bank_transactions").delete().eq("bank_account_id", accountId);
-      // Delete the bank account
+      // First, get all transaction IDs for this account
+      const { data: txns } = await supabase
+        .from("bank_transactions")
+        .select("id")
+        .eq("bank_account_id", accountId);
+      
+      // Nullify any invoice references to these transactions (FK without CASCADE)
+      if (txns && txns.length > 0) {
+        const txnIds = txns.map(t => t.id);
+        await supabase
+          .from("invoices")
+          .update({ matched_transaction_id: null })
+          .in("matched_transaction_id", txnIds);
+      }
+
+      // Delete the bank account (transactions cascade automatically)
       const { error } = await supabase.from("bank_accounts").delete().eq("id", accountId);
       if (error) throw error;
       toast.success("Conto rimosso", { description: "Il conto bancario è stato eliminato con successo." });
