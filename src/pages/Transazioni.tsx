@@ -361,7 +361,36 @@ export default function Transazioni() {
           Analisi AI Spese
         </Button>
 
-        <Button variant="outline" className="gap-2 bg-card border-border hover:bg-secondary ml-auto">
+        <Button
+          variant="outline"
+          className="gap-2 bg-card border-border hover:bg-secondary ml-auto"
+          onClick={() => {
+            if (!transactions || transactions.length === 0) {
+              toast.error("Nessuna transazione da esportare");
+              return;
+            }
+            const headers = ["Data", "Descrizione", "Importo", "Conto", "Categoria"];
+            const rows = transactions.map((tx) => [
+              format(new Date(tx.date), "dd/MM/yyyy", { locale: it }),
+              (tx.description || tx.merchantName || "").replace(/"/g, '""'),
+              tx.amount.toFixed(2).replace(".", ","),
+              tx.bankName || "",
+              getCategoryName(tx.aiCategoryId) || "Non categorizzata",
+            ]);
+            const csvContent = [
+              headers.join(";"),
+              ...rows.map((r) => r.map((v) => `"${v}"`).join(";")),
+            ].join("\n");
+            const blob = new Blob(["\uFEFF" + csvContent], { type: "text/csv;charset=utf-8;" });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.href = url;
+            link.download = `transazioni_${format(new Date(), "yyyy-MM-dd")}.csv`;
+            link.click();
+            URL.revokeObjectURL(url);
+            toast.success("Transazioni esportate con successo");
+          }}
+        >
           <Download className="h-4 w-4" />
           Esporta
         </Button>
