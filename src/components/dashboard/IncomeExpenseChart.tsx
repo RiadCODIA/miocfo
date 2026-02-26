@@ -12,6 +12,10 @@ export function IncomeExpenseChart() {
   const hasData = data && data.length > 0 && data.some(d => d.incassi > 0 || d.pagamenti > 0);
   const periodLabel = `${format(dateRange.from, "d MMM yyyy", { locale: it })} – ${format(dateRange.to, "d MMM yyyy", { locale: it })}`;
 
+  // Adaptive tick interval: show ~12 labels max
+  const totalMonths = data?.length || 1;
+  const tickInterval = totalMonths <= 12 ? 0 : Math.ceil(totalMonths / 12) - 1;
+
   return (
     <div className="glass rounded-xl p-5">
       <div className="mb-4">
@@ -38,7 +42,7 @@ export function IncomeExpenseChart() {
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
-                interval={0}
+                interval={tickInterval}
               />
               <YAxis
                 stroke="hsl(var(--muted-foreground))"
