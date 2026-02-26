@@ -16,6 +16,58 @@ const SUPABASE_SERVICE_ROLE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
 const API_BASE = "https://api.enablebanking.com";
 
+// Resolve bank name from IBAN prefix when institution name is unavailable
+function resolveBankNameFromIban(iban: string | null): string | null {
+  if (!iban || iban.length < 8) return null;
+  const country = iban.slice(0, 2).toUpperCase();
+  const bankCode = iban.slice(4, 9);
+  
+  // Known IBAN bank code mappings
+  const ibanBankMap: Record<string, Record<string, string>> = {
+    IT: {
+      "03268": "Deutsche Bank Italia",
+      "03069": "Intesa Sanpaolo",
+      "01005": "Banca Nazionale del Lavoro",
+      "02008": "UniCredit",
+      "03002": "Banca Sella",
+      "05034": "Banca Popolare di Sondrio",
+      "03111": "Banca Mediolanum",
+      "36081": "Poste Italiane",
+      "05428": "Banca Popolare di Milano",
+      "03015": "FinecoBank",
+      "03226": "Crédit Agricole Italia",
+      "05018": "Banco BPM",
+      "03127": "ING Italia",
+      "03589": "N26",
+      "08000": "Banca Monte dei Paschi di Siena",
+      "06175": "BPER Banca",
+      "33604": "Hype",
+      "36019": "BancoPosta",
+    },
+    LT: {
+      "32500": "Revolut",
+      "33300": "Paysera",
+      "74000": "Viva Wallet",
+    },
+    DE: {
+      "10011": "N26",
+      "70020": "HypoVereinsbank",
+    },
+    FR: {
+      "20041": "La Banque Postale",
+    },
+    IE: {
+      "99036": "Revolut",
+    },
+  };
+  
+  const countryMap = ibanBankMap[country];
+  if (!countryMap) return null;
+  
+  // Try 5-digit bank code first, then 4-digit
+  return countryMap[bankCode] || countryMap[bankCode.slice(0, 4)] || null;
+}
+
 // Base64url encode
 function base64url(input: string | Uint8Array): string {
   let b64: string;
@@ -361,7 +413,8 @@ async function syncToDatabase(
     }
 
     const iban = acc.account_id?.iban || null;
-    const bankName = acc.institution?.name || "Banca";
+    const institutionName = acc.institution?.name || null;
+    const bankName = institutionName || resolveBankNameFromIban(iban) || "Banca sconosciuta";
 
     const accountData = {
       user_id: userId,
