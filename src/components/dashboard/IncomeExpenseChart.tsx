@@ -38,6 +38,7 @@ export function IncomeExpenseChart() {
                 fontSize={11}
                 tickLine={false}
                 axisLine={false}
+                interval={0}
               />
               <YAxis
                 stroke="hsl(var(--muted-foreground))"
