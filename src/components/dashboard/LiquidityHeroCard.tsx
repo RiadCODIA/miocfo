@@ -3,14 +3,36 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
 import { Tooltip, TooltipTrigger, TooltipContent, TooltipProvider } from "@/components/ui/tooltip";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+interface BankAccountOption {
+  id: string;
+  name: string;
+  bank_name: string;
+}
 
 interface LiquidityHeroCardProps {
   totalBalance: number;
   change?: number;
   isLoading?: boolean;
+  accounts?: BankAccountOption[];
+  selectedAccountId: string | null;
+  onAccountChange: (accountId: string | null) => void;
 }
 
-export function LiquidityHeroCard({ totalBalance, change, isLoading }: LiquidityHeroCardProps) {
+export function LiquidityHeroCard({
+  totalBalance,
+  change,
+  isLoading,
+  accounts,
+  selectedAccountId,
+  onAccountChange,
+}: LiquidityHeroCardProps) {
   const isPositive = change && change > 0;
   const isNegative = change && change < 0;
   const now = new Date();
@@ -18,6 +40,11 @@ export function LiquidityHeroCard({ totalBalance, change, isLoading }: Liquidity
   const formatCurrency = (value: number) => {
     return value.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
   };
+
+  const selectedAccount = accounts?.find((a) => a.id === selectedAccountId);
+  const buttonLabel = selectedAccount
+    ? `${selectedAccount.bank_name} — ${selectedAccount.name}`
+    : "Tutti i conti";
 
   return (
     <div className="rounded-2xl bg-card border border-border p-6 shadow-sm">
@@ -62,11 +89,32 @@ export function LiquidityHeroCard({ totalBalance, change, isLoading }: Liquidity
             Ultimo aggiornamento: {format(now, "dd MMMM yyyy, HH:mm", { locale: it })}
           </p>
         </div>
-        
-        <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm text-muted-foreground hover:bg-muted transition-colors">
-          Tutti i conti
-          <ChevronDown className="h-4 w-4" />
-        </button>
+
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 border border-border text-sm text-muted-foreground hover:bg-muted transition-colors max-w-[220px] truncate">
+              <span className="truncate">{buttonLabel}</span>
+              <ChevronDown className="h-4 w-4 shrink-0" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-card border-border min-w-[200px]">
+            <DropdownMenuItem
+              onClick={() => onAccountChange(null)}
+              className={cn(!selectedAccountId && "font-semibold")}
+            >
+              Tutti i conti
+            </DropdownMenuItem>
+            {accounts?.map((acc) => (
+              <DropdownMenuItem
+                key={acc.id}
+                onClick={() => onAccountChange(acc.id)}
+                className={cn(selectedAccountId === acc.id && "font-semibold")}
+              >
+                {acc.bank_name} — {acc.name}
+              </DropdownMenuItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
     </div>
   );
