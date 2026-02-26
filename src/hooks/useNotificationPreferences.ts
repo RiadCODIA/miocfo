@@ -7,19 +7,27 @@ export interface NotificationPreferences {
   userId: string;
   emailAlerts: boolean;
   pushAlerts: boolean;
+  criticalAlerts: boolean;
   budgetAlerts: boolean;
   deadlineReminders: boolean;
   weeklySummary: boolean;
+  notifyLiquidity: boolean;
+  notifyCashflow: boolean;
+  notificationEmail: string;
   createdAt: string;
   updatedAt: string;
 }
 
-const defaultPreferences = {
+const defaultPreferences: Omit<NotificationPreferences, "id" | "userId" | "createdAt" | "updatedAt"> = {
   emailAlerts: true,
   pushAlerts: true,
+  criticalAlerts: true,
   budgetAlerts: true,
   deadlineReminders: true,
   weeklySummary: false,
+  notifyLiquidity: true,
+  notifyCashflow: true,
+  notificationEmail: "",
 };
 
 export function useNotificationPreferences() {
@@ -39,7 +47,6 @@ export function useNotificationPreferences() {
       if (error) throw error;
 
       if (!data) {
-        // Return defaults if no record exists
         return {
           id: "",
           userId: user.id,
@@ -54,9 +61,13 @@ export function useNotificationPreferences() {
         userId: data.user_id,
         emailAlerts: data.email_alerts ?? true,
         pushAlerts: data.push_alerts ?? true,
+        criticalAlerts: (data as any).critical_alerts ?? true,
         budgetAlerts: data.budget_alerts ?? true,
         deadlineReminders: data.deadline_reminders ?? true,
         weeklySummary: data.weekly_summary ?? false,
+        notifyLiquidity: (data as any).notify_liquidity ?? true,
+        notifyCashflow: (data as any).notify_cashflow ?? true,
+        notificationEmail: (data as any).notification_email ?? "",
         createdAt: data.created_at,
         updatedAt: data.updated_at,
       };
@@ -73,17 +84,24 @@ export function useUpdateNotificationPreferences() {
     mutationFn: async (preferences: Partial<Omit<NotificationPreferences, "id" | "userId" | "createdAt" | "updatedAt">>) => {
       if (!user?.id) throw new Error("User not authenticated");
 
+      const payload: Record<string, any> = {
+        user_id: user.id,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (preferences.emailAlerts !== undefined) payload.email_alerts = preferences.emailAlerts;
+      if (preferences.pushAlerts !== undefined) payload.push_alerts = preferences.pushAlerts;
+      if (preferences.criticalAlerts !== undefined) payload.critical_alerts = preferences.criticalAlerts;
+      if (preferences.budgetAlerts !== undefined) payload.budget_alerts = preferences.budgetAlerts;
+      if (preferences.deadlineReminders !== undefined) payload.deadline_reminders = preferences.deadlineReminders;
+      if (preferences.weeklySummary !== undefined) payload.weekly_summary = preferences.weeklySummary;
+      if (preferences.notifyLiquidity !== undefined) payload.notify_liquidity = preferences.notifyLiquidity;
+      if (preferences.notifyCashflow !== undefined) payload.notify_cashflow = preferences.notifyCashflow;
+      if (preferences.notificationEmail !== undefined) payload.notification_email = preferences.notificationEmail || null;
+
       const { data, error } = await supabase
         .from("notification_preferences")
-        .upsert({
-          user_id: user.id,
-          email_alerts: preferences.emailAlerts,
-          push_alerts: preferences.pushAlerts,
-          budget_alerts: preferences.budgetAlerts,
-          deadline_reminders: preferences.deadlineReminders,
-          weekly_summary: preferences.weeklySummary,
-          updated_at: new Date().toISOString(),
-        }, { onConflict: "user_id" })
+        .upsert(payload as any, { onConflict: "user_id" })
         .select()
         .single();
 

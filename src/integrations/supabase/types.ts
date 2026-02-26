@@ -883,9 +883,13 @@ export type Database = {
         Row: {
           budget_alerts: boolean | null
           created_at: string
+          critical_alerts: boolean | null
           deadline_reminders: boolean | null
           email_alerts: boolean | null
           id: string
+          notification_email: string | null
+          notify_cashflow: boolean | null
+          notify_liquidity: boolean | null
           push_alerts: boolean | null
           updated_at: string
           user_id: string
@@ -894,9 +898,13 @@ export type Database = {
         Insert: {
           budget_alerts?: boolean | null
           created_at?: string
+          critical_alerts?: boolean | null
           deadline_reminders?: boolean | null
           email_alerts?: boolean | null
           id?: string
+          notification_email?: string | null
+          notify_cashflow?: boolean | null
+          notify_liquidity?: boolean | null
           push_alerts?: boolean | null
           updated_at?: string
           user_id: string
@@ -905,9 +913,13 @@ export type Database = {
         Update: {
           budget_alerts?: boolean | null
           created_at?: string
+          critical_alerts?: boolean | null
           deadline_reminders?: boolean | null
           email_alerts?: boolean | null
           id?: string
+          notification_email?: string | null
+          notify_cashflow?: boolean | null
+          notify_liquidity?: boolean | null
           push_alerts?: boolean | null
           updated_at?: string
           user_id?: string

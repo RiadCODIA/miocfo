@@ -3,13 +3,6 @@ import { User, Mail, Lock, Bell, Save, Loader2, Droplets, Calendar, Wallet, Tren
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -54,13 +47,13 @@ export default function Impostazioni() {
     if (preferences) {
       setEmailNotifiche(preferences.emailAlerts);
       setPushNotifiche(preferences.pushAlerts);
-      setAlertCritici(preferences.budgetAlerts);
+      setAlertCritici(preferences.criticalAlerts);
       setReportSettimanali(preferences.weeklySummary);
-      setNotifyLiquidity(preferences.budgetAlerts);
+      setNotifyLiquidity(preferences.notifyLiquidity);
       setNotifyDeadlines(preferences.deadlineReminders);
       setNotifyBudget(preferences.budgetAlerts);
-      setNotifyCashflow(preferences.budgetAlerts);
-      setNotificationEmail("");
+      setNotifyCashflow(preferences.notifyCashflow);
+      setNotificationEmail(preferences.notificationEmail);
     }
   }, [preferences]);
 
@@ -95,9 +88,13 @@ export default function Impostazioni() {
       await updatePreferences.mutateAsync({
         emailAlerts: emailNotifiche,
         pushAlerts: pushNotifiche,
+        criticalAlerts: alertCritici,
         budgetAlerts: notifyBudget,
         deadlineReminders: notifyDeadlines,
         weeklySummary: reportSettimanali,
+        notifyLiquidity,
+        notifyCashflow,
+        notificationEmail,
       });
       toast.success("Preferenze salvate con successo");
     } catch (error) {
