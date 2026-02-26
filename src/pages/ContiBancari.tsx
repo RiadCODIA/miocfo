@@ -53,7 +53,9 @@ export default function ContiBancari() {
 
   const handleConnect = (newAccounts: BankAccount[]) => {
     console.log("Connected accounts:", newAccounts);
-    refetch();
+    queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+    queryClient.invalidateQueries({ queryKey: ["bank-transactions-count"] });
+    queryClient.invalidateQueries({ queryKey: ["bank-accounts-balances"] });
   };
 
   const handleUploadSuccess = () => {
