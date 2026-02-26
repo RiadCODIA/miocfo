@@ -26,6 +26,9 @@ export const INVOICE_EXPENSE_CATEGORIES = [
   "Oneri bancari",
   "Canoni vari",
   "Altre spese",
+  "Affitto e utenze",
+  "Software",
+  "Servizi generali",
 ];
 
 /** Set for O(1) lookup */

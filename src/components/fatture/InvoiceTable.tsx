@@ -232,6 +232,13 @@ export function InvoiceTable({
                             : cat.category_type === 'expense') &&
                           ALLOWED_INVOICE_CATEGORIES.has(cat.name)
                         );
+                        // Ensure the currently assigned category is always visible
+                        const currentCat = invoice.categoryId
+                          ? categories.find(c => c.id === invoice.categoryId)
+                          : null;
+                        if (currentCat && !filteredCategories.find(c => c.id === currentCat.id)) {
+                          filteredCategories.unshift(currentCat);
+                        }
                         return onCategoryChange && filteredCategories.length > 0 ? (
                           <Select
                             value={invoice.categoryId || "none"}
