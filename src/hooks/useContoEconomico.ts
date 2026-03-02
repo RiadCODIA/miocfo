@@ -57,13 +57,11 @@ export function useContoEconomico(year: number) {
         supabase
           .from("cost_categories")
           .select("id, name, cost_type, category_type")
-          .eq("is_active", true)
           .eq("category_type", "expense")
           .order("sort_order"),
         supabase
           .from("cost_categories")
           .select("id, name, cost_type, category_type")
-          .eq("is_active", true)
           .eq("category_type", "revenue")
           .order("sort_order"),
       ]);
