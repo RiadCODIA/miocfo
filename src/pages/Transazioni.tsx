@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Filter, Download, Edit2, BarChart3, Loader2, X, Sparkles } from "lucide-react";
+import { Search, Filter, Download, Edit2, BarChart3, Loader2, X } from "lucide-react";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { format as formatDate } from "date-fns";
 import { Input } from "@/components/ui/input";
@@ -144,9 +144,6 @@ export default function Transazioni() {
     return cat?.name || null;
   };
 
-  const uncategorizedCount = transactions?.filter(
-    (tx) => !tx.aiCategoryId && !tx.categoryConfirmed
-  ).length || 0;
 
   const handleCategorizeOne = (transaction: any) => {
     setSelectedTransaction(transaction);
@@ -343,12 +340,6 @@ export default function Transazioni() {
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10 text-primary text-sm">
             <Loader2 className="h-4 w-4 animate-spin" />
             <span>Categorizzazione AI in corso...</span>
-          </div>
-        )}
-        {uncategorizedCount > 0 && !isCategorizing && (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-muted/50 text-muted-foreground text-sm">
-            <Sparkles className="h-4 w-4" />
-            <span>{uncategorizedCount} da categorizzare</span>
           </div>
         )}
 

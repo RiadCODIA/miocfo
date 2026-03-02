@@ -20,3 +20,9 @@ verify_jwt = false
 
 [functions.sync-bank-accounts]
 verify_jwt = false
+
+[functions.auto-categorize]
+verify_jwt = false
+
+[functions.categorize-transactions]
+verify_jwt = false
