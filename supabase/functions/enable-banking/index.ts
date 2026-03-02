@@ -459,7 +459,7 @@ async function syncToDatabase(
     // Sync transactions
     try {
       const endDate = new Date().toISOString().split("T")[0];
-      const startDate = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000)
+      const startDate = new Date(Date.now() - 1095 * 24 * 60 * 60 * 1000)
         .toISOString()
         .split("T")[0];
 
@@ -599,7 +599,7 @@ async function syncSingleAccount(
   let transactionsSynced = 0;
   try {
     const endDate = new Date().toISOString().split("T")[0];
-    const startDate = new Date(Date.now() - 730 * 24 * 60 * 60 * 1000)
+    const startDate = new Date(Date.now() - 1095 * 24 * 60 * 60 * 1000)
       .toISOString()
       .split("T")[0];
 

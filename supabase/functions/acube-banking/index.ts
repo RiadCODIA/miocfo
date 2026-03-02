@@ -401,7 +401,7 @@ async function syncAccountsToDatabase(
   // Sync transactions
   try {
     const endDate = new Date().toISOString().split("T")[0];
-    const startDate = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const startDate = new Date(Date.now() - 1095 * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
     
     const transactions = await getTransactions(fiscalId, startDate, endDate);
     console.log(`[A-Cube] Found ${transactions.length} transactions`);
