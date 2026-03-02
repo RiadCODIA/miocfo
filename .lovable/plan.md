@@ -1,45 +1,57 @@
 
-## Piano: Correggere il flusso dati Fatture → Conto Economico
 
-### Problema identificato
+## Piano: Aggiungere toggle "Saldato" nello Scadenzario
 
-Ho analizzato il codice e il database. Ci sono **2 problemi** che impediscono al Conto Economico di riflettere correttamente le categorie assegnate nelle Fatture:
-
-**1. Categorie inattive ignorate**: Il Conto Economico carica solo le categorie con `is_active = true`, ma alcune fatture sono categorizzate con categorie inattive (es. "Forniture", "Viaggi e trasferte"). Queste fatture finiscono in "Non categorizzato" anche se hanno una categoria assegnata.
-
-**2. Periodo non sincronizzato**: La pagina Fatture mostra tutte le fatture (2025 + 2026), ma il Conto Economico mostra solo l'anno selezionato (default: anno corrente). Se categorizzate fatture del 2025 ma guardate il P&L del 2026, non le vedete.
-
----
+### Situazione attuale
+Esiste gia un bottone verde (check) per segnare una scadenza come completata, ma:
+- E' poco visibile (piccola icona tra gli altri bottoni)
+- Non si puo tornare indietro (una volta completata, il check sparisce)
+- Le scadenze completate non hanno modo di essere riaperte
 
 ### Modifiche previste
 
-#### 1. Hook `useContoEconomico` - Includere categorie inattive con dati
+#### 1. DeadlineList - Aggiungere checkbox "Saldato" ben visibile
 
-**File: `src/hooks/useContoEconomico.ts`**
+**File: `src/components/scadenzario/DeadlineList.tsx`**
 
-Attualmente le query filtrano `is_active = true`. Cambio per caricare TUTTE le categorie (anche inattive), cosi le fatture categorizzate con categorie inattive appaiono nella riga corretta invece di finire in "Non categorizzato".
+- Sostituire il piccolo bottone check con una **Checkbox** visibile accanto a ogni scadenza
+- La checkbox sara checkata se `status === "completed"`, non checkata se `pending`/`overdue`
+- Cliccando la checkbox si togglare lo stato (saldato <-> non saldato)
+- Le scadenze completate mostreranno il testo barrato e opacita ridotta (gia presente)
 
-```text
-Prima:  .eq("is_active", true)
-Dopo:   (nessun filtro is_active, oppure OR con categorie usate)
-```
+#### 2. Hook useDeadlines - Aggiungere mutation "uncomplete"
 
-#### 2. Pagina Fatture - Aggiungere indicatore anno visibile
+**File: `src/hooks/useDeadlines.ts`**
 
-**File: `src/pages/Fatture.tsx`**
+- Aggiungere `useUncompleteDeadline` per riportare una scadenza da "completed" a "pending"
+- Per scadenze da fattura: aggiorna `payment_status` da "paid" a "pending" sulla tabella invoices
+- Per scadenze manuali: aggiorna `status` da "completed" a "pending"/"overdue" (in base alla data)
+- Invalidare tutte le query correlate (deadlines, summary, accrual-forecast, conto-economico)
 
-Nessuna modifica strutturale necessaria - il flusso `category_id` update + invalidazione `conto-economico` query e gia presente (riga 269). Il problema e solo di visibilita: l'utente non si rende conto che il P&L filtra per anno.
+#### 3. Aggiornamento dati a cascata
 
-#### 3. Conto Economico - Nota informativa sul periodo
-
-**File: `src/components/area-economica/ContoEconomicoTab.tsx`**
-
-Aggiungere un piccolo testo sotto il selettore anno che indica quante fatture ci sono per quell'anno, cosi l'utente capisce se sta guardando il periodo giusto.
-
----
+Quando si segna/desegna una scadenza:
+- I **summary cards** (Incassi Previsti / Pagamenti Programmati) si aggiornano
+- Le **tabelle scaduti** si aggiornano
+- Il **grafico Previsione per Competenza** si aggiorna (pieno vs semitrasparente)
+- Il **Conto Economico** riflette lo stato aggiornato delle fatture
 
 ### Dettagli tecnici
 
-**`src/hooks/useContoEconomico.ts`**: Rimuovere il filtro `.eq("is_active", true)` dalle query delle categorie expense e revenue. In questo modo tutte le categorie (attive e inattive) vengono caricate e le fatture con categorie inattive vengono correttamente assegnate alla riga giusta nel P&L.
+**Checkbox component**: Usa il componente `@/components/ui/checkbox` gia presente nel progetto.
 
-**Impatto**: Minimo - solo 2 file modificati, nessuna nuova tabella o edge function.
+**Toggle logic**:
+```text
+Se checkbox cliccata (da non-saldato a saldato):
+  - Scadenza manuale: deadlines.status = "completed"
+  - Scadenza da fattura: invoices.payment_status = "paid"
+
+Se checkbox de-cliccata (da saldato a non-saldato):
+  - Scadenza manuale: deadlines.status = "pending" o "overdue" (in base a due_date vs oggi)
+  - Scadenza da fattura: invoices.payment_status = "pending"
+```
+
+**Query invalidate** (gia presente in useCompleteDeadline, replicato in uncomplete):
+- `deadlines`, `deadlines-summary`, `accrual-forecast`, `conto-economico`
+
+**File modificati**: `src/components/scadenzario/DeadlineList.tsx`, `src/hooks/useDeadlines.ts`
