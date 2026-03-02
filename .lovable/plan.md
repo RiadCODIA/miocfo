@@ -1,57 +1,34 @@
 
 
-## Piano: Aggiungere toggle "Saldato" nello Scadenzario
+## Piano: Estendere lo storico bancario a 3 anni
 
-### Situazione attuale
-Esiste gia un bottone verde (check) per segnare una scadenza come completata, ma:
-- E' poco visibile (piccola icona tra gli altri bottoni)
-- Non si puo tornare indietro (una volta completata, il check sparisce)
-- Le scadenze completate non hanno modo di essere riaperte
+### Problema
+Attualmente, quando si collegano i conti bancari, il sistema scarica solo **2 anni** (730 giorni) di transazioni. Serve estendere a **3 anni** (1095 giorni).
 
 ### Modifiche previste
 
-#### 1. DeadlineList - Aggiungere checkbox "Saldato" ben visibile
+#### 1. Edge Function `enable-banking` - Due punti da aggiornare
 
-**File: `src/components/scadenzario/DeadlineList.tsx`**
+**File: `supabase/functions/enable-banking/index.ts`**
 
-- Sostituire il piccolo bottone check con una **Checkbox** visibile accanto a ogni scadenza
-- La checkbox sara checkata se `status === "completed"`, non checkata se `pending`/`overdue`
-- Cliccando la checkbox si togglare lo stato (saldato <-> non saldato)
-- Le scadenze completate mostreranno il testo barrato e opacita ridotta (gia presente)
+Ci sono 2 occorrenze di `730 * 24 * 60 * 60 * 1000` (righe 462 e 602) che vanno cambiate in `1095 * 24 * 60 * 60 * 1000`:
 
-#### 2. Hook useDeadlines - Aggiungere mutation "uncomplete"
+- **Riga 462**: Sync iniziale durante il collegamento del conto
+- **Riga 602**: Sync durante il refresh manuale ("Aggiorna")
 
-**File: `src/hooks/useDeadlines.ts`**
+#### 2. Edge Function `sync-bank-accounts` - Nessuna modifica
 
-- Aggiungere `useUncompleteDeadline` per riportare una scadenza da "completed" a "pending"
-- Per scadenze da fattura: aggiorna `payment_status` da "paid" a "pending" sulla tabella invoices
-- Per scadenze manuali: aggiorna `status` da "completed" a "pending"/"overdue" (in base alla data)
-- Invalidare tutte le query correlate (deadlines, summary, accrual-forecast, conto-economico)
-
-#### 3. Aggiornamento dati a cascata
-
-Quando si segna/desegna una scadenza:
-- I **summary cards** (Incassi Previsti / Pagamenti Programmati) si aggiornano
-- Le **tabelle scaduti** si aggiornano
-- Il **grafico Previsione per Competenza** si aggiorna (pieno vs semitrasparente)
-- Il **Conto Economico** riflette lo stato aggiornato delle fatture
+Questa function usa 30 giorni per l'auto-sync periodico, il che e corretto: la sincronizzazione automatica non deve riscaricare tutto lo storico ogni volta, ma solo le transazioni recenti. Lo storico completo di 3 anni viene scaricato solo al collegamento iniziale e al refresh manuale.
 
 ### Dettagli tecnici
 
-**Checkbox component**: Usa il componente `@/components/ui/checkbox` gia presente nel progetto.
-
-**Toggle logic**:
 ```text
-Se checkbox cliccata (da non-saldato a saldato):
-  - Scadenza manuale: deadlines.status = "completed"
-  - Scadenza da fattura: invoices.payment_status = "paid"
-
-Se checkbox de-cliccata (da saldato a non-saldato):
-  - Scadenza manuale: deadlines.status = "pending" o "overdue" (in base a due_date vs oggi)
-  - Scadenza da fattura: invoices.payment_status = "pending"
+Prima:  730 * 24 * 60 * 60 * 1000  (2 anni)
+Dopo:  1095 * 24 * 60 * 60 * 1000  (3 anni)
 ```
 
-**Query invalidate** (gia presente in useCompleteDeadline, replicato in uncomplete):
-- `deadlines`, `deadlines-summary`, `accrual-forecast`, `conto-economico`
+Entrambe le modifiche sono nel file `supabase/functions/enable-banking/index.ts`. Dopo la modifica, la function verra ri-deployata automaticamente.
 
-**File modificati**: `src/components/scadenzario/DeadlineList.tsx`, `src/hooks/useDeadlines.ts`
+**Nota**: La quantita di storico effettivamente disponibile dipende anche dalla banca collegata (alcune banche PSD2 forniscono massimo 18-24 mesi). Il sistema richiedera 3 anni ma ricevera quello che la banca rende disponibile.
+
+**File modificati**: `supabase/functions/enable-banking/index.ts`
