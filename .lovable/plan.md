@@ -1,46 +1,45 @@
 
-## Plan: Remove "da categorizzare" box and add automatic scheduled categorization
+## Piano: Correggere il flusso dati Fatture → Conto Economico
 
-### 1. Remove the "141 da categorizzare" UI element from Transazioni page
+### Problema identificato
 
-**File: `src/pages/Transazioni.tsx`**
-- Remove lines 348-353 (the `uncategorizedCount` badge/box)
-- Remove the `uncategorizedCount` variable computation (lines 147-149) since it's no longer needed
-- Remove the `Sparkles` import if unused elsewhere
+Ho analizzato il codice e il database. Ci sono **2 problemi** che impediscono al Conto Economico di riflettere correttamente le categorie assegnate nelle Fatture:
 
-### 2. Create a scheduled edge function for auto-categorization every 4 hours
+**1. Categorie inattive ignorate**: Il Conto Economico carica solo le categorie con `is_active = true`, ma alcune fatture sono categorizzate con categorie inattive (es. "Forniture", "Viaggi e trasferte"). Queste fatture finiscono in "Non categorizzato" anche se hanno una categoria assegnata.
 
-**File: `supabase/functions/auto-categorize/index.ts`**
-- Create a new edge function that:
-  - Runs as a cron job every 4 hours
-  - Calls the existing `categorize-transactions` logic in batch mode
-  - Processes all uncategorized transactions automatically
-  - Logs results for monitoring
+**2. Periodo non sincronizzato**: La pagina Fatture mostra tutte le fatture (2025 + 2026), ma il Conto Economico mostra solo l'anno selezionato (default: anno corrente). Se categorizzate fatture del 2025 ma guardate il P&L del 2026, non le vedete.
 
-The function will internally invoke the existing `categorize-transactions` function endpoint, reusing all the AI + rule-matching logic already built.
+---
 
-**File: `supabase/config.toml`**
-- Add the new function configuration with `verify_jwt = false` (since it's triggered by cron, not by users)
+### Modifiche previste
 
-### 3. Set up the cron schedule
+#### 1. Hook `useContoEconomico` - Includere categorie inattive con dati
 
-**Database migration**: Add a `pg_cron` job to call the `auto-categorize` function every 4 hours:
-```sql
-SELECT cron.schedule(
-  'auto-categorize-transactions',
-  '0 */4 * * *',
-  $$SELECT extensions.http_post(
-    url := '<supabase_url>/functions/v1/auto-categorize',
-    headers := '{"Authorization": "Bearer <service_role_key>"}'::jsonb,
-    body := '{"batch_mode": true}'::jsonb
-  )$$
-);
+**File: `src/hooks/useContoEconomico.ts`**
+
+Attualmente le query filtrano `is_active = true`. Cambio per caricare TUTTE le categorie (anche inattive), cosi le fatture categorizzate con categorie inattive appaiono nella riga corretta invece di finire in "Non categorizzato".
+
+```text
+Prima:  .eq("is_active", true)
+Dopo:   (nessun filtro is_active, oppure OR con categorie usate)
 ```
 
-Alternatively (and more reliably), the `auto-categorize` edge function can be a standalone function that directly queries the DB and calls the AI gateway, without needing pg_cron -- it can be triggered by a simple external cron service or Supabase's built-in cron via `pg_net`.
+#### 2. Pagina Fatture - Aggiungere indicatore anno visibile
 
-### Technical details
+**File: `src/pages/Fatture.tsx`**
 
-- The "categorizzazione AI in corso..." loading indicator (lines 342-347) will remain since it shows when a user-initiated categorization is running
-- The `useCategorizeTransactions` hook import can stay since it's still used for manual single-transaction categorization
-- The auto-categorize function reuses the same AI gateway and rule-matching logic from `categorize-transactions`
+Nessuna modifica strutturale necessaria - il flusso `category_id` update + invalidazione `conto-economico` query e gia presente (riga 269). Il problema e solo di visibilita: l'utente non si rende conto che il P&L filtra per anno.
+
+#### 3. Conto Economico - Nota informativa sul periodo
+
+**File: `src/components/area-economica/ContoEconomicoTab.tsx`**
+
+Aggiungere un piccolo testo sotto il selettore anno che indica quante fatture ci sono per quell'anno, cosi l'utente capisce se sta guardando il periodo giusto.
+
+---
+
+### Dettagli tecnici
+
+**`src/hooks/useContoEconomico.ts`**: Rimuovere il filtro `.eq("is_active", true)` dalle query delle categorie expense e revenue. In questo modo tutte le categorie (attive e inattive) vengono caricate e le fatture con categorie inattive vengono correttamente assegnate alla riga giusta nel P&L.
+
+**Impatto**: Minimo - solo 2 file modificati, nessuna nuova tabella o edge function.
