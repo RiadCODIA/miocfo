@@ -442,14 +442,12 @@ export function useCompleteDeadline() {
   return useMutation({
     mutationFn: async (deadline: Deadline) => {
       if (deadline.source === "invoice" && deadline.invoiceId) {
-        // Update the invoice payment_status to "paid"
         const { error } = await supabase
           .from("invoices")
           .update({ payment_status: "paid" })
           .eq("id", deadline.invoiceId);
         if (error) throw error;
       } else {
-        // Update manual deadline status
         const { error } = await supabase
           .from("deadlines")
           .update({ status: "completed" })
@@ -461,6 +459,39 @@ export function useCompleteDeadline() {
       queryClient.invalidateQueries({ queryKey: ["deadlines"] });
       queryClient.invalidateQueries({ queryKey: ["deadlines-summary"] });
       queryClient.invalidateQueries({ queryKey: ["accrual-forecast"] });
+      queryClient.invalidateQueries({ queryKey: ["conto-economico"] });
+    },
+  });
+}
+
+export function useUncompleteDeadline() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (deadline: Deadline) => {
+      if (deadline.source === "invoice" && deadline.invoiceId) {
+        // Revert invoice payment_status to "pending"
+        const { error } = await supabase
+          .from("invoices")
+          .update({ payment_status: "pending" })
+          .eq("id", deadline.invoiceId);
+        if (error) throw error;
+      } else {
+        // Determine correct status based on due_date vs today
+        const today = format(new Date(), "yyyy-MM-dd");
+        const newStatus = deadline.dueDate < today ? "overdue" : "pending";
+        const { error } = await supabase
+          .from("deadlines")
+          .update({ status: newStatus })
+          .eq("id", deadline.id);
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["deadlines"] });
+      queryClient.invalidateQueries({ queryKey: ["deadlines-summary"] });
+      queryClient.invalidateQueries({ queryKey: ["accrual-forecast"] });
+      queryClient.invalidateQueries({ queryKey: ["conto-economico"] });
     },
   });
 }

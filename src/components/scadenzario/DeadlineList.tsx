@@ -1,11 +1,12 @@
-import { ArrowDownLeft, ArrowUpRight, Check, Pencil, Trash2, Loader2, CheckCircle, FileText } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Pencil, Trash2, Loader2, CheckCircle, FileText } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Skeleton } from "@/components/ui/skeleton";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Deadline, useCompleteDeadline, useDeleteDeadline } from "@/hooks/useDeadlines";
+import { Deadline, useCompleteDeadline, useUncompleteDeadline, useDeleteDeadline } from "@/hooks/useDeadlines";
 import { toast } from "sonner";
 import { useState } from "react";
 import {
@@ -27,9 +28,10 @@ interface DeadlineListProps {
 
 export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps) {
   const completeMutation = useCompleteDeadline();
+  const uncompleteMutation = useUncompleteDeadline();
   const deleteMutation = useDeleteDeadline();
   const [deleteTarget, setDeleteTarget] = useState<Deadline | null>(null);
-  const [completingId, setCompletingId] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
 
   const formatCurrency = (value: number) => `€${value.toLocaleString("it-IT")}`;
 
@@ -39,7 +41,7 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
     const isOverdue = due < today && status === "pending";
 
     if (status === "completed") {
-      return <Badge variant="outline" className="border-success/50 text-success">Completato</Badge>;
+      return <Badge variant="outline" className="border-success/50 text-success">Saldato</Badge>;
     }
     if (isOverdue || status === "overdue") {
       return <Badge variant="outline" className="border-destructive/50 text-destructive">Scaduto</Badge>;
@@ -54,19 +56,26 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
     return <Badge variant="outline">{status}</Badge>;
   };
 
-  const handleComplete = async (deadline: Deadline) => {
-    setCompletingId(deadline.id);
+  const handleToggleSaldato = async (deadline: Deadline) => {
+    setTogglingId(deadline.id);
     try {
-      await completeMutation.mutateAsync(deadline);
-      toast.success(deadline.type === "incasso" ? "Incasso registrato" : "Pagamento completato", {
-        description: `${deadline.title} - ${formatCurrency(deadline.amount)}`,
-      });
+      if (deadline.status === "completed") {
+        await uncompleteMutation.mutateAsync(deadline);
+        toast.success("Scadenza riaperta", {
+          description: `${deadline.title} - ${formatCurrency(deadline.amount)}`,
+        });
+      } else {
+        await completeMutation.mutateAsync(deadline);
+        toast.success(deadline.type === "incasso" ? "Incasso registrato" : "Pagamento completato", {
+          description: `${deadline.title} - ${formatCurrency(deadline.amount)}`,
+        });
+      }
     } catch (error) {
       toast.error("Errore", {
-        description: "Impossibile completare la scadenza",
+        description: "Impossibile aggiornare lo stato della scadenza",
       });
     } finally {
-      setCompletingId(null);
+      setTogglingId(null);
     }
   };
 
@@ -113,6 +122,7 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
           const dueDate = new Date(deadline.dueDate);
           const isCompleted = deadline.status === "completed";
           const isFromInvoice = deadline.source === "invoice";
+          const isToggling = togglingId === deadline.id;
 
           return (
             <div
@@ -124,6 +134,19 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
               )}
               style={{ animationDelay: `${index * 50}ms` }}
             >
+              {/* Checkbox Saldato */}
+              <div className="shrink-0 flex items-center" title={isCompleted ? "Segna come non saldato" : "Segna come saldato"}>
+                <Checkbox
+                  checked={isCompleted}
+                  onCheckedChange={() => handleToggleSaldato(deadline)}
+                  disabled={isToggling}
+                  className={cn(
+                    "h-5 w-5",
+                    isCompleted && "data-[state=checked]:bg-success data-[state=checked]:border-success"
+                  )}
+                />
+              </div>
+
               <div className={cn(
                 "w-12 h-12 rounded-lg flex flex-col items-center justify-center shrink-0",
                 deadline.type === "incasso" ? "bg-success/10" : "bg-destructive/10"
@@ -173,22 +196,6 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
               </div>
 
               <div className="flex items-center gap-1">
-                {!isCompleted && (
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-success hover:text-success hover:bg-success/10"
-                    onClick={() => handleComplete(deadline)}
-                    disabled={completingId === deadline.id}
-                    title="Segna come completato"
-                  >
-                    {completingId === deadline.id ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Check className="h-4 w-4" />
-                    )}
-                  </Button>
-                )}
                 {!isFromInvoice && (
                   <>
                     <Button
