@@ -1,9 +1,9 @@
 import { format } from "date-fns";
 import { it } from "date-fns/locale";
-import { Check } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { useCompleteDeadline, Deadline } from "@/hooks/useDeadlines";
 import { toast } from "sonner";
+import { useState } from "react";
 
 interface OverdueEntry {
   id: string;
@@ -26,8 +26,9 @@ interface OverdueTableProps {
 export function OverdueTable({ title, entries, type, emptyMessage, isLoading }: OverdueTableProps) {
   const completeDeadline = useCompleteDeadline();
   const isIncasso = type === "incasso";
+  const [completingId, setCompletingId] = useState<string | null>(null);
 
-  const handleComplete = (entry: OverdueEntry) => {
+  const handleComplete = async (entry: OverdueEntry) => {
     const deadline: Deadline = {
       id: entry.id,
       title: entry.title,
@@ -40,12 +41,15 @@ export function OverdueTable({ title, entries, type, emptyMessage, isLoading }: 
       source: entry.source,
     };
 
+    setCompletingId(entry.id);
     completeDeadline.mutate(deadline, {
       onSuccess: () => {
         toast.success(isIncasso ? "Incasso registrato" : "Pagamento registrato");
+        setCompletingId(null);
       },
       onError: () => {
         toast.error("Errore durante il completamento");
+        setCompletingId(null);
       },
     });
   };
@@ -70,6 +74,14 @@ export function OverdueTable({ title, entries, type, emptyMessage, isLoading }: 
               key={entry.id}
               className="flex items-center justify-between gap-2 py-2 px-2 rounded-lg hover:bg-muted/40 transition-colors text-sm"
             >
+              <div className="shrink-0" title={isIncasso ? "Segna come incassato" : "Segna come pagato"}>
+                <Checkbox
+                  checked={false}
+                  onCheckedChange={() => handleComplete(entry)}
+                  disabled={completingId === entry.id}
+                  className="h-4 w-4"
+                />
+              </div>
               <div className="flex-1 min-w-0">
                 <p className="font-medium truncate text-foreground">{entry.title}</p>
                 <p className="text-xs text-muted-foreground">
@@ -79,16 +91,6 @@ export function OverdueTable({ title, entries, type, emptyMessage, isLoading }: 
               <span className={`font-semibold whitespace-nowrap ${isIncasso ? "text-success" : "text-destructive"}`}>
                 {formatCurrency(entry.amount)}
               </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                onClick={() => handleComplete(entry)}
-                disabled={completeDeadline.isPending}
-                title={isIncasso ? "Segna come incassato" : "Segna come pagato"}
-              >
-                <Check className="h-4 w-4" />
-              </Button>
             </div>
           ))}
         </div>
