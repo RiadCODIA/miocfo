@@ -1,43 +1,46 @@
 
+## Plan: Remove "da categorizzare" box and add automatic scheduled categorization
 
-## Problem
+### 1. Remove the "141 da categorizzare" UI element from Transazioni page
 
-When connecting a bank, after the redirect flow completes and the bank is already linked in the database, the modal stays in "connecting" loading state indefinitely. The user must manually refresh the page to see the connected bank.
+**File: `src/pages/Transazioni.tsx`**
+- Remove lines 348-353 (the `uncategorizedCount` badge/box)
+- Remove the `uncategorizedCount` variable computation (lines 147-149) since it's no longer needed
+- Remove the `Sparkles` import if unused elsewhere
 
-Two root causes:
+### 2. Create a scheduled edge function for auto-categorization every 4 hours
 
-1. **`handleConnect` in `ContiBancari.tsx` doesn't invalidate React Query caches** — it only calls `refetch()` but not `queryClient.invalidateQueries`, so other components using the same query key may not update.
+**File: `supabase/functions/auto-categorize/index.ts`**
+- Create a new edge function that:
+  - Runs as a cron job every 4 hours
+  - Calls the existing `categorize-transactions` logic in batch mode
+  - Processes all uncategorized transactions automatically
+  - Logs results for monitoring
 
-2. **The `completeSession` callback in `ConnectBankModal` may fail silently or the modal may get stuck in the "connecting" step** if the Enable Banking edge function returns an error or the session isn't restored after redirect. The retry logic only retries on session/auth errors, not other failures.
+The function will internally invoke the existing `categorize-transactions` function endpoint, reusing all the AI + rule-matching logic already built.
 
-3. **No timeout mechanism** — if `completeSession` hangs, the user sees a spinner forever.
+**File: `supabase/config.toml`**
+- Add the new function configuration with `verify_jwt = false` (since it's triggered by cron, not by users)
 
-## Plan
+### 3. Set up the cron schedule
 
-### 1. Fix `handleConnect` in `ContiBancari.tsx`
-- Use `queryClient.invalidateQueries` for `["bank-accounts"]` and `["bank-transactions-count"]` instead of just `refetch()`, ensuring all consumers of that data refresh.
-
-### 2. Add a timeout to the connecting step in `ConnectBankModal.tsx`
-- Add a timeout (e.g., 15 seconds) to the `completeSession` and `completeAcube` async flows. If they don't resolve in time, show an error with a "Riprova" option.
-
-### 3. Improve session restoration polling in the redirect callback
-- After the redirect back from the bank, add explicit Supabase session restoration polling (similar to what `completeAcube` already does) before calling `completeSession`, ensuring the auth token is available.
-
-### 4. Add fallback: auto-refetch accounts on success
-- In the success step's `handleComplete`, also trigger `queryClient.invalidateQueries` to ensure the accounts list is refreshed even if `onConnect` only does a shallow refetch.
-
-### Technical Details
-
-**`src/pages/ContiBancari.tsx`** — `handleConnect` (line 54-57):
-```tsx
-const handleConnect = (newAccounts: BankAccount[]) => {
-  queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
-  queryClient.invalidateQueries({ queryKey: ["bank-transactions-count"] });
-  queryClient.invalidateQueries({ queryKey: ["bank-accounts-balances"] });
-};
+**Database migration**: Add a `pg_cron` job to call the `auto-categorize` function every 4 hours:
+```sql
+SELECT cron.schedule(
+  'auto-categorize-transactions',
+  '0 */4 * * *',
+  $$SELECT extensions.http_post(
+    url := '<supabase_url>/functions/v1/auto-categorize',
+    headers := '{"Authorization": "Bearer <service_role_key>"}'::jsonb,
+    body := '{"batch_mode": true}'::jsonb
+  )$$
+);
 ```
 
-**`src/components/conti-bancari/ConnectBankModal.tsx`** — Enable Banking callback (lines 74-89):
-- Add session restoration polling before calling `completeSession` (wait for `supabase.auth.getSession()` to return a valid token, up to 5 retries with 1s delay)
-- Wrap the `complete()` call in a timeout of 15 seconds that falls back to error state
+Alternatively (and more reliably), the `auto-categorize` edge function can be a standalone function that directly queries the DB and calls the AI gateway, without needing pg_cron -- it can be triggered by a simple external cron service or Supabase's built-in cron via `pg_net`.
 
+### Technical details
+
+- The "categorizzazione AI in corso..." loading indicator (lines 342-347) will remain since it shows when a user-initiated categorization is running
+- The `useCategorizeTransactions` hook import can stay since it's still used for manual single-transaction categorization
+- The auto-categorize function reuses the same AI gateway and rule-matching logic from `categorize-transactions`
