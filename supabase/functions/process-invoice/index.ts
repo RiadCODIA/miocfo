@@ -164,6 +164,15 @@ function applyVATFallback(invoice: ExtractedInvoice): ExtractedInvoice {
     console.log(`VAT fallback (scorporo): taxable=€${taxable_amount}, vat_amount=€${vat_amount}`);
   }
 
+  // Case 4: taxable == total, vat_rate=0, vat_amount=0 → assume 22% IVA (Italian standard)
+  // This catches cases where AI completely failed to detect VAT
+  if (taxable_amount === total_amount && vat_rate === 0 && vat_amount === 0 && total_amount > 0) {
+    vat_rate = 22;
+    taxable_amount = Math.round((total_amount / 1.22) * 100) / 100;
+    vat_amount = Math.round((total_amount - taxable_amount) * 100) / 100;
+    console.log(`VAT fallback (default 22%): taxable=€${taxable_amount}, vat_amount=€${vat_amount}`);
+  }
+
   return {
     ...invoice,
     taxable_amount,
