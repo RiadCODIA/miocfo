@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Search, Filter, Download, Edit2, BarChart3, Loader2, X } from "lucide-react";
+import { useState, useEffect } from "react";
+import { Search, Filter, Download, Edit2, BarChart3, Loader2, X, Clock } from "lucide-react";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { format as formatDate } from "date-fns";
 import { Input } from "@/components/ui/input";
@@ -124,7 +124,19 @@ export default function Transazioni() {
   };
 
   const { data: accounts } = useBankAccounts();
+  const hasConnectedAccounts = (accounts?.length ?? 0) > 0;
   const { isLoading: isCategorizing } = useCategorizeTransactions();
+
+  // Realtime subscription for new transactions
+  useEffect(() => {
+    const channel = supabase
+      .channel('transazioni-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bank_transactions' }, () => {
+        queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [queryClient]);
 
   const { data: costCategories } = useQuery({
     queryKey: ["cost-categories"],
@@ -415,21 +427,35 @@ export default function Transazioni() {
             ) : transactions?.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={6} className="h-40 text-center">
-                  <div className="text-muted-foreground space-y-3">
-                    <p className="font-medium">Nessuna transazione importata</p>
-                    <p className="text-sm">
-                      Vai su Conti Bancari e premi Sincronizza, oppure carica un estratto conto (PDF/CSV).
-                    </p>
-                    <div className="flex justify-center gap-3 mt-4">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => window.location.href = "/conti-bancari"}
-                      >
-                        Vai a Conti Bancari
-                      </Button>
+                  {hasConnectedAccounts ? (
+                    <div className="space-y-3">
+                      <div className="flex justify-center">
+                        <div className="h-12 w-12 rounded-full bg-primary/10 flex items-center justify-center">
+                          <Clock className="h-6 w-6 text-primary animate-pulse" />
+                        </div>
+                      </div>
+                      <p className="font-medium text-foreground">Sincronizzazione in corso...</p>
+                      <p className="text-sm text-muted-foreground max-w-md mx-auto">
+                        Le transazioni del conto appena collegato sono in fase di importazione. L'operazione potrebbe richiedere qualche minuto. La pagina si aggiornerà automaticamente.
+                      </p>
                     </div>
-                  </div>
+                  ) : (
+                    <div className="text-muted-foreground space-y-3">
+                      <p className="font-medium">Nessuna transazione importata</p>
+                      <p className="text-sm">
+                        Vai su Conti Bancari e premi Sincronizza, oppure carica un estratto conto (PDF/CSV).
+                      </p>
+                      <div className="flex justify-center gap-3 mt-4">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => window.location.href = "/conti-bancari"}
+                        >
+                          Vai a Conti Bancari
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </TableCell>
               </TableRow>
             ) : (
