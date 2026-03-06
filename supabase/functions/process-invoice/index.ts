@@ -615,17 +615,12 @@ serve(async (req) => {
     // Fetch categories once for insert loop
     const allCategories = await fetchCategories(supabaseAdmin);
 
-    // Apply user-provided invoice type override if present
-    const invoiceTypeHint = contentType.includes('application/json') 
-      ? (await Promise.resolve(invoiceTypeOverride)) 
-      : undefined;
-
     // Insert invoices into database with full extracted data + auto-categorization
     for (const invoice of extractedInvoices) {
       // Override direction if user specified it
-      if (invoiceTypeHint && ['emessa', 'ricevuta', 'autofattura'].includes(invoiceTypeHint)) {
-        invoice.invoice_direction = invoiceTypeHint as 'emessa' | 'ricevuta';
-        console.log(`User override: invoice_direction set to "${invoiceTypeHint}"`);
+      if (invoiceTypeOverride && ['emessa', 'ricevuta', 'autofattura'].includes(invoiceTypeOverride)) {
+        invoice.invoice_direction = invoiceTypeOverride as 'emessa' | 'ricevuta';
+        console.log(`User override: invoice_direction set to "${invoiceTypeOverride}"`);
       }
 
       // Auto-assign category from AI-suggested name
