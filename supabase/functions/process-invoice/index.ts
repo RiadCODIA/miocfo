@@ -526,7 +526,7 @@ serve(async (req) => {
       userId = body.userId || userId;
 
       // User-provided invoice type override
-      const invoiceTypeOverride: string | undefined = body.invoiceType;
+      invoiceTypeOverride = body.invoiceType;
 
       console.log(`Processing file from storage: ${storagePath}`);
 
