@@ -426,6 +426,7 @@ serve(async (req) => {
     let fileName: string;
     let fileType: string;
     let fileData: Uint8Array;
+    let invoiceTypeOverride: string | undefined;
 
     if (contentType.includes('application/json')) {
       const body = await req.json();
