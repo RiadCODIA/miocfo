@@ -165,6 +165,10 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
           }));
           setConnectedAccounts(mapped);
           setStep("success");
+          // Immediately invalidate so the page behind the modal refreshes
+          queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+          queryClient.invalidateQueries({ queryKey: ["bank-transactions-count"] });
+          queryClient.invalidateQueries({ queryKey: ["bank-accounts-balances"] });
         } catch (error) {
           console.error("A-Cube complete error:", error);
           setErrorMessage(error instanceof Error ? error.message : "Errore A-Cube");

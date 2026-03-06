@@ -18,6 +18,32 @@ export default function ContiBancari() {
   const { data: accounts = [], isLoading, refetch } = useBankAccountsQuery();
   const queryClient = useQueryClient();
 
+  // Realtime subscription for reactive UI updates
+  useEffect(() => {
+    const channel = supabase
+      .channel('bank-accounts-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'bank_accounts' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
+          queryClient.invalidateQueries({ queryKey: ["bank-accounts-balances"] });
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'bank_transactions' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["bank-transactions-count"] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [queryClient]);
+
   const { data: txCount = 0 } = useQuery({
     queryKey: ["bank-transactions-count"],
     queryFn: async () => {
