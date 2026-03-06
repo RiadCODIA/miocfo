@@ -314,7 +314,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
              "Seleziona la tua banca"}
           </DialogTitle>
           <DialogDescription>
-            {step === "connecting" ? "Stiamo salvando i tuoi dati..." :
+            {step === "connecting" ? "Sincronizzazione transazioni in corso, potrebbe richiedere qualche minuto..." :
              step === "redirecting" ? `Stai per essere reindirizzato a ${selectedBank?.name || "la tua banca"}...` :
              step === "success" ? `${connectedAccounts.length} conto/i collegati con successo` :
              step === "error" ? "Si è verificato un errore durante il collegamento" :
