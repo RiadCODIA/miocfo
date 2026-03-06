@@ -38,7 +38,7 @@ interface ConnectBankModalProps {
 
 export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankModalProps) {
   const [provider, setProvider] = useState<"choose" | "enable_banking" | "acube">("choose");
-  const [step, setStep] = useState<"select_bank" | "redirecting" | "connecting" | "success" | "error">("select_bank");
+  const [step, setStep] = useState<"select_bank" | "redirecting" | "connecting" | "syncing" | "success" | "error">("select_bank");
   const [aspsps, setAspsps] = useState<ASPSP[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBank, setSelectedBank] = useState<ASPSP | null>(null);
