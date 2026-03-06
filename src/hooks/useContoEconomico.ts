@@ -159,13 +159,50 @@ export function useContoEconomico(year: number) {
         costi[catId][month] = (costi[catId][month] || 0) + Number(inv.amount);
       });
 
-      // Total costs
+      // ── Bank transactions (categorized, not matched to invoices) ──
+      const matchedTxIds = new Set(
+        (matchedTxRes.data || []).map((r) => r.matched_transaction_id).filter(Boolean)
+      );
+
+      (transactionsRes.data || []).forEach((tx) => {
+        if (!tx.date || !tx.ai_category_id) return;
+        if (matchedTxIds.has(tx.id)) return; // skip already-invoiced transactions
+        const month = new Date(tx.date).getMonth();
+        const amount = Math.abs(Number(tx.amount));
+        const catId = tx.ai_category_id;
+
+        if (tx.amount > 0 && revenueCatById[catId]) {
+          // Income transaction → revenue
+          if (!ricaviPerCategoria[catId]) ricaviPerCategoria[catId] = {};
+          ricaviPerCategoria[catId][month] = (ricaviPerCategoria[catId][month] || 0) + amount;
+        } else if (tx.amount > 0 && !revenueCatById[catId] && altriRicaviCat) {
+          // Income but category is expense-type → fallback to "Altri ricavi"
+          ricaviPerCategoria[altriRicaviCat.id][month] = (ricaviPerCategoria[altriRicaviCat.id][month] || 0) + amount;
+        } else if (tx.amount < 0 && expenseCatById[catId]) {
+          // Expense transaction → cost
+          if (!costi[catId]) costi[catId] = {};
+          costi[catId][month] = (costi[catId][month] || 0) + amount;
+        } else if (tx.amount < 0) {
+          // Expense but no matching expense category
+          costiNonCategorizzati[month] = (costiNonCategorizzati[month] || 0) + amount;
+        }
+      });
+
+      // Total costs (recalculate after adding transactions)
       const costiTotali: MonthlyData = {};
       for (let m = 0; m < 12; m++) {
         let total = 0;
         orderedCostCategories.forEach((c) => { total += costi[c.id]?.[m] || 0; });
         total += costiNonCategorizzati[m] || 0;
         if (total > 0) costiTotali[m] = total;
+      }
+
+      // Recalculate total revenue after adding transactions
+      const ricaviTotaliFinal: MonthlyData = {};
+      for (let m = 0; m < 12; m++) {
+        let total = 0;
+        revenueCategories.forEach((c) => { total += ricaviPerCategoria[c.id]?.[m] || 0; });
+        if (total > 0) ricaviTotaliFinal[m] = total;
       }
 
       return {
