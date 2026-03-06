@@ -1,38 +1,47 @@
 
 
-## Plan: Convert Nav Links to Scroll-to-Section Navigation
+## Plan: Replace Timeout Error with Informational "Please Wait" Popup
 
-The current nav menu (`Chi Siamo`, `Piani`, `FAQ`, `Contatti`) links to separate pages via React Router. Instead, each nav item will scroll smoothly to the corresponding section on the landing page.
+### Problem
+When the user returns from the Enable Banking site, the modal shows a spinner while `completeSession` runs. If it takes longer than 120s, the user sees a timeout **error** — but the bank connection actually succeeds in the background (visible after page refresh). The user wants a non-blocking informational popup instead.
+
+### Solution
+
+Remove the timeout-based error entirely. Instead, after returning from the OAuth redirect:
+
+1. **Fire-and-forget the `completeSession` call** — let it run in the background without blocking the UI
+2. **Immediately show an informational popup** telling the user the operation is in progress and may take a few minutes
+3. **Add a "Continua" (Continue) button** to dismiss the popup — the sync continues in the background regardless
+4. **Keep the Realtime subscription** (already in place on `ContiBancari`) to auto-update the page when the bank appears in the DB
 
 ### Changes
 
-**1. `src/pages/Landing.tsx`** — Add `id` attributes to sections:
-- Problems section → `id="chi-siamo"`
-- Process section → `id="piani"` (or a pricing-like section)
-- Features section → `id="faq"`
-- CTA section → `id="contatti"`
+**File: `src/components/conti-bancari/ConnectBankModal.tsx`**
 
-More logically mapped:
-- `id="problemi"` on Problems section
-- `id="soluzione"` on Process section  
-- `id="funzionalita"` on Features section
-- `id="contatti"` on CTA section
+1. **Remove the 120s timeout** for both Enable Banking (line 108-112) and A-Cube (line 178-182) callbacks — no more fake error
+2. **Change the `connecting` step behavior**: Instead of waiting for `completeSession` to finish before showing anything useful, immediately go to a new **`"syncing"` step** that shows an informational message with a "Continua" button
+3. **The `completeSession` call runs in the background** — on success it invalidates queries (already does this); on failure it can show a toast but doesn't block the UI
+4. **New `"syncing"` step UI**:
+   - Green/blue info icon (not a spinner)
+   - Title: "Collegamento avviato con successo"
+   - Message: "La sincronizzazione delle transazioni è in corso e potrebbe richiedere qualche minuto. Puoi continuare a usare l'app, la pagina si aggiornerà automaticamente."
+   - "Continua" button that closes the modal and calls `handleComplete()`
 
-The nav items will be renamed/remapped to match these sections.
+### Flow
 
-**2. `src/components/landing/HeroSection.tsx`** — Change nav from `<Link to="...">` to `<a href="#section-id">` with smooth scroll:
-- Update `menuItems` array to use anchor `href`s (`#problemi`, `#soluzione`, `#funzionalita`, `#contatti`)
-- Replace `<Link>` with `<a>` tags that call `scrollIntoView({ behavior: 'smooth' })` on click
-- Close mobile menu on click
+```text
+User returns from bank OAuth
+→ Modal opens with brief spinner (1-2s while session restores)
+→ completeSession fires in background
+→ Immediately show "syncing" info screen with "Continua" button
+→ User clicks "Continua" → modal closes
+→ Background: completeSession finishes → queries invalidated → page updates via Realtime
+```
 
-### Section ↔ Nav Mapping
+### UI for the new "syncing" step
 
-| Nav Label | Section ID | Landing Section |
-|-----------|-----------|-----------------|
-| Chi Siamo | `#chi-siamo` | Problems section |
-| Piani | `#piani` | Process section |
-| FAQ | `#funzionalita` | Features section |
-| Contatti | `#contatti` | CTA/Footer section |
-
-**Files to modify**: `src/components/landing/HeroSection.tsx`, `src/pages/Landing.tsx`
+- CheckCircle2 icon in a blue/primary circle (not error, not spinner)
+- "Collegamento avviato con successo"
+- "La sincronizzazione delle transazioni è in corso e potrebbe richiedere qualche minuto. La pagina si aggiornerà automaticamente."
+- Primary button: "Continua"
 
