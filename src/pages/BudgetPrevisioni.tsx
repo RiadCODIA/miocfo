@@ -1,9 +1,11 @@
 import { useState } from "react";
-import { Plus, Save, TrendingUp, TrendingDown, ArrowUpCircle, ArrowDownCircle, Info } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, ArrowUpCircle, ArrowDownCircle, Info, Pencil, Trash2 } from "lucide-react";
 import { CreateBudgetModal } from "@/components/budget/CreateBudgetModal";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Table,
   TableBody,
@@ -12,6 +14,23 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import {
   BarChart,
   Bar,
@@ -22,11 +41,11 @@ import {
   ResponsiveContainer,
   Legend,
   ReferenceLine,
-  Cell,
 } from "recharts";
 import { cn } from "@/lib/utils";
-import { useBudgets, useBudgetChartData, useBudgetVarianceSummary, useUpdateBudget } from "@/hooks/useBudgets";
+import { useBudgets, useBudgetChartData, useBudgetVarianceSummary, useUpdateBudget, useDeleteBudget, type Budget } from "@/hooks/useBudgets";
 import { toast } from "sonner";
+import { format } from "date-fns";
 
 import DashedBar from "@/components/charts/DashedBar";
 
@@ -35,23 +54,53 @@ export default function BudgetPrevisioni() {
   const { data: chartData, isLoading: loadingChart } = useBudgetChartData();
   const { data: variance, isLoading: loadingVariance } = useBudgetVarianceSummary();
   const updateBudget = useUpdateBudget();
+  const deleteBudget = useDeleteBudget();
 
-  const [editedValues] = useState<Record<string, { income?: number; expenses?: number }>>({});
   const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [editingBudget, setEditingBudget] = useState<Budget | null>(null);
+  const [editForm, setEditForm] = useState({ name: "", amount: "", budgetType: "income" as "income" | "expense", startDate: "" });
+  const [deleteId, setDeleteId] = useState<string | null>(null);
 
   const formatCurrency = (value: number) => `€${value.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 0 })}`;
 
-  const handleSave = async () => {
+  const openEdit = (budget: Budget) => {
+    setEditingBudget(budget);
+    setEditForm({
+      name: budget.name,
+      amount: String(budget.amount),
+      budgetType: budget.budgetType,
+      startDate: budget.startDate,
+    });
+  };
+
+  const handleEditSave = async () => {
+    if (!editingBudget) return;
     try {
-      toast.success("Budget salvato con successo");
+      await updateBudget.mutateAsync({
+        id: editingBudget.id,
+        name: editForm.name,
+        amount: Number(editForm.amount),
+        budgetType: editForm.budgetType,
+        startDate: editForm.startDate,
+      });
+      toast.success("Budget aggiornato");
+      setEditingBudget(null);
     } catch {
-      toast.error("Errore durante il salvataggio");
+      toast.error("Errore durante l'aggiornamento");
     }
   };
 
-  const hasChanges = Object.keys(editedValues).length > 0;
+  const handleDelete = async () => {
+    if (!deleteId) return;
+    try {
+      await deleteBudget.mutateAsync(deleteId);
+      toast.success("Budget eliminato");
+      setDeleteId(null);
+    } catch {
+      toast.error("Errore durante l'eliminazione");
+    }
+  };
 
-  // Custom tooltip for the chart
   const CustomTooltip = ({ active, payload, label }: any) => {
     if (!active || !payload) return null;
     return (
@@ -85,24 +134,14 @@ export default function BudgetPrevisioni() {
             Pianifica un budget di costi e ricavi e verifica gli scostamenti sul consuntivo
           </p>
         </div>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            className="gap-2 bg-card border-border hover:bg-secondary"
-            onClick={() => setCreateModalOpen(true)}
-          >
-            <Plus className="h-4 w-4" />
-            Inserisci Budget
-          </Button>
-          <Button
-            className="gap-2 bg-primary text-primary-foreground hover:bg-primary/90"
-            disabled={!hasChanges || updateBudget.isPending}
-            onClick={handleSave}
-          >
-            <Save className="h-4 w-4" />
-            Salva Modifiche
-          </Button>
-        </div>
+        <Button
+          variant="outline"
+          className="gap-2 bg-card border-border hover:bg-secondary"
+          onClick={() => setCreateModalOpen(true)}
+        >
+          <Plus className="h-4 w-4" />
+          Inserisci Budget
+        </Button>
       </div>
 
       {/* Budget Table */}
@@ -118,6 +157,7 @@ export default function BudgetPrevisioni() {
               <TableHead className="text-muted-foreground">Nome</TableHead>
               <TableHead className="text-muted-foreground">Mese</TableHead>
               <TableHead className="text-muted-foreground text-right">Importo Previsto</TableHead>
+              <TableHead className="text-muted-foreground text-right w-[100px]">Azioni</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -128,11 +168,12 @@ export default function BudgetPrevisioni() {
                   <TableCell><Skeleton className="h-4 w-24" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-16" /></TableCell>
                   <TableCell><Skeleton className="h-4 w-20 ml-auto" /></TableCell>
+                  <TableCell><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
                 </TableRow>
               ))
             ) : budgets?.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={4} className="h-32 text-center">
+                <TableCell colSpan={5} className="h-32 text-center">
                   <div className="text-muted-foreground">
                     <p>Nessun budget definito</p>
                     <p className="text-xs mt-1">Clicca "Inserisci Budget" per aggiungere ricavi o costi previsti</p>
@@ -157,6 +198,16 @@ export default function BudgetPrevisioni() {
                     <TableCell className={cn("text-right font-semibold", isIncome ? "text-success" : "text-destructive")}>
                       {isIncome ? "+" : "-"}{formatCurrency(row.amount)}
                     </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => openEdit(row)}>
+                          <Pencil className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 hover:text-destructive" onClick={() => setDeleteId(row.id)}>
+                          <Trash2 className="h-3.5 w-3.5 text-muted-foreground" />
+                        </Button>
+                      </div>
+                    </TableCell>
                   </TableRow>
                 );
               })
@@ -165,7 +216,7 @@ export default function BudgetPrevisioni() {
         </Table>
       </div>
 
-      {/* Summary cards with explanation */}
+      {/* Summary cards */}
       {!loadingVariance && variance && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div className="glass rounded-xl p-5">
@@ -229,12 +280,12 @@ export default function BudgetPrevisioni() {
         </div>
       )}
 
-      {/* Chart: Actual vs Expected from invoices */}
+      {/* Chart */}
       <div className="glass rounded-xl p-5">
         <div className="mb-4">
           <h3 className="text-lg font-semibold text-foreground">Ricavi e Costi — Effettivi vs Previsti</h3>
           <p className="text-sm text-muted-foreground">
-            Barre piene: movimenti bancari effettivi · Barre trasparenti: importi attesi dalle scadenze fatture non pagate
+            Barre piene: movimenti bancari effettivi · Barre trasparenti: importi attesi da budget e fatture non pagate
           </p>
         </div>
         <div className="h-[380px]">
@@ -243,19 +294,13 @@ export default function BudgetPrevisioni() {
           ) : !chartData || chartData.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
               <p className="text-sm">Nessun dato disponibile</p>
-              <p className="text-xs mt-1">I dati appariranno quando ci saranno transazioni o fatture con scadenza</p>
+              <p className="text-xs mt-1">I dati appariranno quando ci saranno transazioni, budget o fatture con scadenza</p>
             </div>
           ) : (
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }} barGap={4} barSize={11}>
                 <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" vertical={false} />
-                <XAxis
-                  dataKey="mese"
-                  stroke="hsl(var(--muted-foreground))"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                />
+                <XAxis dataKey="mese" stroke="hsl(var(--muted-foreground))" fontSize={11} tickLine={false} axisLine={false} />
                 <YAxis
                   stroke="hsl(var(--muted-foreground))"
                   fontSize={11}
@@ -276,36 +321,10 @@ export default function BudgetPrevisioni() {
                   )}
                 />
                 <ReferenceLine y={0} stroke="hsl(var(--border))" />
-
-                {/* Actual income - solid green */}
-                <Bar
-                  dataKey="ricaviEffettivi"
-                  fill="hsl(142, 71%, 45%)"
-                  radius={[2, 2, 0, 0]}
-                  name="Ricavi Effettivi"
-                />
-
-                {/* Expected income - transparent green with dashed border */}
-                <Bar
-                  dataKey="ricaviPrevisti"
-                  name="Ricavi Previsti (da fatture)"
-                  shape={<DashedBar color="hsl(142, 71%, 45%)" />}
-                />
-
-                {/* Actual expenses - solid red */}
-                <Bar
-                  dataKey="costiEffettivi"
-                  fill="hsl(0, 84%, 60%)"
-                  radius={[2, 2, 0, 0]}
-                  name="Costi Effettivi"
-                />
-
-                {/* Expected expenses - transparent red with dashed border */}
-                <Bar
-                  dataKey="costiPrevisti"
-                  name="Costi Previsti (da fatture)"
-                  shape={<DashedBar color="hsl(0, 84%, 60%)" />}
-                />
+                <Bar dataKey="ricaviEffettivi" fill="hsl(142, 71%, 45%)" radius={[2, 2, 0, 0]} name="Ricavi Effettivi" />
+                <Bar dataKey="ricaviPrevisti" name="Ricavi Previsti" shape={<DashedBar color="hsl(142, 71%, 45%)" />} />
+                <Bar dataKey="costiEffettivi" fill="hsl(0, 84%, 60%)" radius={[2, 2, 0, 0]} name="Costi Effettivi" />
+                <Bar dataKey="costiPrevisti" name="Costi Previsti" shape={<DashedBar color="hsl(0, 84%, 60%)" />} />
               </BarChart>
             </ResponsiveContainer>
           )}
@@ -314,6 +333,61 @@ export default function BudgetPrevisioni() {
 
       {/* Create Budget Modal */}
       <CreateBudgetModal open={createModalOpen} onOpenChange={setCreateModalOpen} />
+
+      {/* Edit Budget Dialog */}
+      <Dialog open={!!editingBudget} onOpenChange={(open) => !open && setEditingBudget(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Modifica Budget</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Nome</label>
+              <Input value={editForm.name} onChange={(e) => setEditForm(f => ({ ...f, name: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Tipo</label>
+              <Select value={editForm.budgetType} onValueChange={(v) => setEditForm(f => ({ ...f, budgetType: v as "income" | "expense" }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="income">Ricavo</SelectItem>
+                  <SelectItem value="expense">Costo</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Importo (€)</label>
+              <Input type="number" min="0" step="0.01" value={editForm.amount} onChange={(e) => setEditForm(f => ({ ...f, amount: e.target.value }))} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-foreground">Mese</label>
+              <Input type="month" value={editForm.startDate ? format(new Date(editForm.startDate), "yyyy-MM") : ""} onChange={(e) => setEditForm(f => ({ ...f, startDate: e.target.value + "-01" }))} />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditingBudget(null)}>Annulla</Button>
+            <Button onClick={handleEditSave} disabled={updateBudget.isPending || !editForm.name || !editForm.amount}>
+              Salva
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete Confirmation */}
+      <AlertDialog open={!!deleteId} onOpenChange={(open) => !open && setDeleteId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Eliminare questo budget?</AlertDialogTitle>
+            <AlertDialogDescription>Questa azione non può essere annullata.</AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Annulla</AlertDialogCancel>
+            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+              Elimina
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

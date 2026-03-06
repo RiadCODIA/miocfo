@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, startOfMonth, subMonths, addMonths } from "date-fns";
+import { format, startOfMonth, addMonths } from "date-fns";
 import { it } from "date-fns/locale";
 import { useDateRange } from "@/contexts/DateRangeContext";
 
@@ -93,6 +93,12 @@ export function useBudgetChartData() {
         .not("due_date", "is", null)
         .neq("payment_status", "paid");
 
+      // Fetch active budgets
+      const { data: budgets } = await supabase
+        .from("budgets")
+        .select("amount, budget_type, start_date")
+        .eq("is_active", true);
+
       const monthlyActuals: Record<string, { income: number; expenses: number }> = {};
       transactions?.forEach(tx => {
         const month = format(new Date(tx.date), "yyyy-MM");
@@ -104,15 +110,29 @@ export function useBudgetChartData() {
 
       const currentMonth = format(startOfMonth(now), "yyyy-MM");
       const monthlyExpected: Record<string, { income: number; expenses: number }> = {};
+
+      // Add invoice-based expected
       invoices?.forEach(inv => {
         if (!inv.due_date) return;
         const dueDate = new Date(inv.due_date);
-        // Overdue invoices (due_date < today) go into the current month
         const month = dueDate < now ? currentMonth : format(dueDate, "yyyy-MM");
         if (!months.includes(month)) return;
         if (!monthlyExpected[month]) monthlyExpected[month] = { income: 0, expenses: 0 };
         const amount = Number(inv.total_amount || inv.amount);
         if (inv.invoice_type === "emessa") {
+          monthlyExpected[month].income += amount;
+        } else {
+          monthlyExpected[month].expenses += amount;
+        }
+      });
+
+      // Add budget-based expected
+      budgets?.forEach(b => {
+        const month = format(new Date(b.start_date), "yyyy-MM");
+        if (!months.includes(month)) return;
+        if (!monthlyExpected[month]) monthlyExpected[month] = { income: 0, expenses: 0 };
+        const amount = Math.abs(Number(b.amount));
+        if ((b as any).budget_type === "income") {
           monthlyExpected[month].income += amount;
         } else {
           monthlyExpected[month].expenses += amount;
@@ -150,7 +170,6 @@ export function useBudgetVarianceSummary() {
         .gte("start_date", from)
         .lte("start_date", to);
 
-      // Fetch invoices with due dates within range for expected totals
       const { data: invoices } = await supabase
         .from("invoices")
         .select("amount, total_amount, invoice_type, due_date, payment_status")
@@ -166,7 +185,6 @@ export function useBudgetVarianceSummary() {
         ?.filter(b => (b as any).budget_type === "expense")
         .reduce((s, b) => s + Math.abs(Number(b.amount)), 0) || 0;
 
-      // Expected from pending invoices
       const pendingInvoices = invoices?.filter(i => i.payment_status !== "paid") || [];
       const ricaviDaFatture = pendingInvoices
         .filter(i => i.invoice_type === "emessa")
@@ -194,7 +212,6 @@ export function useBudgetVarianceSummary() {
   });
 }
 
-// Keep old hook name for compatibility
 export function useBudgetComparison() {
   return useBudgetChartData();
 }
@@ -207,18 +224,46 @@ export function useUpdateBudget() {
       id,
       amount,
       name,
+      budgetType,
+      startDate,
     }: {
       id: string;
       amount?: number;
       name?: string;
+      budgetType?: "income" | "expense";
+      startDate?: string;
     }) => {
       const updates: Record<string, unknown> = {};
-      if (amount !== undefined) updates.amount = amount;
+      if (amount !== undefined) {
+        updates.amount = budgetType === "expense" ? -Math.abs(amount) : Math.abs(amount);
+      }
       if (name !== undefined) updates.name = name;
+      if (budgetType !== undefined) updates.budget_type = budgetType;
+      if (startDate !== undefined) updates.start_date = startDate;
 
       const { error } = await supabase
         .from("budgets")
         .update(updates)
+        .eq("id", id);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["budgets"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-chart-data"] });
+      queryClient.invalidateQueries({ queryKey: ["budget-variance-summary"] });
+    },
+  });
+}
+
+export function useDeleteBudget() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (id: string) => {
+      const { error } = await supabase
+        .from("budgets")
+        .update({ is_active: false })
         .eq("id", id);
 
       if (error) throw error;
