@@ -1,38 +1,59 @@
 
 
-## Plan: Convert Nav Links to Scroll-to-Section Navigation
+## Audit: Data Isolation by User ID Across Edge Functions
 
-The current nav menu (`Chi Siamo`, `Piani`, `FAQ`, `Contatti`) links to separate pages via React Router. Instead, each nav item will scroll smoothly to the corresponding section on the landing page.
+I reviewed all 16 edge functions. Here are the findings:
 
-### Changes
+### Already Secure (no changes needed)
+- **analyze-spending** — Fixed in previous iteration, filters by `user_id`
+- **ai-assistant** — Authenticates user, all queries scoped to `userId`
+- **check-alerts** — All queries filtered by `userId`
+- **process-bank-statement** — Authenticates user, scoped to `userId`
+- **process-invoice** — Authenticates user, scoped to `userId`
+- **sync-bank-accounts** — Background job, writes with `account.user_id` from existing records
+- **acube-banking** — Extracts `userId` from auth, all queries scoped
+- **enable-banking** — Extracts `userId` from auth, all queries scoped
+- **acube-cassetto-fiscale** — `fetch-invoices` requires auth; setup/status are per-fiscal-id (no DB leak)
+- **analyze-kpi** — Receives data from frontend, no DB queries
+- **analyze-conto-economico** — Receives data from frontend, no DB queries
+- **create-client-user** — Verifies admin role before acting
+- **send-alert-email** — Internal service call, no user-facing data leak
 
-**1. `src/pages/Landing.tsx`** — Add `id` attributes to sections:
-- Problems section → `id="chi-siamo"`
-- Process section → `id="piani"` (or a pricing-like section)
-- Features section → `id="faq"`
-- CTA section → `id="contatti"`
+### Issues Found
 
-More logically mapped:
-- `id="problemi"` on Problems section
-- `id="soluzione"` on Process section  
-- `id="funzionalita"` on Features section
-- `id="contatti"` on CTA section
+#### 1. `categorize-transactions` — Batch mode leaks across users
+**Problem:** In `batch_mode` (line 100-106), it queries `bank_transactions` where `ai_category_id IS NULL` with **no `user_id` filter**. This means it categorizes ALL users' uncategorized transactions together. Also, `categorization_rules` (line 68-71) are fetched globally without user filtering.
 
-The nav items will be renamed/remapped to match these sections.
+**Fix:**
+- Add auth extraction (same pattern as `analyze-spending`)
+- Add `.eq("user_id", userId)` to the batch transactions query (line 102)
+- Add `.eq("user_id", userId)` to the categorization rules query (line 68)
+- For specific `transaction_ids` mode, verify transactions belong to the caller
 
-**2. `src/components/landing/HeroSection.tsx`** — Change nav from `<Link to="...">` to `<a href="#section-id">` with smooth scroll:
-- Update `menuItems` array to use anchor `href`s (`#problemi`, `#soluzione`, `#funzionalita`, `#contatti`)
-- Replace `<Link>` with `<a>` tags that call `scrollIntoView({ behavior: 'smooth' })` on click
-- Close mobile menu on click
+#### 2. `auto-categorize` — Triggers batch mode without user context
+**Problem:** Calls `categorize-transactions` with `batch_mode: true` using the service role key. Since `categorize-transactions` doesn't filter by user, this processes all users' data together.
 
-### Section ↔ Nav Mapping
+**Fix:** After fixing `categorize-transactions`, `auto-categorize` needs to iterate per-user or pass a user context. The simplest approach: query distinct `user_id` values from uncategorized transactions, then call `categorize-transactions` once per user.
 
-| Nav Label | Section ID | Landing Section |
-|-----------|-----------|-----------------|
-| Chi Siamo | `#chi-siamo` | Problems section |
-| Piani | `#piani` | Process section |
-| FAQ | `#funzionalita` | Features section |
-| Contatti | `#contatti` | CTA/Footer section |
+#### 3. `powens` — Multiple functions lack user scoping
+**Problem:**
+- `getAccounts()` (line 183-196): fetches ALL `bank_accounts` from DB with no `user_id` filter
+- `syncAccount()` (line 198-291): fetches account by `id` without verifying ownership
+- `getTransactions()` (line 294-322): fetches transactions by `bank_account_id` without user check
+- `removeConnection()` (line 324-380): deletes accounts without verifying ownership
 
-**Files to modify**: `src/components/landing/HeroSection.tsx`, `src/pages/Landing.tsx`
+**Fix:**
+- Add auth extraction to the main handler
+- Pass `userId` to all action handlers
+- Add `.eq("user_id", userId)` to all DB queries
+
+### Plan Summary
+
+| File | Change | Priority |
+|------|--------|----------|
+| `categorize-transactions/index.ts` | Add auth + user_id filter to batch mode and rules query | High |
+| `auto-categorize/index.ts` | Iterate per-user when triggering batch categorization | Medium |
+| `powens/index.ts` | Add auth + user_id filter to all DB queries | High |
+
+Three files to modify. The `categorize-transactions` and `powens` fixes are critical for preventing cross-user data access. The `auto-categorize` fix ensures background jobs respect user boundaries.
 
