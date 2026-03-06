@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { z } from "zod";
 import miocfoLogo from "@/assets/miocfo-logo.png";
-import { Eye, EyeOff, Mail, Lock, User, Building2, FlaskConical, ShieldCheck, Crown } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Building2 } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Email non valida"),
@@ -30,7 +30,7 @@ const signupSchema = z.object({
 });
 
 export default function Auth() {
-  const { user, loading, signIn, signUp, signInAsDemo, signInAsDemoAdmin, signInAsDemoSuperAdmin } = useAuth();
+  const { user, loading, signIn, signUp } = useAuth();
   const navigate = useNavigate();
   
   const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
@@ -71,30 +71,6 @@ export default function Auth() {
   if (user) {
     return <Navigate to="/dashboard" replace />;
   }
-
-  const handleDemoLogin = async () => {
-    setIsSubmitting(true);
-    const { error } = await signInAsDemo();
-    setIsSubmitting(false);
-    
-    if (error) {
-      toast.error("Errore Demo", {
-        description: "Account demo utente non disponibile. Contatta l'amministratore.",
-      });
-    }
-  };
-
-  const handleSuperAdminDemoLogin = async () => {
-    setIsSubmitting(true);
-    const { error } = await signInAsDemoSuperAdmin();
-    setIsSubmitting(false);
-    
-    if (error) {
-      toast.error("Errore Demo", {
-        description: "Account demo super admin non disponibile. Contatta l'amministratore.",
-      });
-    }
-  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -257,39 +233,6 @@ export default function Auth() {
                     "Accedi"
                   )}
                 </Button>
-                
-                {/* Demo access buttons */}
-                <div className="relative my-4">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-border" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">Accesso demo (solo test)</span>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    className="w-full text-xs"
-                    onClick={handleDemoLogin}
-                    disabled={isSubmitting}
-                  >
-                    <FlaskConical className="mr-1 h-3 w-3" />
-                    Utente
-                  </Button>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    className="w-full text-xs bg-violet-500/10 border-violet-500/30 text-violet-600 hover:bg-violet-500/20"
-                    onClick={handleSuperAdminDemoLogin}
-                    disabled={isSubmitting}
-                  >
-                    <Crown className="mr-1 h-3 w-3" />
-                    Super Admin
-                  </Button>
-                </div>
               </form>
             </TabsContent>
             
