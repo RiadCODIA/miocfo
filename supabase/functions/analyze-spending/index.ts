@@ -72,9 +72,15 @@ serve(async (req) => {
       );
     }
 
+    // Use anon key + user's auth header to validate identity
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+    const authClient = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+    });
+    const { data: { user }, error: authError } = await authClient.auth.getUser();
+
+    // Service role client for data queries (with explicit user_id filter)
     const supabase = createClient(supabaseUrl, supabaseKey);
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
 
     if (authError || !user) {
       console.error("Auth error:", authError);
