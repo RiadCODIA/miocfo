@@ -98,6 +98,37 @@ export function ContoEconomicoTab() {
     savePersonnel(year, updated);
   };
 
+  const handleAutoLoad = async () => {
+    setAutoLoading(true);
+    try {
+      toast.info("Categorizzazione transazioni in corso...");
+      const { data: result, error } = await supabase.functions.invoke("categorize-transactions", {
+        body: { batch_mode: true },
+      });
+      if (error) throw error;
+      if (result?.error) {
+        if (result.error.includes("Rate limit")) {
+          toast.error("Limite di richieste raggiunto. Riprova tra qualche secondo.");
+        } else if (result.error.includes("Payment required")) {
+          toast.error("Crediti AI esauriti. Aggiungi crediti nelle impostazioni workspace.");
+        } else {
+          toast.error(result.error);
+        }
+        return;
+      }
+      const count = result?.results?.length || 0;
+      toast.success(`${count} transazioni categorizzate con successo`);
+      // Refresh P&L data
+      queryClient.invalidateQueries({ queryKey: ["conto-economico"] });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Errore durante la categorizzazione automatica";
+      console.error("Auto-load error:", e);
+      toast.error("Errore", { description: msg });
+    } finally {
+      setAutoLoading(false);
+    }
+  };
+
   const handleAIAnalysis = async () => {
     if (!data) return;
     setAiLoading(true);
