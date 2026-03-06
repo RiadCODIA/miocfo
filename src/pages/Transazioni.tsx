@@ -124,7 +124,7 @@ export default function Transazioni() {
   };
 
   const { data: accounts } = useBankAccounts();
-  const connectedAccounts = accounts?.filter(a => a.is_connected) || [];
+  const hasConnectedAccounts = (accounts?.length ?? 0) > 0;
   const { isLoading: isCategorizing } = useCategorizeTransactions();
 
   // Realtime subscription for new transactions
