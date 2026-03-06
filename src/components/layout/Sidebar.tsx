@@ -115,14 +115,70 @@ const superAdminNavGroups: NavGroup[] = [
   },
 ];
 
-function NavItemRow({ item, collapsed, isActive, alertsCount }: {
+function NavItemRow({ item, collapsed, isActive, alertsCount, locked }: {
   item: NavItem;
   collapsed: boolean;
   isActive: boolean;
   alertsCount?: { total: number } | null;
+  locked?: boolean;
 }) {
   const isAlertItem = item.id === "alert_notifiche";
   const showAlertBadge = isAlertItem && alertsCount && alertsCount.total > 0;
+
+  const content = (
+    <>
+      {isActive && !locked && (
+        <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 rounded-r-full bg-sidebar-primary" />
+      )}
+      <item.icon className={cn("h-[18px] w-[18px] shrink-0", isActive && !locked && "text-sidebar-primary")} />
+      {!collapsed && (
+        <span className="text-sm font-medium truncate">{item.label}</span>
+      )}
+      {/* Lock icon for locked items */}
+      {locked && !collapsed && (
+        <Lock className="ml-auto h-3.5 w-3.5 text-white/30 shrink-0" />
+      )}
+      {locked && collapsed && (
+        <Lock className="absolute -top-1 -right-1 h-3 w-3 text-white/30" />
+      )}
+      {/* Alert count badge */}
+      {!locked && showAlertBadge && (
+        <span className={cn(
+          "flex items-center justify-center text-xs font-bold text-white rounded-full bg-destructive",
+          collapsed ? "absolute -top-1 -right-1 h-5 w-5" : "ml-auto h-5 min-w-5 px-1.5"
+        )}>
+          {alertsCount!.total > 99 ? "99+" : alertsCount!.total}
+        </span>
+      )}
+      {/* Feature badge (e.g. "New") */}
+      {!locked && item.badge && !showAlertBadge && !collapsed && (
+        <Badge className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-sidebar-primary text-white border-0">
+          {item.badge}
+        </Badge>
+      )}
+    </>
+  );
+
+  if (locked) {
+    return (
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <NavLink
+            to={item.path}
+            className={cn(
+              "flex items-center gap-3 px-3 py-2 rounded-lg transition-all duration-200 group relative",
+              "text-white/30 cursor-pointer"
+            )}
+          >
+            {content}
+          </NavLink>
+        </TooltipTrigger>
+        <TooltipContent side="right">
+          <p>Upgrade per accedere</p>
+        </TooltipContent>
+      </Tooltip>
+    );
+  }
 
   return (
     <Tooltip>
@@ -136,28 +192,7 @@ function NavItemRow({ item, collapsed, isActive, alertsCount }: {
               : "text-white/60 hover:bg-white/5 hover:text-white/90"
           )}
         >
-          {isActive && (
-            <div className="absolute left-0 top-1/2 -translate-y-1/2 w-1 h-4 rounded-r-full bg-sidebar-primary" />
-          )}
-          <item.icon className={cn("h-[18px] w-[18px] shrink-0", isActive && "text-sidebar-primary")} />
-          {!collapsed && (
-            <span className="text-sm font-medium truncate">{item.label}</span>
-          )}
-          {/* Alert count badge */}
-          {showAlertBadge && (
-            <span className={cn(
-              "flex items-center justify-center text-xs font-bold text-white rounded-full bg-destructive",
-              collapsed ? "absolute -top-1 -right-1 h-5 w-5" : "ml-auto h-5 min-w-5 px-1.5"
-            )}>
-              {alertsCount!.total > 99 ? "99+" : alertsCount!.total}
-            </span>
-          )}
-          {/* Feature badge (e.g. "New") */}
-          {item.badge && !showAlertBadge && !collapsed && (
-            <Badge className="ml-auto text-[10px] px-1.5 py-0 h-4 bg-sidebar-primary text-white border-0">
-              {item.badge}
-            </Badge>
-          )}
+          {content}
         </NavLink>
       </TooltipTrigger>
       {collapsed && (
