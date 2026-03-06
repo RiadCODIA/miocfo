@@ -67,7 +67,7 @@ export function useContoEconomico(year: number) {
         // Fetch categorized bank transactions
         supabase
           .from("bank_transactions")
-          .select("amount, date, ai_category_id")
+          .select("id, amount, date, ai_category_id")
           .not("ai_category_id", "is", null)
           .gte("date", startDate)
           .lte("date", endDate),
