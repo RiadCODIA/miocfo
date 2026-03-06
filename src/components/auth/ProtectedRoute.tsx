@@ -1,6 +1,7 @@
 import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
+import { LockedPageOverlay } from "@/components/LockedPageOverlay";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -38,15 +39,20 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
     return <>{children}</>;
   }
 
-  // If user has no subscription, redirect to upgrade (except for settings pages)
+  // Determine if route should be locked
   const alwaysAllowed = ["/dashboard", "/impostazioni", "/configurazione", "/comunicazioni"];
-  if (!hasSubscription && !alwaysAllowed.includes(location.pathname)) {
-    return <Navigate to="/dashboard" replace />;
-  }
+  const isAlwaysAllowed = alwaysAllowed.includes(location.pathname);
+  const isLocked = !isAlwaysAllowed && (!hasSubscription || !canAccessRoute(location.pathname));
 
-  // Check route access based on subscription features
-  if (hasSubscription && !canAccessRoute(location.pathname)) {
-    return <Navigate to="/dashboard" replace />;
+  if (isLocked) {
+    return (
+      <div className="relative min-h-[calc(100vh-4rem)]">
+        <div className="pointer-events-none select-none opacity-50">
+          {children}
+        </div>
+        <LockedPageOverlay />
+      </div>
+    );
   }
 
   return <>{children}</>;
