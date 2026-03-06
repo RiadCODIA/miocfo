@@ -26,7 +26,7 @@ export default function Landing() {
       <HeroSection />
 
       {/* Problems Section */}
-      <section className="py-20 md:py-32 relative overflow-hidden">
+      <section id="chi-siamo" className="py-20 md:py-32 relative overflow-hidden scroll-mt-20">
         <div className="container mx-auto px-4 relative z-10">
           <motion.div 
             className="text-center mb-16"
@@ -79,7 +79,7 @@ export default function Landing() {
       </section>
 
       {/* Process Section */}
-      <section className="py-20 md:py-32 relative overflow-hidden bg-muted/20">
+      <section id="piani" className="py-20 md:py-32 relative overflow-hidden bg-muted/20 scroll-mt-20">
         <div className="container mx-auto px-4 relative z-10">
           <motion.div 
             className="text-center mb-20"
@@ -131,7 +131,7 @@ export default function Landing() {
       </section>
 
       {/* Features Section */}
-      <section className="py-20 md:py-32 relative overflow-hidden">
+      <section id="funzionalita" className="py-20 md:py-32 relative overflow-hidden scroll-mt-20">
         <div className="container mx-auto px-4">
           <motion.div 
             className="text-center mb-20"
@@ -181,7 +181,7 @@ export default function Landing() {
       </section>
 
       {/* CTA Section */}
-      <section className="py-20 md:py-32 relative overflow-hidden">
+      <section id="contatti" className="py-20 md:py-32 relative overflow-hidden scroll-mt-20">
         <div className="container mx-auto px-4 relative z-10">
           <motion.div 
             className="max-w-4xl mx-auto relative"

@@ -145,10 +145,10 @@ export function HeroSection() {
 }
 
 const menuItems = [
-  { name: 'Chi Siamo', href: '/chi-siamo' },
-  { name: 'Piani', href: '/pricing' },
-  { name: 'FAQ', href: '/faq' },
-  { name: 'Contatti', href: '/contatti' },
+  { name: 'Chi Siamo', href: '#chi-siamo' },
+  { name: 'Piani', href: '#piani' },
+  { name: 'Funzionalità', href: '#funzionalita' },
+  { name: 'Contatti', href: '#contatti' },
 ];
 
 const HeroHeader = () => {
@@ -206,12 +206,16 @@ const HeroHeader = () => {
               <ul className="flex gap-8 text-sm">
                 {menuItems.map((item, index) => (
                   <li key={index}>
-                    <Link
-                      to={item.href}
-                      className="text-muted-foreground hover:text-foreground block duration-150 font-medium"
+                    <a
+                      href={item.href}
+                      onClick={(e) => {
+                        e.preventDefault();
+                        document.querySelector(item.href)?.scrollIntoView({ behavior: 'smooth' });
+                      }}
+                      className="text-muted-foreground hover:text-foreground block duration-150 font-medium cursor-pointer"
                     >
                       <span>{item.name}</span>
-                    </Link>
+                    </a>
                   </li>
                 ))}
               </ul>
@@ -227,13 +231,17 @@ const HeroHeader = () => {
                 <ul className="space-y-6 text-base">
                   {menuItems.map((item, index) => (
                     <li key={index}>
-                      <Link
-                        to={item.href}
-                        className="text-muted-foreground hover:text-foreground block duration-150"
-                        onClick={() => setMenuState(false)}
+                      <a
+                        href={item.href}
+                        onClick={(e) => {
+                          e.preventDefault();
+                          setMenuState(false);
+                          document.querySelector(item.href)?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        className="text-muted-foreground hover:text-foreground block duration-150 cursor-pointer"
                       >
                         <span>{item.name}</span>
-                      </Link>
+                      </a>
                     </li>
                   ))}
                 </ul>
