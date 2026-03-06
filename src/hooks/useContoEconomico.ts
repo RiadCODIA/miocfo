@@ -73,9 +73,12 @@ export function useContoEconomico(year: number) {
         id: c.id, name: c.name, cost_type: c.cost_type as "fixed" | "variable", category_type: c.category_type,
       }));
 
-      const revenueCategories: CostCategory[] = (revenueCatsRes.data || []).map((c) => ({
-        id: c.id, name: c.name, cost_type: c.cost_type as "fixed" | "variable", category_type: c.category_type,
-      }));
+      const EXCLUDED_REVENUE = ["incassi", "bonifici", "altri incassi"];
+      const revenueCategories: CostCategory[] = (revenueCatsRes.data || [])
+        .filter((c) => !EXCLUDED_REVENUE.includes(c.name.toLowerCase()))
+        .map((c) => ({
+          id: c.id, name: c.name, cost_type: c.cost_type as "fixed" | "variable", category_type: c.category_type,
+        }));
 
       const expenseCatById: Record<string, CostCategory> = {};
       orderedCostCategories.forEach((c) => { expenseCatById[c.id] = c; });
