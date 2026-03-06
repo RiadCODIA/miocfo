@@ -214,10 +214,9 @@ export function Sidebar() {
   const { hasFeature, isSuperAdmin } = useUserSubscription();
   const navGroups = isSuperAdmin ? superAdminNavGroups : userNavGroups;
 
-  // Filter nav items based on subscription
-  const filterItems = (items: NavItem[]): NavItem[] => {
-    if (isSuperAdmin) return items;
-    return items.filter(item => hasFeature(item.id));
+  const isItemLocked = (item: NavItem): boolean => {
+    if (isSuperAdmin) return false;
+    return !hasFeature(item.id);
   };
 
   const toggleGroup = (label: string) => {
