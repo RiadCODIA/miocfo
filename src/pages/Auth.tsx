@@ -30,7 +30,7 @@ const signupSchema = z.object({
 });
 
 export default function Auth() {
-  const { user, loading, signIn, signUp, signInAsDemo, signInAsDemoAdmin, signInAsDemoSuperAdmin } = useAuth();
+  const { user, loading, signIn, signUp } = useAuth();
   const navigate = useNavigate();
   
   const [activeTab, setActiveTab] = useState<"login" | "signup">("login");
