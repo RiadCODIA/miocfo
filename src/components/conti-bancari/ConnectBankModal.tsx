@@ -111,37 +111,39 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       setStep("connecting");
       onOpenChange(true);
 
-      const completeAcube = async (retries = 5) => {
-        try {
-          let session = (await supabase.auth.getSession()).data.session;
-          if (!session?.access_token) {
-            for (let i = 0; i < retries; i++) {
-              await new Promise(r => setTimeout(r, 1000));
-              session = (await supabase.auth.getSession()).data.session;
-              if (session?.access_token) break;
-            }
+      const waitForAcubeSession = async () => {
+        let session = (await supabase.auth.getSession()).data.session;
+        if (!session?.access_token) {
+          for (let i = 0; i < 5; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            session = (await supabase.auth.getSession()).data.session;
+            if (session?.access_token) break;
           }
-          if (!session?.access_token) throw new Error("Sessione non disponibile");
-
-          const response = await fetch(
-            `https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/acube-banking`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${session.access_token}`,
-                apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6aG9ubXVoeXdkaXFheHhibnNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzNzEzMTMsImV4cCI6MjA4NTk0NzMxM30.7oaiC1P4pwNdj8mIv4rU5Jsdm2jgkxKwz85PzUxWcvY",
-              },
-              body: JSON.stringify({
-                action: "complete_connection",
-                fiscal_id: acubeFiscalId,
-              }),
-            }
-          );
-          if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.error || "Errore nel completamento A-Cube");
+        }
+        if (!session?.access_token) {
+          setErrorMessage("Sessione non disponibile");
+          setStep("error");
+          return;
+        }
+        // Session ready — show syncing info immediately
+        setStep("syncing");
+        // Fire-and-forget A-Cube completion
+        fetch(
+          `https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/acube-banking`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+              apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6aG9ubXVoeXdkaXFheHhibnNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzNzEzMTMsImV4cCI6MjA4NTk0NzMxM30.7oaiC1P4pwNdj8mIv4rU5Jsdm2jgkxKwz85PzUxWcvY",
+            },
+            body: JSON.stringify({
+              action: "complete_connection",
+              fiscal_id: acubeFiscalId,
+            }),
           }
+        ).then(async (response) => {
+          if (!response.ok) throw new Error("Errore nel completamento A-Cube");
           const data = await response.json();
           const mapped: BankAccount[] = (data.accounts || []).map((a: Record<string, unknown>) => ({
             id: a.id as string,
@@ -157,23 +159,17 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
             last_sync_at: a.last_sync_at as string,
           }));
           setConnectedAccounts(mapped);
-          setStep("success");
-          // Immediately invalidate so the page behind the modal refreshes
           queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
           queryClient.invalidateQueries({ queryKey: ["bank-transactions-count"] });
           queryClient.invalidateQueries({ queryKey: ["bank-accounts-balances"] });
-        } catch (error) {
-          console.error("A-Cube complete error:", error);
-          setErrorMessage(error instanceof Error ? error.message : "Errore A-Cube");
-          setStep("error");
-        }
+        }).catch((error) => {
+          console.error("A-Cube background sync error:", error);
+          toast.error("Errore sincronizzazione", {
+            description: "Il collegamento potrebbe essere avvenuto correttamente. Ricarica la pagina per verificare.",
+          });
+        });
       };
-      // 120s timeout for A-Cube too
-      const timeout = setTimeout(() => {
-        setErrorMessage("Timeout: il collegamento sta impiegando troppo tempo. Riprova.");
-        setStep("error");
-      }, 120000);
-      completeAcube().finally(() => clearTimeout(timeout));
+      waitForAcubeSession();
     }
   }, [completeSession, onOpenChange]);
 
