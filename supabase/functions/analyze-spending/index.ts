@@ -63,12 +63,35 @@ serve(async (req) => {
       throw new Error("LOVABLE_API_KEY not configured");
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    // Extract user identity from Authorization header
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(
+        JSON.stringify({ error: "Non autenticato. Effettua il login." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    // Fetch ALL transactions (both income and expenses)
+    const supabase = createClient(supabaseUrl, supabaseKey);
+    const token = authHeader.replace("Bearer ", "");
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      console.error("Auth error:", authError);
+      return new Response(
+        JSON.stringify({ error: "Sessione non valida. Effettua nuovamente il login." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    const userId = user.id;
+    console.log(`Analyzing spending for user: ${userId}`);
+
+    // Fetch ALL transactions for THIS USER (both income and expenses)
     const { data: allTransactions, error: allTxError } = await supabase
       .from("bank_transactions")
       .select("id, description, merchant_name, amount, date, ai_category_id")
+      .eq("user_id", userId)
       .order("date", { ascending: false });
 
     if (allTxError) {

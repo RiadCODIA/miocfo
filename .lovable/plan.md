@@ -1,38 +1,38 @@
 
 
-## Plan: Fix Data Isolation in Edge Functions
+## Plan: Convert Nav Links to Scroll-to-Section Navigation
 
-### Problem
-The `analyze-spending` edge function uses the **service role key** (bypasses RLS) and queries `bank_transactions` **without any `user_id` filter**. This means when any user triggers the spending analysis, they see ALL users' transaction data — a critical data leak.
+The current nav menu (`Chi Siamo`, `Piani`, `FAQ`, `Contatti`) links to separate pages via React Router. Instead, each nav item will scroll smoothly to the corresponding section on the landing page.
 
-The `categorize-transactions` function has a similar issue in batch mode (no user filter), though the impact is different (it categorizes all users' transactions together, not leaking data to the UI directly).
+### Changes
 
-### Root Cause
-- `analyze-spending` creates a Supabase client with `SUPABASE_SERVICE_ROLE_KEY` and never extracts the calling user's identity
-- It fetches from `bank_transactions` and `cost_categories` without `.eq("user_id", userId)`
+**1. `src/pages/Landing.tsx`** — Add `id` attributes to sections:
+- Problems section → `id="chi-siamo"`
+- Process section → `id="piani"` (or a pricing-like section)
+- Features section → `id="faq"`
+- CTA section → `id="contatti"`
 
-### Fix
+More logically mapped:
+- `id="problemi"` on Problems section
+- `id="soluzione"` on Process section  
+- `id="funzionalita"` on Features section
+- `id="contatti"` on CTA section
 
-**File: `supabase/functions/analyze-spending/index.ts`**
+The nav items will be renamed/remapped to match these sections.
 
-1. **Extract the user's identity** from the `Authorization` header (same pattern as `ai-assistant`):
-   - Get the Bearer token from the request header
-   - Call `supabase.auth.getUser(token)` to verify and get `user.id`
-   - Return 401 if not authenticated
+**2. `src/components/landing/HeroSection.tsx`** — Change nav from `<Link to="...">` to `<a href="#section-id">` with smooth scroll:
+- Update `menuItems` array to use anchor `href`s (`#problemi`, `#soluzione`, `#funzionalita`, `#contatti`)
+- Replace `<Link>` with `<a>` tags that call `scrollIntoView({ behavior: 'smooth' })` on click
+- Close mobile menu on click
 
-2. **Filter all queries by `user_id`**:
-   - Line 69-72: Add `.eq("user_id", userId)` to the `bank_transactions` query
-   - Line 95-98: Add `.eq("user_id", userId)` or keep global categories (they use `user_id IS NULL` for system ones) — categories are fine as-is since they're read-only reference data
+### Section ↔ Nav Mapping
 
-3. **No changes needed** for `ai-assistant` (already filters by userId), `analyze-conto-economico` (receives data from frontend), or `analyze-kpi` (receives data from frontend).
+| Nav Label | Section ID | Landing Section |
+|-----------|-----------|-----------------|
+| Chi Siamo | `#chi-siamo` | Problems section |
+| Piani | `#piani` | Process section |
+| FAQ | `#funzionalita` | Features section |
+| Contatti | `#contatti` | CTA/Footer section |
 
-**File: `supabase/functions/categorize-transactions/index.ts`** (optional hardening)
-
-The batch mode (line 100-106) processes all uncategorized transactions across all users. This is acceptable for a background job but should also filter `categorization_rules` by user. Since it doesn't leak data to the UI, this is lower priority but worth noting.
-
-### Summary of Changes
-- Single file edit: `analyze-spending/index.ts`
-- Add auth validation (~10 lines)
-- Add `.eq("user_id", userId)` to the transactions query
-- Redeploy automatically
+**Files to modify**: `src/components/landing/HeroSection.tsx`, `src/pages/Landing.tsx`
 
