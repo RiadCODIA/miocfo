@@ -72,30 +72,6 @@ export default function Auth() {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const handleDemoLogin = async () => {
-    setIsSubmitting(true);
-    const { error } = await signInAsDemo();
-    setIsSubmitting(false);
-    
-    if (error) {
-      toast.error("Errore Demo", {
-        description: "Account demo utente non disponibile. Contatta l'amministratore.",
-      });
-    }
-  };
-
-  const handleSuperAdminDemoLogin = async () => {
-    setIsSubmitting(true);
-    const { error } = await signInAsDemoSuperAdmin();
-    setIsSubmitting(false);
-    
-    if (error) {
-      toast.error("Errore Demo", {
-        description: "Account demo super admin non disponibile. Contatta l'amministratore.",
-      });
-    }
-  };
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     
