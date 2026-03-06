@@ -218,7 +218,19 @@ export default function Fatture() {
     },
   });
 
-  const handleUpload = async (files: File[]) => {
+  // When user drops/selects files, show type dialog first
+  const handleUpload = (files: File[]) => {
+    setPendingFiles(files);
+    setIsTypeDialogOpen(true);
+  };
+
+  // After user picks a type, actually start uploading
+  const handleTypeConfirm = async (invoiceType: "emessa" | "ricevuta" | "autofattura") => {
+    const files = pendingFiles;
+    setIsTypeDialogOpen(false);
+    setPendingFiles(null);
+    if (!files || files.length === 0) return;
+
     const newUploads: UploadedInvoice[] = files.map((file) => ({
       id: `upload-${Date.now()}-${Math.random()}`,
       fileName: file.name,
@@ -230,27 +242,29 @@ export default function Fatture() {
     setUploadingFiles((prev) => [...prev, ...newUploads]);
 
     try {
-      // Update status to processing
       setUploadingFiles((prev) =>
         prev.map((f) =>
           newUploads.some(u => u.id === f.id) ? { ...f, status: "processing" as const } : f
         )
       );
 
-      await uploadMutation.mutateAsync(files);
+      await uploadMutation.mutateAsync({ files, invoiceType });
 
-      // Clear upload queue on success
       setUploadingFiles((prev) =>
         prev.filter((f) => !newUploads.some(u => u.id === f.id))
       );
     } catch (error) {
-      // Mark as error
       setUploadingFiles((prev) =>
         prev.map((f) =>
           newUploads.some(u => u.id === f.id) ? { ...f, status: "error" as const } : f
         )
       );
     }
+  };
+
+  const handleTypeCancel = () => {
+    setIsTypeDialogOpen(false);
+    setPendingFiles(null);
   };
 
   const handleRemoveUpload = (id: string) => {
