@@ -1,34 +1,49 @@
 
 
-## Piano: Estendere lo storico bancario a 3 anni
+## Plan: Fix Bank Account Data Leak Between Users
 
-### Problema
-Attualmente, quando si collegano i conti bancari, il sistema scarica solo **2 anni** (730 giorni) di transazioni. Serve estendere a **3 anni** (1095 giorni).
+### Problem
+The edge functions use `SUPABASE_SERVICE_ROLE_KEY` (bypasses RLS) and upsert bank accounts with `onConflict: "external_id"`. If two users connect the same bank account (or banks reuse external IDs), the second user's data overwrites the first user's record, causing cross-user data leaks.
 
-### Modifiche previste
+Same issue exists for `acube_account_id` in the A-Cube function and `external_id` on `bank_transactions`.
 
-#### 1. Edge Function `enable-banking` - Due punti da aggiornare
+### Root Cause
+The unique constraints on `external_id` and `acube_account_id` are **global** (not scoped per user). Combined with service role key usage, this means upserts can overwrite another user's records.
 
-**File: `supabase/functions/enable-banking/index.ts`**
+### Changes
 
-Ci sono 2 occorrenze di `730 * 24 * 60 * 60 * 1000` (righe 462 e 602) che vanno cambiate in `1095 * 24 * 60 * 60 * 1000`:
+#### 1. Database Migration - User-scoped unique constraints
 
-- **Riga 462**: Sync iniziale durante il collegamento del conto
-- **Riga 602**: Sync durante il refresh manuale ("Aggiorna")
+Drop the existing unique constraints and replace them with composite ones that include `user_id`:
 
-#### 2. Edge Function `sync-bank-accounts` - Nessuna modifica
+```sql
+-- bank_accounts: external_id should be unique per user, not globally
+ALTER TABLE bank_accounts DROP CONSTRAINT IF EXISTS bank_accounts_external_id_key;
+CREATE UNIQUE INDEX bank_accounts_external_id_user_id_idx ON bank_accounts (external_id, user_id) WHERE external_id IS NOT NULL;
 
-Questa function usa 30 giorni per l'auto-sync periodico, il che e corretto: la sincronizzazione automatica non deve riscaricare tutto lo storico ogni volta, ma solo le transazioni recenti. Lo storico completo di 3 anni viene scaricato solo al collegamento iniziale e al refresh manuale.
+-- bank_accounts: acube_account_id should be unique per user
+ALTER TABLE bank_accounts DROP CONSTRAINT IF EXISTS bank_accounts_acube_account_id_key;
+CREATE UNIQUE INDEX bank_accounts_acube_account_id_user_id_idx ON bank_accounts (acube_account_id, user_id) WHERE acube_account_id IS NOT NULL;
 
-### Dettagli tecnici
-
-```text
-Prima:  730 * 24 * 60 * 60 * 1000  (2 anni)
-Dopo:  1095 * 24 * 60 * 60 * 1000  (3 anni)
+-- bank_transactions: external_id should be unique per user
+ALTER TABLE bank_transactions DROP CONSTRAINT IF EXISTS bank_transactions_external_id_key;
+CREATE UNIQUE INDEX bank_transactions_external_id_user_id_idx ON bank_transactions (external_id, user_id) WHERE external_id IS NOT NULL;
 ```
 
-Entrambe le modifiche sono nel file `supabase/functions/enable-banking/index.ts`. Dopo la modifica, la function verra ri-deployata automaticamente.
+#### 2. Edge Function `enable-banking/index.ts`
 
-**Nota**: La quantita di storico effettivamente disponibile dipende anche dalla banca collegata (alcune banche PSD2 forniscono massimo 18-24 mesi). Il sistema richiedera 3 anni ma ricevera quello che la banca rende disponibile.
+Update upsert calls to use the composite conflict target:
+- Line 437: `onConflict: "external_id"` → `onConflict: "external_id,user_id"`
+- Line 521: `onConflict: "external_id"` → `onConflict: "external_id,user_id"` (transactions)
+- Line 656: `onConflict: "external_id"` → `onConflict: "external_id,user_id"` (sync transactions)
 
-**File modificati**: `supabase/functions/enable-banking/index.ts`
+#### 3. Edge Function `acube-banking/index.ts`
+
+- Line 377: `onConflict: "acube_account_id"` → `onConflict: "acube_account_id,user_id"`
+- Line 432: `onConflict: "external_id"` → `onConflict: "external_id,user_id"` (transactions)
+
+### Impact
+- Each user gets their own isolated bank account records even if connecting the same bank
+- Existing data is preserved; the migration only changes constraints
+- **4 files modified**: 1 migration + 2 edge functions
+
