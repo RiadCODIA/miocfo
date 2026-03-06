@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS bank_transactions_external_id_key;
