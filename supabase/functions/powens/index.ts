@@ -73,18 +73,13 @@ async function powensRequest(
 }
 
 async function createWebviewUrl(redirectUri: string) {
-  // Generate the webview URL for bank connection
-  // URL format: https://webview.powens.com/connect?domain={domain}&client_id=...&redirect_uri=...
   const webviewUrl = `https://webview.powens.com/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(redirectUri)}`;
-
   console.log(`[Powens] Created webview URL: ${webviewUrl}`);
-
   return { webview_url: webviewUrl };
 }
 
-async function exchangeCode(code: string) {
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
+// deno-lint-ignore no-explicit-any
+async function exchangeCode(code: string, userId: string, supabase: any) {
   // Exchange authorization code for permanent token
   const response = await fetch(`${POWENS_API_URL}/auth/token/access`, {
     method: "POST",
@@ -106,9 +101,9 @@ async function exchangeCode(code: string) {
   }
 
   const permanentToken = tokenData.access_token;
-  const userId = tokenData.user?.id;
+  const powensUserId = tokenData.user?.id;
 
-  console.log(`[Powens] Got permanent token for user: ${userId}`);
+  console.log(`[Powens] Got permanent token for Powens user: ${powensUserId}, app user: ${userId}`);
 
   // Get user's connections (banks)
   const connectionsData = await powensRequest(
@@ -132,11 +127,10 @@ async function exchangeCode(code: string) {
   const accounts = accountsData.accounts || [];
   console.log(`[Powens] Found ${accounts.length} accounts`);
 
-  // Save each account to database
+  // Save each account to database with the authenticated user's ID
   const savedAccounts = [];
 
   for (const account of accounts) {
-    // Find the connection for this account to get bank name
     const connection = connections.find(
       (c: { id: number }) => c.id === account.id_connection
     );
@@ -146,7 +140,8 @@ async function exchangeCode(code: string) {
       .from("bank_accounts")
       .upsert(
         {
-          plaid_item_id: `powens_${userId}`, // Reusing field for Powens user ID
+          user_id: userId,
+          plaid_item_id: `powens_${powensUserId}`,
           plaid_access_token: permanentToken,
           plaid_account_id: String(account.id),
           bank_name: bankName,
@@ -179,12 +174,12 @@ async function exchangeCode(code: string) {
   return { accounts: savedAccounts };
 }
 
-async function getAccounts() {
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
+// deno-lint-ignore no-explicit-any
+async function getAccounts(userId: string, supabase: any) {
   const { data: accounts, error } = await supabase
     .from("bank_accounts")
     .select("*")
+    .eq("user_id", userId)
     .order("created_at", { ascending: false });
 
   if (error) {
@@ -195,21 +190,21 @@ async function getAccounts() {
   return { accounts };
 }
 
-async function syncAccount(accountId: string) {
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-  // Get account from database
+// deno-lint-ignore no-explicit-any
+async function syncAccount(accountId: string, userId: string, supabase: any) {
+  // Get account from database, scoped to user
   const { data: account, error: accountError } = await supabase
     .from("bank_accounts")
     .select("*")
     .eq("id", accountId)
+    .eq("user_id", userId)
     .single();
 
   if (accountError || !account) {
-    throw new Error("Account not found");
+    throw new Error("Account not found or access denied");
   }
 
-  console.log(`[Powens] Syncing account: ${account.id}`);
+  console.log(`[Powens] Syncing account: ${account.id} for user: ${userId}`);
 
   const permanentToken = account.plaid_access_token;
   const powensAccountId = account.plaid_account_id;
@@ -231,7 +226,8 @@ async function syncAccount(accountId: string) {
         last_sync_at: new Date().toISOString(),
         status: accountData.disabled ? "error" : "active",
       })
-      .eq("id", accountId);
+      .eq("id", accountId)
+      .eq("user_id", userId);
 
     if (updateError) {
       console.error("[Powens] Error updating account:", updateError);
@@ -258,6 +254,7 @@ async function syncAccount(accountId: string) {
   for (const tx of transactions) {
     const { error: txError } = await supabase.from("bank_transactions").upsert(
       {
+        user_id: userId,
         bank_account_id: accountId,
         plaid_transaction_id: String(tx.id),
         amount: tx.value || 0,
@@ -283,6 +280,7 @@ async function syncAccount(accountId: string) {
     .from("bank_accounts")
     .select("*")
     .eq("id", accountId)
+    .eq("user_id", userId)
     .single();
 
   return {
@@ -293,15 +291,29 @@ async function syncAccount(accountId: string) {
 
 async function getTransactions(
   accountId: string,
+  userId: string,
+  // deno-lint-ignore no-explicit-any
+  supabase: any,
   startDate?: string,
   endDate?: string
 ) {
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
+  // First verify the account belongs to this user
+  const { data: account, error: accountError } = await supabase
+    .from("bank_accounts")
+    .select("id")
+    .eq("id", accountId)
+    .eq("user_id", userId)
+    .single();
+
+  if (accountError || !account) {
+    throw new Error("Account not found or access denied");
+  }
 
   let query = supabase
     .from("bank_transactions")
     .select("*")
     .eq("bank_account_id", accountId)
+    .eq("user_id", userId)
     .order("date", { ascending: false });
 
   if (startDate) {
@@ -321,18 +333,18 @@ async function getTransactions(
   return { transactions };
 }
 
-async function removeConnection(accountId: string) {
-  const supabase = createClient(supabaseUrl, supabaseServiceKey);
-
-  // Get account
+// deno-lint-ignore no-explicit-any
+async function removeConnection(accountId: string, userId: string, supabase: any) {
+  // Get account, scoped to user
   const { data: account, error: accountError } = await supabase
     .from("bank_accounts")
     .select("*")
     .eq("id", accountId)
+    .eq("user_id", userId)
     .single();
 
   if (accountError || !account) {
-    throw new Error("Account not found");
+    throw new Error("Account not found or access denied");
   }
 
   // Handle manual accounts - delete directly
@@ -342,7 +354,8 @@ async function removeConnection(accountId: string) {
     const { error: deleteError } = await supabase
       .from("bank_accounts")
       .delete()
-      .eq("id", accountId);
+      .eq("id", accountId)
+      .eq("user_id", userId);
 
     if (deleteError) {
       console.error("[Powens] Error deleting manual account:", deleteError);
@@ -352,15 +365,14 @@ async function removeConnection(accountId: string) {
     return { success: true, deleted_count: 1, account_type: "manual" };
   }
 
-  // For Powens accounts, we can optionally revoke the connection
-  // For now, just delete from our database
+  // For Powens accounts, delete ALL accounts with the same Powens user ID AND same user
   const powensUserId = account.plaid_item_id;
 
-  // Delete ALL accounts with the same Powens user ID
   const { data: deletedAccounts, error: deleteError } = await supabase
     .from("bank_accounts")
     .delete()
     .eq("plaid_item_id", powensUserId)
+    .eq("user_id", userId)
     .select("id");
 
   if (deleteError) {
@@ -370,7 +382,7 @@ async function removeConnection(accountId: string) {
 
   const deletedCount = deletedAccounts?.length || 0;
   console.log(
-    `[Powens] Deleted ${deletedCount} accounts for user ${powensUserId}`
+    `[Powens] Deleted ${deletedCount} accounts for user ${userId}`
   );
 
   return {
@@ -390,6 +402,37 @@ Deno.serve(async (req) => {
     const body: PowensRequest = await req.json();
     console.log(`[Powens] Action: ${body.action}`);
 
+    // Authenticate user (except for create_webview_url which doesn't need DB access)
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    let userId: string | null = null;
+
+    if (body.action !== "create_webview_url") {
+      const authHeader = req.headers.get("Authorization");
+      if (!authHeader) {
+        return new Response(
+          JSON.stringify({ error: "Autenticazione richiesta." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const authClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: authError } = await authClient.auth.getUser();
+
+      if (authError || !user) {
+        console.error("[Powens] Auth error:", authError);
+        return new Response(
+          JSON.stringify({ error: "Sessione non valida. Effettua nuovamente il login." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+
+      userId = user.id;
+      console.log(`[Powens] Authenticated user: ${userId}`);
+    }
+
     let result;
 
     switch (body.action) {
@@ -404,18 +447,18 @@ Deno.serve(async (req) => {
         if (!body.code) {
           throw new Error("code is required");
         }
-        result = await exchangeCode(body.code);
+        result = await exchangeCode(body.code, userId!, supabase);
         break;
 
       case "get_accounts":
-        result = await getAccounts();
+        result = await getAccounts(userId!, supabase);
         break;
 
       case "sync_account":
         if (!body.account_id) {
           throw new Error("account_id is required");
         }
-        result = await syncAccount(body.account_id);
+        result = await syncAccount(body.account_id, userId!, supabase);
         break;
 
       case "get_transactions":
@@ -424,6 +467,8 @@ Deno.serve(async (req) => {
         }
         result = await getTransactions(
           body.account_id,
+          userId!,
+          supabase,
           body.start_date,
           body.end_date
         );
@@ -433,7 +478,7 @@ Deno.serve(async (req) => {
         if (!body.account_id) {
           throw new Error("account_id is required");
         }
-        result = await removeConnection(body.account_id);
+        result = await removeConnection(body.account_id, userId!, supabase);
         break;
 
       default:

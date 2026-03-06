@@ -42,7 +42,7 @@ serve(async (req) => {
   }
 
   try {
-    const { transaction_ids, batch_mode = false } = await req.json();
+    const { transaction_ids, batch_mode = false, user_id: passedUserId } = await req.json();
     
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) {
@@ -53,7 +53,40 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Fetch available categories
+    // Determine user ID: either from auth header (user-initiated) or passed directly (background job)
+    let userId: string | null = null;
+
+    const authHeader = req.headers.get("Authorization");
+    if (authHeader && !passedUserId) {
+      // User-initiated call: verify identity via auth
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+      const authClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data: { user }, error: authError } = await authClient.auth.getUser();
+      if (authError || !user) {
+        console.error("[Categorize] Auth error:", authError);
+        return new Response(
+          JSON.stringify({ error: "Sessione non valida. Effettua nuovamente il login." }),
+          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+      userId = user.id;
+    } else if (passedUserId) {
+      // Background job (auto-categorize) passes user_id directly via service role
+      userId = passedUserId;
+    }
+
+    if (!userId) {
+      return new Response(
+        JSON.stringify({ error: "User ID richiesto. Autenticati o fornisci user_id." }),
+        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    console.log(`[Categorize] Processing for user: ${userId}`);
+
+    // Fetch available categories (global + user's own)
     const { data: categories, error: catError } = await supabase
       .from("cost_categories")
       .select("id, name, cost_type, cashflow_type")
@@ -64,18 +97,20 @@ serve(async (req) => {
       throw new Error("No active cost categories found. Please create categories first.");
     }
 
-    // Also fetch existing categorization rules for pattern matching
+    // Fetch categorization rules scoped to THIS user
     const { data: rules } = await supabase
       .from("categorization_rules")
       .select("pattern, category_id, match_type, priority")
+      .eq("user_id", userId)
       .order("priority", { ascending: false });
 
-    // If specific transaction IDs provided, process just those
+    // If specific transaction IDs provided, process just those (verify ownership)
     if (transaction_ids && transaction_ids.length > 0) {
       const { data: transactions, error: txError } = await supabase
         .from("bank_transactions")
         .select("id, description, merchant_name, amount, category")
-        .in("id", transaction_ids);
+        .in("id", transaction_ids)
+        .eq("user_id", userId);
 
       if (txError) throw new Error(`Failed to fetch transactions: ${txError.message}`);
       if (!transactions || transactions.length === 0) {
@@ -92,16 +127,16 @@ serve(async (req) => {
       );
     }
 
-    // Batch mode: process ALL uncategorized transactions with parallel batches
+    // Batch mode: process uncategorized transactions FOR THIS USER
     if (batch_mode) {
       let totalProcessed = 0;
       const allResults: CategorizationResult[] = [];
 
       while (totalProcessed < MAX_PER_CALL) {
-        // Fetch multiple batches at once for parallel processing
         const { data: transactions, error: txError } = await supabase
           .from("bank_transactions")
           .select("id, description, merchant_name, amount, category")
+          .eq("user_id", userId)
           .is("ai_category_id", null)
           .limit(BATCH_SIZE * PARALLEL_BATCHES);
 
@@ -111,7 +146,7 @@ serve(async (req) => {
         }
 
         if (!transactions || transactions.length === 0) {
-          console.log(`[Categorize] No more uncategorized transactions. Total processed: ${totalProcessed}`);
+          console.log(`[Categorize] No more uncategorized transactions for user ${userId}. Total processed: ${totalProcessed}`);
           break;
         }
 
@@ -146,7 +181,7 @@ serve(async (req) => {
         }
       }
 
-      console.log(`[Categorize] Completed. Total categorized: ${allResults.length}`);
+      console.log(`[Categorize] Completed for user ${userId}. Total categorized: ${allResults.length}`);
       
       return new Response(
         JSON.stringify({
