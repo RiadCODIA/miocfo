@@ -124,7 +124,19 @@ export default function Transazioni() {
   };
 
   const { data: accounts } = useBankAccounts();
+  const connectedAccounts = accounts?.filter(a => a.is_connected) || [];
   const { isLoading: isCategorizing } = useCategorizeTransactions();
+
+  // Realtime subscription for new transactions
+  useEffect(() => {
+    const channel = supabase
+      .channel('transazioni-realtime')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'bank_transactions' }, () => {
+        queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [queryClient]);
 
   const { data: costCategories } = useQuery({
     queryKey: ["cost-categories"],
