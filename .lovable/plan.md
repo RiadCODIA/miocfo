@@ -1,38 +1,47 @@
 
 
-## Plan: Convert Nav Links to Scroll-to-Section Navigation
+## Plan: Add Invoice Type Selection on Upload + Fix IVA Display
 
-The current nav menu (`Chi Siamo`, `Piani`, `FAQ`, `Contatti`) links to separate pages via React Router. Instead, each nav item will scroll smoothly to the corresponding section on the landing page.
+### Problem
+1. When uploading an invoice, there's no prompt asking the user whether the invoice was **emessa** (issued by them) or **ricevuta** (received from a supplier). The AI guesses the direction but can get it wrong, causing the IVA to appear in the wrong column (debito vs credito).
+2. If a supplier invoice is incorrectly classified as "emessa", its VAT goes to "IVA a debito" instead of "IVA a credito".
 
-### Changes
+### Solution
 
-**1. `src/pages/Landing.tsx`** — Add `id` attributes to sections:
-- Problems section → `id="chi-siamo"`
-- Process section → `id="piani"` (or a pricing-like section)
-- Features section → `id="faq"`
-- CTA section → `id="contatti"`
+**1. Add an invoice type selection dialog before upload processing**
 
-More logically mapped:
-- `id="problemi"` on Problems section
-- `id="soluzione"` on Process section  
-- `id="funzionalita"` on Features section
-- `id="contatti"` on CTA section
+**File: `src/components/fatture/InvoiceTypeDialog.tsx`** (new)
+- A simple dialog/modal that appears after file selection but before upload starts
+- Two clear options: "Fattura emessa (vendita)" and "Fattura ricevuta (acquisto)"
+- Optionally a third: "Autofattura"
+- The selected type is passed along to the upload function
 
-The nav items will be renamed/remapped to match these sections.
+**2. Update `src/pages/Fatture.tsx`**
+- When `handleUpload` is called with files, instead of immediately uploading, show the `InvoiceTypeDialog`
+- Store the pending files in state
+- On dialog confirm, pass the selected type to the upload mutation
+- The upload mutation sends the `invoiceType` hint to the edge function
 
-**2. `src/components/landing/HeroSection.tsx`** — Change nav from `<Link to="...">` to `<a href="#section-id">` with smooth scroll:
-- Update `menuItems` array to use anchor `href`s (`#problemi`, `#soluzione`, `#funzionalita`, `#contatti`)
-- Replace `<Link>` with `<a>` tags that call `scrollIntoView({ behavior: 'smooth' })` on click
-- Close mobile menu on click
+**3. Update `src/components/fatture/InvoiceUploadZone.tsx`**
+- No changes needed — it just calls `onUpload(files)` which triggers the dialog
 
-### Section ↔ Nav Mapping
+**4. Update `supabase/functions/process-invoice/index.ts`**
+- Accept an optional `invoiceType` field in the JSON body
+- If provided, override the AI's `invoice_direction` with the user's choice instead of guessing
+- This ensures correct classification for IVA calculations
 
-| Nav Label | Section ID | Landing Section |
-|-----------|-----------|-----------------|
-| Chi Siamo | `#chi-siamo` | Problems section |
-| Piani | `#piani` | Process section |
-| FAQ | `#funzionalita` | Features section |
-| Contatti | `#contatti` | CTA/Footer section |
+### Flow
 
-**Files to modify**: `src/components/landing/HeroSection.tsx`, `src/pages/Landing.tsx`
+```text
+User drops file → InvoiceTypeDialog opens → User picks "Ricevuta" 
+→ Upload starts with invoiceType="ricevuta" → Edge function uses it 
+→ Invoice saved as ricevuta → IVA appears in "IVA a credito" ✓
+```
+
+### Files to modify
+- `src/pages/Fatture.tsx` — add dialog state, intercept upload flow
+- `supabase/functions/process-invoice/index.ts` — accept and use `invoiceType` override
+
+### Files to create
+- `src/components/fatture/InvoiceTypeDialog.tsx` — type selection dialog
 
