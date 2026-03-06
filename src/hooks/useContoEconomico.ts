@@ -207,7 +207,7 @@ export function useContoEconomico(year: number) {
 
       return {
         ricaviPerCategoria,
-        ricaviTotali,
+        ricaviTotali: ricaviTotaliFinal,
         revenueCategories,
         costi,
         costiNonCategorizzati,
