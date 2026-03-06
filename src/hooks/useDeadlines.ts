@@ -56,23 +56,23 @@ function invoiceToDeadline(inv: {
   const isExpense = inv.invoice_type === "expense" || inv.invoice_type === "ricevuta";
   const today = format(new Date(), "yyyy-MM-dd");
 
-  // Core logic: no due_date = already paid/collected
   let status: Deadline["status"];
   let dueDate: string;
 
-  if (!inv.due_date) {
-    // No due date means already paid (expense) or collected (income)
+  const isPaid = inv.payment_status === "paid" || inv.payment_status === "matched";
+
+  if (isPaid) {
     status = "completed";
+    dueDate = inv.due_date || inv.invoice_date || today;
+  } else if (!inv.due_date) {
+    // No due date and not explicitly paid → treat as pending (user can manage)
+    status = "pending";
     dueDate = inv.invoice_date || today;
+  } else if (inv.due_date < today) {
+    status = "overdue";
+    dueDate = inv.due_date;
   } else {
-    const isPaid = inv.payment_status === "paid" || inv.payment_status === "matched";
-    if (isPaid) {
-      status = "completed";
-    } else if (inv.due_date < today) {
-      status = "overdue";
-    } else {
-      status = "pending";
-    }
+    status = "pending";
     dueDate = inv.due_date;
   }
 
@@ -226,9 +226,6 @@ export function useDeadlinesSummary() {
       (invoicesData || [])
         .filter((inv) => !linkedInvoiceIds.includes(inv.id))
         .forEach((inv) => {
-          // No due_date = already paid/collected, skip for summary counters
-          if (!inv.due_date) return;
-          
           const isPaid = inv.payment_status === "paid" || inv.payment_status === "matched";
           if (isPaid) return; // Already completed, skip
           
@@ -323,7 +320,7 @@ export function useAccrualForecast() {
         const isIncome = inv.invoice_type === "income" || inv.invoice_type === "emessa";
         
         // Determine if paid/collected
-        const isPaidOrCollected = !inv.due_date || inv.payment_status === "paid" || inv.payment_status === "matched";
+        const isPaidOrCollected = inv.payment_status === "paid" || inv.payment_status === "matched";
 
         if (isIncome) {
           if (isPaidOrCollected) {
