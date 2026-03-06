@@ -1,48 +1,21 @@
 
 
-## Problem Analysis
+## Issues
 
-Two issues in Budget & Previsioni:
+### 1. IVA Calculation is Wrong
+In `IVASection.tsx`, the current logic only shows the **net** difference as either "a credito" OR "a debito" (one is always zero). In Italian accounting:
+- **IVA a debito** = total VAT on issued invoices (`ivaRicavi`) — always shown
+- **IVA a credito** = total VAT on received invoices (`ivaCosti`) — always shown  
+- **IVA netta** = IVA a debito − IVA a credito (positive = you owe the state, negative = credit)
 
-### 1. Budget entries are not editable
-The table (lines 143-163 in `BudgetPrevisioni.tsx`) renders budgets as read-only rows with no edit or delete actions. The `editedValues` state is initialized but never populated — there are no input fields or action buttons on each row.
+**Fix in `IVASection.tsx`**: Replace the incorrect conditional logic with direct display of `totalIvaRicavi` as "IVA a debito", `totalIvaCosti` as "IVA a credito", and `totalIvaRicavi - totalIvaCosti` as "IVA netta".
 
-### 2. Budget entries not visible on chart
-`useBudgetChartData()` (lines 55-136 in `useBudgets.ts`) builds chart data from:
-- **Actuals**: `bank_transactions` (solid bars)
-- **Expected**: unpaid `invoices` with `due_date` (dashed bars)
+### 2. Remove "Incassi", "Bonifici", "Altri incassi" from Revenue Rows
+These are revenue categories stored in the `cost_categories` table that shouldn't appear in the P&L. They represent payment methods, not economic revenue lines.
 
-It **never queries the `budgets` table**, so manually inserted budgets don't appear on the chart at all.
+**Fix in `useContoEconomico.ts`**: Filter out these categories from `revenueCategories` before building the P&L data, using a name-based exclusion list: `["incassi", "bonifici", "altri incassi"]`. Invoices assigned to these excluded categories will fall back to "Altri ricavi e proventi" (existing fallback logic).
 
 ---
 
-## Fix Plan
-
-### A. Make budget rows editable + deletable
-
-In `BudgetPrevisioni.tsx`:
-- Add a new column "Azioni" to the table header
-- Add inline edit (pencil icon) and delete (trash icon) buttons per row
-- On edit click: open a modal or enable inline editing for name, amount, type, and month
-- On delete: call a new `useDeleteBudget()` mutation
-- Create `useDeleteBudget()` in `useBudgets.ts` that sets `is_active = false` (soft delete) or deletes the row
-
-### B. Include budgets in chart data
-
-In `useBudgetChartData()`:
-- Fetch active budgets from the `budgets` table
-- For each budget, map its `start_date` to a month key
-- Add budget amounts to `ricaviPrevisti` / `costiPrevisti` alongside the invoice-based expected values
-- This makes the dashed bars reflect both manual budgets and pending invoices
-
-### C. Add delete mutation
-
-In `useBudgets.ts`, add:
-```typescript
-export function useDeleteBudget() {
-  // delete from "budgets" by id, invalidate queries
-}
-```
-
-**Files to modify**: `src/pages/BudgetPrevisioni.tsx`, `src/hooks/useBudgets.ts`
+**Files to modify**: `src/components/area-economica/IVASection.tsx`, `src/hooks/useContoEconomico.ts`
 
