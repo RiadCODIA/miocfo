@@ -524,6 +524,9 @@ serve(async (req) => {
       fileType = body.fileType || fileName.split('.').pop()?.toLowerCase() || '';
       userId = body.userId || userId;
 
+      // User-provided invoice type override
+      const invoiceTypeOverride: string | undefined = body.invoiceType;
+
       console.log(`Processing file from storage: ${storagePath}`);
 
       const { data: downloadData, error: downloadError } = await supabaseAdmin.storage

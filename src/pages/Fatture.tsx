@@ -740,6 +740,13 @@ export default function Fatture() {
         onOpenChange={setIsCassettoModalOpen}
         onConnected={(fid) => setConnectedFiscalId(fid)}
       />
+
+      <InvoiceTypeDialog
+        open={isTypeDialogOpen}
+        onConfirm={handleTypeConfirm}
+        onCancel={handleTypeCancel}
+        fileCount={pendingFiles?.length || 0}
+      />
     </div>
   );
 }
