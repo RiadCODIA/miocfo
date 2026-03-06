@@ -101,11 +101,11 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
         }
       };
 
-      // Add 15s timeout
+      // 120s timeout — transaction sync can paginate through thousands of records
       const timeout = setTimeout(() => {
         setErrorMessage("Timeout: il collegamento sta impiegando troppo tempo. Riprova.");
         setStep("error");
-      }, 15000);
+      }, 120000);
       complete().finally(() => clearTimeout(timeout));
     } else if (acubeDone && acubeFiscalId) {
       // A-Cube callback after bank authorization
@@ -167,11 +167,11 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
           setStep("error");
         }
       };
-      // Add 15s timeout for A-Cube too
+      // 120s timeout for A-Cube too
       const timeout = setTimeout(() => {
         setErrorMessage("Timeout: il collegamento sta impiegando troppo tempo. Riprova.");
         setStep("error");
-      }, 15000);
+      }, 120000);
       completeAcube().finally(() => clearTimeout(timeout));
     }
   }, [completeSession, onOpenChange]);
@@ -314,7 +314,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
              "Seleziona la tua banca"}
           </DialogTitle>
           <DialogDescription>
-            {step === "connecting" ? "Stiamo salvando i tuoi dati..." :
+            {step === "connecting" ? "Sincronizzazione transazioni in corso, potrebbe richiedere qualche minuto..." :
              step === "redirecting" ? `Stai per essere reindirizzato a ${selectedBank?.name || "la tua banca"}...` :
              step === "success" ? `${connectedAccounts.length} conto/i collegati con successo` :
              step === "error" ? "Si è verificato un errore durante il collegamento" :
@@ -530,7 +530,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
         {step === "connecting" && (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <Loader2 className="h-12 w-12 text-primary animate-spin" />
-            <p className="text-muted-foreground">Stiamo collegando i tuoi conti...</p>
+            <p className="text-muted-foreground">Sincronizzazione transazioni in corso, potrebbe richiedere qualche minuto...</p>
           </div>
         )}
 
