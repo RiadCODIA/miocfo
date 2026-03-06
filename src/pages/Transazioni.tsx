@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Search, Filter, Download, Edit2, BarChart3, Loader2, X } from "lucide-react";
 import { useDateRange } from "@/contexts/DateRangeContext";
 import { format as formatDate } from "date-fns";
