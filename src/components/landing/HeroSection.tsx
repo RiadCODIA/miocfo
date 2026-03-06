@@ -147,7 +147,7 @@ export function HeroSection() {
 const menuItems = [
   { name: 'Chi Siamo', href: '#chi-siamo' },
   { name: 'Piani', href: '#piani' },
-  { name: 'Funzionalità', href: '#funzionalita' },
+  { name: 'FAQ', href: '#faq' },
   { name: 'Contatti', href: '#contatti' },
 ];
 
