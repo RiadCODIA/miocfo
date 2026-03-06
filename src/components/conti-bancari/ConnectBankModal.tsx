@@ -303,22 +303,24 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            {step === "connecting" ? "Collegamento in corso..." :
-             step === "redirecting" ? "Reindirizzamento..." :
-             step === "success" ? "Connessione riuscita!" :
-             step === "error" ? "Errore di connessione" :
-             provider === "choose" ? "Scegli il metodo di collegamento" :
-             "Seleziona la tua banca"}
-          </DialogTitle>
-          <DialogDescription>
-            {step === "connecting" ? "Sincronizzazione transazioni in corso, potrebbe richiedere qualche minuto..." :
-             step === "redirecting" ? `Stai per essere reindirizzato a ${selectedBank?.name || "la tua banca"}...` :
-             step === "success" ? `${connectedAccounts.length} conto/i collegati con successo` :
-             step === "error" ? "Si è verificato un errore durante il collegamento" :
-             provider === "choose" ? "Seleziona come vuoi collegare il tuo conto bancario" :
-             "Cerca e seleziona la tua banca per collegare i conti"}
-          </DialogDescription>
-        </DialogHeader>
+             {step === "connecting" ? "Collegamento in corso..." :
+              step === "redirecting" ? "Reindirizzamento..." :
+              step === "syncing" ? "Collegamento avviato!" :
+              step === "success" ? "Connessione riuscita!" :
+              step === "error" ? "Errore di connessione" :
+              provider === "choose" ? "Scegli il metodo di collegamento" :
+              "Seleziona la tua banca"}
+           </DialogTitle>
+           <DialogDescription>
+             {step === "connecting" ? "Verifica della sessione in corso..." :
+              step === "redirecting" ? `Stai per essere reindirizzato a ${selectedBank?.name || "la tua banca"}...` :
+              step === "syncing" ? "La sincronizzazione è in corso in background" :
+              step === "success" ? `${connectedAccounts.length} conto/i collegati con successo` :
+              step === "error" ? "Si è verificato un errore durante il collegamento" :
+              provider === "choose" ? "Seleziona come vuoi collegare il tuo conto bancario" :
+              "Cerca e seleziona la tua banca per collegare i conti"}
+           </DialogDescription>
+         </DialogHeader>
 
         {/* Provider Choice */}
         {provider === "choose" && step === "select_bank" && (
