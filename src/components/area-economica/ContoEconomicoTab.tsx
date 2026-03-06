@@ -292,7 +292,7 @@ export function ContoEconomicoTab() {
         {/* Year selector + AI button */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <p className="text-sm text-muted-foreground">
-            Analisi economica mensile basata su fatture emesse e ricevute — Anno <strong>{year}</strong>
+            Analisi economica mensile basata su fatture e transazioni categorizzate — Anno <strong>{year}</strong>
           </p>
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" onClick={handleAutoLoad} disabled={autoLoading} className="gap-2">
