@@ -1,49 +1,48 @@
 
 
-## Plan: Fix Bank Account Data Leak Between Users
+## Plan: Fix Partial Index Issue in Bank Isolation Migration
 
-### Problem
-The edge functions use `SUPABASE_SERVICE_ROLE_KEY` (bypasses RLS) and upsert bank accounts with `onConflict: "external_id"`. If two users connect the same bank account (or banks reuse external IDs), the second user's data overwrites the first user's record, causing cross-user data leaks.
+### Problem Found
+The current migration creates **partial unique indexes** with `WHERE external_id IS NOT NULL`. According to project memory (`memory/technical/database-sync-constraints`), **partial indexes with WHERE clauses are NOT recognized by Supabase's ON CONFLICT spec**. This means all upsert operations in the edge functions will fail when they try to use `onConflict: "external_id,user_id"`.
 
-Same issue exists for `acube_account_id` in the A-Cube function and `external_id` on `bank_transactions`.
+### No Mock Data Found
+There are no mock bank accounts or fake banking data in the codebase. The `useBankAccountsQuery` hook queries `bank_accounts` directly through the Supabase client with RLS (`auth.uid() = user_id`), which already ensures frontend isolation. The landing page has mock UI elements (visual only), and `Comunicazioni.tsx` has mock messages, but neither relates to banking.
 
-### Root Cause
-The unique constraints on `external_id` and `acube_account_id` are **global** (not scoped per user). Combined with service role key usage, this means upserts can overwrite another user's records.
+### Fix Required
 
-### Changes
+**File: New migration to replace partial indexes with standard unique indexes**
 
-#### 1. Database Migration - User-scoped unique constraints
-
-Drop the existing unique constraints and replace them with composite ones that include `user_id`:
+Replace the 3 partial indexes from the previous migration with standard (non-partial) unique indexes:
 
 ```sql
--- bank_accounts: external_id should be unique per user, not globally
-ALTER TABLE bank_accounts DROP CONSTRAINT IF EXISTS bank_accounts_external_id_key;
-CREATE UNIQUE INDEX bank_accounts_external_id_user_id_idx ON bank_accounts (external_id, user_id) WHERE external_id IS NOT NULL;
+-- Drop the partial indexes that don't work with ON CONFLICT
+DROP INDEX IF EXISTS bank_accounts_external_id_user_id_idx;
+DROP INDEX IF EXISTS bank_accounts_acube_account_id_user_id_idx;
+DROP INDEX IF EXISTS bank_transactions_external_id_user_id_idx;
 
--- bank_accounts: acube_account_id should be unique per user
-ALTER TABLE bank_accounts DROP CONSTRAINT IF EXISTS bank_accounts_acube_account_id_key;
-CREATE UNIQUE INDEX bank_accounts_acube_account_id_user_id_idx ON bank_accounts (acube_account_id, user_id) WHERE acube_account_id IS NOT NULL;
+-- Create standard composite unique indexes (no WHERE clause)
+CREATE UNIQUE INDEX bank_accounts_external_id_user_id_idx 
+  ON bank_accounts (external_id, user_id);
 
--- bank_transactions: external_id should be unique per user
-ALTER TABLE bank_transactions DROP CONSTRAINT IF EXISTS bank_transactions_external_id_key;
-CREATE UNIQUE INDEX bank_transactions_external_id_user_id_idx ON bank_transactions (external_id, user_id) WHERE external_id IS NOT NULL;
+CREATE UNIQUE INDEX bank_accounts_acube_account_id_user_id_idx 
+  ON bank_accounts (acube_account_id, user_id);
+
+CREATE UNIQUE INDEX bank_transactions_external_id_user_id_idx 
+  ON bank_transactions (external_id, user_id);
 ```
 
-#### 2. Edge Function `enable-banking/index.ts`
+Since `external_id` and `acube_account_id` are nullable, rows with NULL values won't conflict (SQL standard: NULL != NULL in unique indexes), so this is safe.
 
-Update upsert calls to use the composite conflict target:
-- Line 437: `onConflict: "external_id"` → `onConflict: "external_id,user_id"`
-- Line 521: `onConflict: "external_id"` → `onConflict: "external_id,user_id"` (transactions)
-- Line 656: `onConflict: "external_id"` → `onConflict: "external_id,user_id"` (sync transactions)
+### Verification Checklist
+- Edge functions already updated with `onConflict: "external_id,user_id"` -- correct
+- RLS on `bank_accounts` enforces `auth.uid() = user_id` for SELECT/INSERT/UPDATE/DELETE -- correct
+- Frontend queries go through RLS (no service role key on client) -- correct
+- No mock bank data exists -- confirmed
 
-#### 3. Edge Function `acube-banking/index.ts`
+### Testing Approach
+After the migration, I'll use the Supabase `read-query` tool to verify:
+1. The new indexes exist and are non-partial
+2. No old global unique constraints remain
 
-- Line 377: `onConflict: "acube_account_id"` → `onConflict: "acube_account_id,user_id"`
-- Line 432: `onConflict: "external_id"` → `onConflict: "external_id,user_id"` (transactions)
-
-### Impact
-- Each user gets their own isolated bank account records even if connecting the same bank
-- Existing data is preserved; the migration only changes constraints
-- **4 files modified**: 1 migration + 2 edge functions
+**1 file modified**: 1 new migration
 
