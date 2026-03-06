@@ -130,13 +130,11 @@ export default function Fatture() {
 
   // Upload mutation - upload diretto a Storage poi process
   const uploadMutation = useMutation({
-    mutationFn: async (files: File[]) => {
+    mutationFn: async ({ files, invoiceType }: { files: File[]; invoiceType: string }) => {
       const { data: { session } } = await supabase.auth.getSession();
-      // UUID valido per utenti demo (non autenticati)
       const userId = session?.user?.id || '00000000-0000-0000-0000-000000000000';
       
       const uploadResults = [];
-      
       const BATCH_SIZE = 5;
       let processedCount = 0;
       let failedCount = 0;
@@ -148,7 +146,6 @@ export default function Fatture() {
         
         const batchResults = await Promise.allSettled(
           batch.map(async (file) => {
-            // 1. Upload diretto a Supabase Storage
             const storagePath = `${userId}/${Date.now()}-${file.name}`;
             const { error: uploadError } = await supabase.storage
               .from('invoices')
@@ -160,7 +157,6 @@ export default function Fatture() {
               throw new Error(`Errore upload ${file.name}: ${uploadError.message}`);
             }
 
-            // 2. Chiama edge function per processare il file già caricato
             const response = await fetch(
               'https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/process-invoice',
               {
@@ -175,7 +171,8 @@ export default function Fatture() {
                   storagePath,
                   fileName: file.name,
                   fileType: file.type,
-                  userId
+                  userId,
+                  invoiceType
                 }),
               }
             );
