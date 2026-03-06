@@ -167,11 +167,11 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
           setStep("error");
         }
       };
-      // Add 15s timeout for A-Cube too
+      // 120s timeout for A-Cube too
       const timeout = setTimeout(() => {
         setErrorMessage("Timeout: il collegamento sta impiegando troppo tempo. Riprova.");
         setStep("error");
-      }, 15000);
+      }, 120000);
       completeAcube().finally(() => clearTimeout(timeout));
     }
   }, [completeSession, onOpenChange]);
