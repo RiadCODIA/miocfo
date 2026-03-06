@@ -1,21 +1,38 @@
 
 
-## Issues
+## Plan: Convert Nav Links to Scroll-to-Section Navigation
 
-### 1. IVA Calculation is Wrong
-In `IVASection.tsx`, the current logic only shows the **net** difference as either "a credito" OR "a debito" (one is always zero). In Italian accounting:
-- **IVA a debito** = total VAT on issued invoices (`ivaRicavi`) — always shown
-- **IVA a credito** = total VAT on received invoices (`ivaCosti`) — always shown  
-- **IVA netta** = IVA a debito − IVA a credito (positive = you owe the state, negative = credit)
+The current nav menu (`Chi Siamo`, `Piani`, `FAQ`, `Contatti`) links to separate pages via React Router. Instead, each nav item will scroll smoothly to the corresponding section on the landing page.
 
-**Fix in `IVASection.tsx`**: Replace the incorrect conditional logic with direct display of `totalIvaRicavi` as "IVA a debito", `totalIvaCosti` as "IVA a credito", and `totalIvaRicavi - totalIvaCosti` as "IVA netta".
+### Changes
 
-### 2. Remove "Incassi", "Bonifici", "Altri incassi" from Revenue Rows
-These are revenue categories stored in the `cost_categories` table that shouldn't appear in the P&L. They represent payment methods, not economic revenue lines.
+**1. `src/pages/Landing.tsx`** — Add `id` attributes to sections:
+- Problems section → `id="chi-siamo"`
+- Process section → `id="piani"` (or a pricing-like section)
+- Features section → `id="faq"`
+- CTA section → `id="contatti"`
 
-**Fix in `useContoEconomico.ts`**: Filter out these categories from `revenueCategories` before building the P&L data, using a name-based exclusion list: `["incassi", "bonifici", "altri incassi"]`. Invoices assigned to these excluded categories will fall back to "Altri ricavi e proventi" (existing fallback logic).
+More logically mapped:
+- `id="problemi"` on Problems section
+- `id="soluzione"` on Process section  
+- `id="funzionalita"` on Features section
+- `id="contatti"` on CTA section
 
----
+The nav items will be renamed/remapped to match these sections.
 
-**Files to modify**: `src/components/area-economica/IVASection.tsx`, `src/hooks/useContoEconomico.ts`
+**2. `src/components/landing/HeroSection.tsx`** — Change nav from `<Link to="...">` to `<a href="#section-id">` with smooth scroll:
+- Update `menuItems` array to use anchor `href`s (`#problemi`, `#soluzione`, `#funzionalita`, `#contatti`)
+- Replace `<Link>` with `<a>` tags that call `scrollIntoView({ behavior: 'smooth' })` on click
+- Close mobile menu on click
+
+### Section ↔ Nav Mapping
+
+| Nav Label | Section ID | Landing Section |
+|-----------|-----------|-----------------|
+| Chi Siamo | `#chi-siamo` | Problems section |
+| Piani | `#piani` | Process section |
+| FAQ | `#funzionalita` | Features section |
+| Contatti | `#contatti` | CTA/Footer section |
+
+**Files to modify**: `src/components/landing/HeroSection.tsx`, `src/pages/Landing.tsx`
 
