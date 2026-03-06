@@ -530,7 +530,7 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
         {step === "connecting" && (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <Loader2 className="h-12 w-12 text-primary animate-spin" />
-            <p className="text-muted-foreground">Stiamo collegando i tuoi conti...</p>
+            <p className="text-muted-foreground">Sincronizzazione transazioni in corso, potrebbe richiedere qualche minuto...</p>
           </div>
         )}
 
