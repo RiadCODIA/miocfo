@@ -96,6 +96,8 @@ export default function Fatture() {
   const [connectedFiscalId, setConnectedFiscalId] = useState<string | null>(null);
   const [isFetchingCassetto, setIsFetchingCassetto] = useState(false);
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
+  const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false);
   
   const queryClient = useQueryClient();
 
