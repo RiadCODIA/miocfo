@@ -26,3 +26,6 @@ verify_jwt = false
 
 [functions.categorize-transactions]
 verify_jwt = false
+
+[functions.powens]
+verify_jwt = false
