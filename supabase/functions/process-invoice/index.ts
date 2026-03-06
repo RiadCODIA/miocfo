@@ -426,6 +426,7 @@ serve(async (req) => {
     let fileName: string;
     let fileType: string;
     let fileData: Uint8Array;
+    let invoiceTypeOverride: string | undefined;
 
     if (contentType.includes('application/json')) {
       const body = await req.json();
@@ -524,6 +525,9 @@ serve(async (req) => {
       fileType = body.fileType || fileName.split('.').pop()?.toLowerCase() || '';
       userId = body.userId || userId;
 
+      // User-provided invoice type override
+      invoiceTypeOverride = body.invoiceType;
+
       console.log(`Processing file from storage: ${storagePath}`);
 
       const { data: downloadData, error: downloadError } = await supabaseAdmin.storage
@@ -613,6 +617,12 @@ serve(async (req) => {
 
     // Insert invoices into database with full extracted data + auto-categorization
     for (const invoice of extractedInvoices) {
+      // Override direction if user specified it
+      if (invoiceTypeOverride && ['emessa', 'ricevuta', 'autofattura'].includes(invoiceTypeOverride)) {
+        invoice.invoice_direction = invoiceTypeOverride as 'emessa' | 'ricevuta';
+        console.log(`User override: invoice_direction set to "${invoiceTypeOverride}"`);
+      }
+
       // Auto-assign category from AI-suggested name
       const categoryId = resolveCategoryId(allCategories, invoice.category_name, invoice.invoice_direction);
       console.log(`Auto-category: category_name=${invoice.category_name}, direction=${invoice.invoice_direction}, categoryId=${categoryId}`);

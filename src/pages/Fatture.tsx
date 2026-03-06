@@ -20,6 +20,7 @@ import { InvoiceTable, Invoice } from "@/components/fatture/InvoiceTable";
 import { InvoiceMatchingModal } from "@/components/fatture/InvoiceMatchingModal";
 import { InvoicePreview } from "@/components/fatture/InvoicePreview";
 import { CassettoFiscaleModal } from "@/components/fatture/CassettoFiscaleModal";
+import { InvoiceTypeDialog } from "@/components/fatture/InvoiceTypeDialog";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -95,6 +96,8 @@ export default function Fatture() {
   const [connectedFiscalId, setConnectedFiscalId] = useState<string | null>(null);
   const [isFetchingCassetto, setIsFetchingCassetto] = useState(false);
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
+  const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
+  const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false);
   
   const queryClient = useQueryClient();
 
@@ -127,13 +130,11 @@ export default function Fatture() {
 
   // Upload mutation - upload diretto a Storage poi process
   const uploadMutation = useMutation({
-    mutationFn: async (files: File[]) => {
+    mutationFn: async ({ files, invoiceType }: { files: File[]; invoiceType: string }) => {
       const { data: { session } } = await supabase.auth.getSession();
-      // UUID valido per utenti demo (non autenticati)
       const userId = session?.user?.id || '00000000-0000-0000-0000-000000000000';
       
       const uploadResults = [];
-      
       const BATCH_SIZE = 5;
       let processedCount = 0;
       let failedCount = 0;
@@ -145,7 +146,6 @@ export default function Fatture() {
         
         const batchResults = await Promise.allSettled(
           batch.map(async (file) => {
-            // 1. Upload diretto a Supabase Storage
             const storagePath = `${userId}/${Date.now()}-${file.name}`;
             const { error: uploadError } = await supabase.storage
               .from('invoices')
@@ -157,7 +157,6 @@ export default function Fatture() {
               throw new Error(`Errore upload ${file.name}: ${uploadError.message}`);
             }
 
-            // 2. Chiama edge function per processare il file già caricato
             const response = await fetch(
               'https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/process-invoice',
               {
@@ -172,7 +171,8 @@ export default function Fatture() {
                   storagePath,
                   fileName: file.name,
                   fileType: file.type,
-                  userId
+                  userId,
+                  invoiceType
                 }),
               }
             );
@@ -218,7 +218,19 @@ export default function Fatture() {
     },
   });
 
-  const handleUpload = async (files: File[]) => {
+  // When user drops/selects files, show type dialog first
+  const handleUpload = (files: File[]) => {
+    setPendingFiles(files);
+    setIsTypeDialogOpen(true);
+  };
+
+  // After user picks a type, actually start uploading
+  const handleTypeConfirm = async (invoiceType: "emessa" | "ricevuta" | "autofattura") => {
+    const files = pendingFiles;
+    setIsTypeDialogOpen(false);
+    setPendingFiles(null);
+    if (!files || files.length === 0) return;
+
     const newUploads: UploadedInvoice[] = files.map((file) => ({
       id: `upload-${Date.now()}-${Math.random()}`,
       fileName: file.name,
@@ -230,27 +242,29 @@ export default function Fatture() {
     setUploadingFiles((prev) => [...prev, ...newUploads]);
 
     try {
-      // Update status to processing
       setUploadingFiles((prev) =>
         prev.map((f) =>
           newUploads.some(u => u.id === f.id) ? { ...f, status: "processing" as const } : f
         )
       );
 
-      await uploadMutation.mutateAsync(files);
+      await uploadMutation.mutateAsync({ files, invoiceType });
 
-      // Clear upload queue on success
       setUploadingFiles((prev) =>
         prev.filter((f) => !newUploads.some(u => u.id === f.id))
       );
     } catch (error) {
-      // Mark as error
       setUploadingFiles((prev) =>
         prev.map((f) =>
           newUploads.some(u => u.id === f.id) ? { ...f, status: "error" as const } : f
         )
       );
     }
+  };
+
+  const handleTypeCancel = () => {
+    setIsTypeDialogOpen(false);
+    setPendingFiles(null);
   };
 
   const handleRemoveUpload = (id: string) => {
@@ -725,6 +739,13 @@ export default function Fatture() {
         open={isCassettoModalOpen}
         onOpenChange={setIsCassettoModalOpen}
         onConnected={(fid) => setConnectedFiscalId(fid)}
+      />
+
+      <InvoiceTypeDialog
+        open={isTypeDialogOpen}
+        onConfirm={handleTypeConfirm}
+        onCancel={handleTypeCancel}
+        fileCount={pendingFiles?.length || 0}
       />
     </div>
   );
