@@ -294,38 +294,36 @@ export function Sidebar() {
                 {(!group.collapsible || !isGroupCollapsed) && (
                   <div className="space-y-0.5">
                     {/* Flat items */}
-                    {filterItems(group.items || []).map((item) => (
+                    {(group.items || []).map((item) => (
                       <NavItemRow
                         key={item.id}
                         item={item}
                         collapsed={collapsed}
                         isActive={location.pathname === item.path}
                         alertsCount={alertsCount}
+                        locked={isItemLocked(item)}
                       />
                     ))}
                     {/* Sub-groups */}
-                    {group.subGroups?.map((sub) => {
-                      const filteredSubItems = filterItems(sub.items);
-                      if (filteredSubItems.length === 0) return null;
-                      return (
-                        <div key={sub.label}>
-                          {!collapsed && (
-                            <p className="px-3 mt-3 mb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white/25">
-                              {sub.label}
-                            </p>
-                          )}
-                          {filteredSubItems.map((item) => (
-                            <NavItemRow
-                              key={item.id}
-                              item={item}
-                              collapsed={collapsed}
-                              isActive={location.pathname === item.path}
-                              alertsCount={alertsCount}
-                            />
-                          ))}
-                        </div>
-                      );
-                    })}
+                    {group.subGroups?.map((sub) => (
+                      <div key={sub.label}>
+                        {!collapsed && (
+                          <p className="px-3 mt-3 mb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white/25">
+                            {sub.label}
+                          </p>
+                        )}
+                        {sub.items.map((item) => (
+                          <NavItemRow
+                            key={item.id}
+                            item={item}
+                            collapsed={collapsed}
+                            isActive={location.pathname === item.path}
+                            alertsCount={alertsCount}
+                            locked={isItemLocked(item)}
+                          />
+                        ))}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
