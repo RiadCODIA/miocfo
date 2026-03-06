@@ -178,9 +178,17 @@ const HeroHeader = () => {
         >
           <div className="relative flex flex-wrap items-center justify-between gap-6 py-3 lg:gap-0 lg:py-4">
             <div className="flex w-full justify-between lg:w-auto">
-              <Link to="/" aria-label="home" className="flex items-center space-x-2">
+              <a
+                href="#"
+                onClick={(e) => {
+                  e.preventDefault();
+                  window.scrollTo({ top: 0, behavior: 'smooth' });
+                }}
+                aria-label="home"
+                className="flex items-center space-x-2 cursor-pointer"
+              >
                 <img src={miocfoLogo} alt="mioCFO" className="h-8" />
-              </Link>
+              </a>
 
               <button
                 onClick={() => setMenuState(!menuState)}
