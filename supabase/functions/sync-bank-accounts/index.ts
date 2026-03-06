@@ -317,7 +317,7 @@ serve(async (req) => {
 
               const { error: txError } = await supabase
                 .from("bank_transactions")
-                .upsert(txData, { onConflict: "external_id", ignoreDuplicates: true });
+                .upsert(txData, { onConflict: "external_id,user_id", ignoreDuplicates: true });
 
               if (txError) {
                 console.error(`[SyncBanking] TX upsert error:`, txError.message);

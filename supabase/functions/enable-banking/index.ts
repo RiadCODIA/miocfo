@@ -434,7 +434,7 @@ async function syncToDatabase(
     const { data: savedAccount, error: upsertError } = await supabase
       .from("bank_accounts")
       .upsert(accountData, {
-        onConflict: "external_id",
+        onConflict: "external_id,user_id",
         ignoreDuplicates: false,
       })
       .select()
@@ -518,7 +518,7 @@ async function syncToDatabase(
           const { error: txError } = await supabase
             .from("bank_transactions")
             .upsert(txData, {
-              onConflict: "external_id",
+              onConflict: "external_id,user_id",
               ignoreDuplicates: true,
             });
 
@@ -653,7 +653,7 @@ async function syncSingleAccount(
 
         const { error: txError } = await supabase
           .from("bank_transactions")
-          .upsert(txData, { onConflict: "external_id", ignoreDuplicates: true });
+          .upsert(txData, { onConflict: "external_id,user_id", ignoreDuplicates: true });
 
         if (txError) {
           console.error(`[EnableBanking] Sync TX upsert error:`, txError.message);
