@@ -41,7 +41,7 @@ export function useContoEconomico(year: number) {
       const startDate = `${year}-01-01`;
       const endDate = `${year}-12-31`;
 
-      const [emesseRes, ricevuteRes, expenseCatsRes, revenueCatsRes] = await Promise.all([
+      const [emesseRes, ricevuteRes, expenseCatsRes, revenueCatsRes, transactionsRes, matchedTxRes] = await Promise.all([
         supabase
           .from("invoices")
           .select("amount, total_amount, vat_amount, invoice_date, category_id")
@@ -64,6 +64,20 @@ export function useContoEconomico(year: number) {
           .select("id, name, cost_type, category_type")
           .eq("category_type", "revenue")
           .order("sort_order"),
+        // Fetch categorized bank transactions
+        supabase
+          .from("bank_transactions")
+          .select("amount, date, ai_category_id")
+          .not("ai_category_id", "is", null)
+          .gte("date", startDate)
+          .lte("date", endDate),
+        // Fetch invoice-matched transaction IDs to avoid double-counting
+        supabase
+          .from("invoices")
+          .select("matched_transaction_id")
+          .not("matched_transaction_id", "is", null)
+          .gte("invoice_date", startDate)
+          .lte("invoice_date", endDate),
       ]);
 
       if (emesseRes.error) throw emesseRes.error;
