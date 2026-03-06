@@ -73,44 +73,37 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       setStep("connecting");
       onOpenChange(true);
 
-      const complete = async (retries = 3) => {
-        try {
-          // Wait for session restoration after redirect
-          let session = (await supabase.auth.getSession()).data.session;
-          if (!session?.access_token) {
-            for (let i = 0; i < 5; i++) {
-              await new Promise(r => setTimeout(r, 1000));
-              session = (await supabase.auth.getSession()).data.session;
-              if (session?.access_token) break;
-            }
+      // Wait for session, then fire-and-forget completeSession in the background
+      const waitForSession = async () => {
+        let session = (await supabase.auth.getSession()).data.session;
+        if (!session?.access_token) {
+          for (let i = 0; i < 5; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            session = (await supabase.auth.getSession()).data.session;
+            if (session?.access_token) break;
           }
-          if (!session?.access_token) throw new Error("Sessione non disponibile dopo il redirect");
-
-          const accounts = await completeSession(code);
+        }
+        if (!session?.access_token) {
+          setErrorMessage("Sessione non disponibile dopo il redirect");
+          setStep("error");
+          return;
+        }
+        // Session is ready — show syncing info immediately
+        setStep("syncing");
+        // Fire-and-forget: completeSession runs in the background
+        completeSession(code).then((accounts) => {
           setConnectedAccounts(accounts);
-          setStep("success");
-          // Immediately invalidate so the page behind the modal refreshes
           queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
           queryClient.invalidateQueries({ queryKey: ["bank-transactions-count"] });
           queryClient.invalidateQueries({ queryKey: ["bank-accounts-balances"] });
-        } catch (error) {
-          console.error("Failed to complete session:", error);
-          if (retries > 0 && error instanceof Error && 
-              (error.message.includes("session") || error.message.includes("auth"))) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            return complete(retries - 1);
-          }
-          setErrorMessage(error instanceof Error ? error.message : "Errore nel collegamento");
-          setStep("error");
-        }
+        }).catch((error) => {
+          console.error("Background sync error:", error);
+          toast.error("Errore sincronizzazione", {
+            description: "Il collegamento potrebbe essere avvenuto correttamente. Ricarica la pagina per verificare.",
+          });
+        });
       };
-
-      // 120s timeout — transaction sync can paginate through thousands of records
-      const timeout = setTimeout(() => {
-        setErrorMessage("Timeout: il collegamento sta impiegando troppo tempo. Riprova.");
-        setStep("error");
-      }, 120000);
-      complete().finally(() => clearTimeout(timeout));
+      waitForSession();
     } else if (acubeDone && acubeFiscalId) {
       // A-Cube callback after bank authorization
       window.history.replaceState({}, document.title, window.location.pathname);
