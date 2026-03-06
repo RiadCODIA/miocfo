@@ -9,11 +9,8 @@ interface IVASectionProps {
 const fmt = (v: number) => `${v.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 export function IVASection({ year, ivaRicavi, ivaCosti }: IVASectionProps) {
-  const totalIvaRicavi = Object.values(ivaRicavi).reduce((s, v) => s + v, 0);
-  const totalIvaCosti = Object.values(ivaCosti).reduce((s, v) => s + v, 0);
-  const differenza = totalIvaRicavi - totalIvaCosti;
-  const aCredito = differenza < 0 ? Math.abs(differenza) : 0;
-  const aDebito = differenza > 0 ? differenza : 0;
+  const aDebito = Object.values(ivaRicavi).reduce((s, v) => s + v, 0);
+  const aCredito = Object.values(ivaCosti).reduce((s, v) => s + v, 0);
   const ivaNetta = aDebito - aCredito;
 
   return (
