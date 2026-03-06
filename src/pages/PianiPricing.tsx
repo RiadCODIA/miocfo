@@ -3,7 +3,7 @@ import { LandingHeader } from "@/components/landing/LandingHeader";
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, UserPlus, Link2, LayoutDashboard, Phone } from "lucide-react";
+import { ArrowRight, Check, UserPlus, Link2, LayoutDashboard, Phone, X } from "lucide-react";
 
 const steps = [
   {
@@ -25,49 +25,81 @@ const steps = [
 
 const plans = [
   {
-    name: "Smart",
-    description: "Per il monitoraggio essenziale della liquidità.",
-    priceMonthly: 89,
-    priceYearly: 69,
+    name: "Basic",
+    description: "Analisi dati bancari con caricamento estratti conto.",
+    priceMonthly: 49,
+    priceYearly: 41,
     popular: false,
     features: [
       "Dashboard con KPI finanziari",
-      "Analisi dei flussi di cassa",
-      "Categorizzazione automatica",
-      "CFO Virtuale (AI) - Notifiche",
+      "Flussi di Cassa",
+      "Transazioni con categorizzazione",
+      "Conti correnti (solo upload)",
     ],
-    cta: "Inizia la prova gratuita",
+    notIncluded: [
+      "Connessione Home Banking API",
+      "Conto Economico",
+      "Fatture e Scadenzario",
+      "Budget & Previsioni",
+      "AI Assistant",
+    ],
+    cta: "Inizia con Basic",
+  },
+  {
+    name: "Small",
+    description: "Analisi bancaria con connessione Home Banking via API.",
+    priceMonthly: 79,
+    priceYearly: 66,
+    popular: false,
+    includes: "Tutto del piano Basic",
+    features: [
+      "Connessione Home Banking API",
+      "Collegamenti (solo Conti Bancari)",
+      "Sincronizzazione automatica",
+    ],
+    notIncluded: [
+      "Conto Economico",
+      "Fatture e Scadenzario",
+      "Budget & Previsioni",
+      "AI Assistant",
+    ],
+    cta: "Inizia con Small",
   },
   {
     name: "Pro",
-    description: "Per integrare dati fiscali e pianificare il futuro.",
-    priceMonthly: 189,
-    priceYearly: 149,
+    description: "Analisi completa: dati bancari e fatture, upload e collegamento.",
+    priceMonthly: 239,
+    priceYearly: 199,
     popular: true,
-    includes: "Tutto del piano Smart",
+    includes: "Tutto del piano Small",
     features: [
-      "Dashboard personalizzabile con widget",
-      "Algoritmo di Pianificazione (Previsione liquidità)",
-      "Dashboard con KPI economici, fiscali e finanziari",
-      "Accesso CFO Virtuale (AI) - Notifiche",
-      "Reportistica avanzata",
+      "Conto Economico completo",
+      "Gestione Fatture",
+      "Scadenzario",
+      "Collegamenti completi (Banche + Cassetto Fiscale)",
     ],
-    cta: "Inizia la prova gratuita",
+    notIncluded: [
+      "Budget & Previsioni",
+      "AI Assistant",
+    ],
+    cta: "Inizia con Pro",
   },
   {
     name: "Full",
-    description: "Per il controllo totale della tua attività.",
-    priceMonthly: 399,
-    priceYearly: 329,
+    description: "Controllo totale della tua attività con AI integrata.",
+    priceMonthly: 479,
+    priceYearly: 399,
     popular: false,
     includes: "Tutto del piano Pro",
     features: [
-      "Dashboard fino a 10 Widget",
-      "Analisi marginalità prodotti",
-      "Budget e previsioni avanzate",
-      "Supporto prioritario dedicato",
+      "Budget & Previsioni avanzate",
+      "AI Assistant integrato",
+      "Analisi e report con AI",
+      "Dati & Statistiche avanzate",
+      "Notifiche intelligenti",
     ],
-    cta: "Inizia la prova gratuita",
+    notIncluded: [],
+    cta: "Inizia con Full",
   },
 ];
 
@@ -94,7 +126,7 @@ export default function PianiPricing() {
     <div className="min-h-screen bg-background">
       <LandingHeader />
       <main className="pt-32 pb-16">
-        <div className="container mx-auto px-4 max-w-6xl">
+        <div className="container mx-auto px-4 max-w-7xl">
           {/* Steps */}
           <div className="text-center mb-16">
             <h1 className="text-3xl md:text-4xl font-bold text-foreground mb-4">
@@ -158,7 +190,7 @@ export default function PianiPricing() {
           </div>
 
           {/* Plans Grid */}
-          <div className="grid md:grid-cols-3 gap-6 mb-20">
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
             {plans.map((plan) => (
               <div
                 key={plan.name}
@@ -192,7 +224,7 @@ export default function PianiPricing() {
                   </p>
                 )}
 
-                <ul className="space-y-3 mb-8 flex-1">
+                <ul className="space-y-3 mb-4 flex-1">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-2.5 text-sm">
                       <Check className={`h-4 w-4 mt-0.5 shrink-0 ${plan.popular ? "text-primary-foreground" : "text-primary"}`} />
@@ -200,6 +232,17 @@ export default function PianiPricing() {
                     </li>
                   ))}
                 </ul>
+
+                {plan.notIncluded.length > 0 && (
+                  <ul className="space-y-2 mb-6">
+                    {plan.notIncluded.map((feature) => (
+                      <li key={feature} className="flex items-start gap-2.5 text-sm opacity-40">
+                        <X className="h-4 w-4 mt-0.5 shrink-0" />
+                        <span>{feature}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
 
                 <Button
                   asChild
