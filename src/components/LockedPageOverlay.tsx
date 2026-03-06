@@ -8,7 +8,7 @@ export function LockedPageOverlay() {
   const { hasSubscription } = useUserSubscription();
 
   return (
-    <div className="absolute inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm pointer-events-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/60 backdrop-blur-sm pointer-events-auto">
       <div className="flex flex-col items-center gap-4 max-w-sm text-center p-8 rounded-2xl bg-card border border-border shadow-xl">
         <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center">
           <Lock className="h-7 w-7 text-muted-foreground" />
