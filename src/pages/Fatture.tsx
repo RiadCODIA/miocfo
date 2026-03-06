@@ -20,6 +20,7 @@ import { InvoiceTable, Invoice } from "@/components/fatture/InvoiceTable";
 import { InvoiceMatchingModal } from "@/components/fatture/InvoiceMatchingModal";
 import { InvoicePreview } from "@/components/fatture/InvoicePreview";
 import { CassettoFiscaleModal } from "@/components/fatture/CassettoFiscaleModal";
+import { InvoiceTypeDialog } from "@/components/fatture/InvoiceTypeDialog";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
