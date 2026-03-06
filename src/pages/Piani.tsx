@@ -31,21 +31,21 @@ import {
 import { useSubscriptionPlans, useCreatePlan, useUpdatePlan, SubscriptionPlan } from "@/hooks/useSubscriptionPlans";
 import { Skeleton } from "@/components/ui/skeleton";
 
-// All available features
+// All available features matching app sections
 const allFeatures = [
   { id: "dashboard", label: "Dashboard" },
-  { id: "transactions", label: "Transazioni" },
-  { id: "basic_reports", label: "Report Base" },
-  { id: "cash_flow", label: "Cash Flow" },
-  { id: "budget", label: "Budget & Previsioni" },
-  { id: "advanced_reports", label: "Report Avanzati" },
-  { id: "ai_categorization", label: "AI Categorization" },
-  { id: "api_access", label: "API Access" },
-  { id: "sso", label: "SSO" },
-  { id: "dedicated_support", label: "Supporto Dedicato" },
-  { id: "ai_forecast", label: "AI Forecast" },
-  { id: "multi_currency", label: "Multi-Valuta" },
-  { id: "custom_integrations", label: "Integrazioni Custom" },
+  { id: "collegamenti", label: "Collegamenti (completi)" },
+  { id: "collegamenti_banche", label: "Collegamenti (solo Banche)" },
+  { id: "flussi_cassa", label: "Flussi di Cassa" },
+  { id: "transazioni", label: "Transazioni" },
+  { id: "conti_bancari", label: "Conti Correnti" },
+  { id: "conto_economico", label: "Conto Economico" },
+  { id: "budget_previsioni", label: "Budget & Previsioni" },
+  { id: "fatture", label: "Fatture" },
+  { id: "scadenzario", label: "Scadenzario" },
+  { id: "kpi_report", label: "Dati & Statistiche" },
+  { id: "alert_notifiche", label: "Notifiche" },
+  { id: "ai_assistant", label: "AI Assistant" },
 ];
 
 export default function Piani() {

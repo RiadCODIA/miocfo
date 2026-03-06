@@ -37,7 +37,9 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { useSidebarState } from "./MainLayout";
 import { useActiveAlertsCount } from "@/hooks/useAlerts";
+import { useUserSubscription } from "@/hooks/useUserSubscription";
 import { useState } from "react";
+import { Lock } from "lucide-react";
 
 interface NavItem {
   id: string;
@@ -174,8 +176,14 @@ export function Sidebar() {
   const { data: alertsCount } = useActiveAlertsCount();
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
 
-  const isSuperAdmin = userRole === 'super_admin';
+  const { hasFeature, isSuperAdmin } = useUserSubscription();
   const navGroups = isSuperAdmin ? superAdminNavGroups : userNavGroups;
+
+  // Filter nav items based on subscription
+  const filterItems = (items: NavItem[]): NavItem[] => {
+    if (isSuperAdmin) return items;
+    return items.filter(item => hasFeature(item.id));
+  };
 
   const toggleGroup = (label: string) => {
     setCollapsedGroups(prev => ({ ...prev, [label]: !prev[label] }));
@@ -252,7 +260,7 @@ export function Sidebar() {
                 {(!group.collapsible || !isGroupCollapsed) && (
                   <div className="space-y-0.5">
                     {/* Flat items */}
-                    {group.items?.map((item) => (
+                    {filterItems(group.items || []).map((item) => (
                       <NavItemRow
                         key={item.id}
                         item={item}
@@ -262,24 +270,28 @@ export function Sidebar() {
                       />
                     ))}
                     {/* Sub-groups */}
-                    {group.subGroups?.map((sub) => (
-                      <div key={sub.label}>
-                        {!collapsed && (
-                          <p className="px-3 mt-3 mb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white/25">
-                            {sub.label}
-                          </p>
-                        )}
-                        {sub.items.map((item) => (
-                          <NavItemRow
-                            key={item.id}
-                            item={item}
-                            collapsed={collapsed}
-                            isActive={location.pathname === item.path}
-                            alertsCount={alertsCount}
-                          />
-                        ))}
-                      </div>
-                    ))}
+                    {group.subGroups?.map((sub) => {
+                      const filteredSubItems = filterItems(sub.items);
+                      if (filteredSubItems.length === 0) return null;
+                      return (
+                        <div key={sub.label}>
+                          {!collapsed && (
+                            <p className="px-3 mt-3 mb-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-white/25">
+                              {sub.label}
+                            </p>
+                          )}
+                          {filteredSubItems.map((item) => (
+                            <NavItemRow
+                              key={item.id}
+                              item={item}
+                              collapsed={collapsed}
+                              isActive={location.pathname === item.path}
+                              alertsCount={alertsCount}
+                            />
+                          ))}
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
