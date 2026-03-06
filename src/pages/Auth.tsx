@@ -257,39 +257,6 @@ export default function Auth() {
                     "Accedi"
                   )}
                 </Button>
-                
-                {/* Demo access buttons */}
-                <div className="relative my-4">
-                  <div className="absolute inset-0 flex items-center">
-                    <span className="w-full border-t border-border" />
-                  </div>
-                  <div className="relative flex justify-center text-xs uppercase">
-                    <span className="bg-card px-2 text-muted-foreground">Accesso demo (solo test)</span>
-                  </div>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2">
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    className="w-full text-xs"
-                    onClick={handleDemoLogin}
-                    disabled={isSubmitting}
-                  >
-                    <FlaskConical className="mr-1 h-3 w-3" />
-                    Utente
-                  </Button>
-                  <Button 
-                    type="button" 
-                    variant="outline" 
-                    className="w-full text-xs bg-violet-500/10 border-violet-500/30 text-violet-600 hover:bg-violet-500/20"
-                    onClick={handleSuperAdminDemoLogin}
-                    disabled={isSubmitting}
-                  >
-                    <Crown className="mr-1 h-3 w-3" />
-                    Super Admin
-                  </Button>
-                </div>
               </form>
             </TabsContent>
             
