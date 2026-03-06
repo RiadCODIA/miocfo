@@ -38,7 +38,7 @@ interface ConnectBankModalProps {
 
 export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankModalProps) {
   const [provider, setProvider] = useState<"choose" | "enable_banking" | "acube">("choose");
-  const [step, setStep] = useState<"select_bank" | "redirecting" | "connecting" | "success" | "error">("select_bank");
+  const [step, setStep] = useState<"select_bank" | "redirecting" | "connecting" | "syncing" | "success" | "error">("select_bank");
   const [aspsps, setAspsps] = useState<ASPSP[]>([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedBank, setSelectedBank] = useState<ASPSP | null>(null);
@@ -73,44 +73,37 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       setStep("connecting");
       onOpenChange(true);
 
-      const complete = async (retries = 3) => {
-        try {
-          // Wait for session restoration after redirect
-          let session = (await supabase.auth.getSession()).data.session;
-          if (!session?.access_token) {
-            for (let i = 0; i < 5; i++) {
-              await new Promise(r => setTimeout(r, 1000));
-              session = (await supabase.auth.getSession()).data.session;
-              if (session?.access_token) break;
-            }
+      // Wait for session, then fire-and-forget completeSession in the background
+      const waitForSession = async () => {
+        let session = (await supabase.auth.getSession()).data.session;
+        if (!session?.access_token) {
+          for (let i = 0; i < 5; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            session = (await supabase.auth.getSession()).data.session;
+            if (session?.access_token) break;
           }
-          if (!session?.access_token) throw new Error("Sessione non disponibile dopo il redirect");
-
-          const accounts = await completeSession(code);
+        }
+        if (!session?.access_token) {
+          setErrorMessage("Sessione non disponibile dopo il redirect");
+          setStep("error");
+          return;
+        }
+        // Session is ready — show syncing info immediately
+        setStep("syncing");
+        // Fire-and-forget: completeSession runs in the background
+        completeSession(code).then((accounts) => {
           setConnectedAccounts(accounts);
-          setStep("success");
-          // Immediately invalidate so the page behind the modal refreshes
           queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
           queryClient.invalidateQueries({ queryKey: ["bank-transactions-count"] });
           queryClient.invalidateQueries({ queryKey: ["bank-accounts-balances"] });
-        } catch (error) {
-          console.error("Failed to complete session:", error);
-          if (retries > 0 && error instanceof Error && 
-              (error.message.includes("session") || error.message.includes("auth"))) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            return complete(retries - 1);
-          }
-          setErrorMessage(error instanceof Error ? error.message : "Errore nel collegamento");
-          setStep("error");
-        }
+        }).catch((error) => {
+          console.error("Background sync error:", error);
+          toast.error("Errore sincronizzazione", {
+            description: "Il collegamento potrebbe essere avvenuto correttamente. Ricarica la pagina per verificare.",
+          });
+        });
       };
-
-      // 120s timeout — transaction sync can paginate through thousands of records
-      const timeout = setTimeout(() => {
-        setErrorMessage("Timeout: il collegamento sta impiegando troppo tempo. Riprova.");
-        setStep("error");
-      }, 120000);
-      complete().finally(() => clearTimeout(timeout));
+      waitForSession();
     } else if (acubeDone && acubeFiscalId) {
       // A-Cube callback after bank authorization
       window.history.replaceState({}, document.title, window.location.pathname);
@@ -118,37 +111,39 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       setStep("connecting");
       onOpenChange(true);
 
-      const completeAcube = async (retries = 5) => {
-        try {
-          let session = (await supabase.auth.getSession()).data.session;
-          if (!session?.access_token) {
-            for (let i = 0; i < retries; i++) {
-              await new Promise(r => setTimeout(r, 1000));
-              session = (await supabase.auth.getSession()).data.session;
-              if (session?.access_token) break;
-            }
+      const waitForAcubeSession = async () => {
+        let session = (await supabase.auth.getSession()).data.session;
+        if (!session?.access_token) {
+          for (let i = 0; i < 5; i++) {
+            await new Promise(r => setTimeout(r, 1000));
+            session = (await supabase.auth.getSession()).data.session;
+            if (session?.access_token) break;
           }
-          if (!session?.access_token) throw new Error("Sessione non disponibile");
-
-          const response = await fetch(
-            `https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/acube-banking`,
-            {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `Bearer ${session.access_token}`,
-                apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6aG9ubXVoeXdkaXFheHhibnNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzNzEzMTMsImV4cCI6MjA4NTk0NzMxM30.7oaiC1P4pwNdj8mIv4rU5Jsdm2jgkxKwz85PzUxWcvY",
-              },
-              body: JSON.stringify({
-                action: "complete_connection",
-                fiscal_id: acubeFiscalId,
-              }),
-            }
-          );
-          if (!response.ok) {
-            const err = await response.json();
-            throw new Error(err.error || "Errore nel completamento A-Cube");
+        }
+        if (!session?.access_token) {
+          setErrorMessage("Sessione non disponibile");
+          setStep("error");
+          return;
+        }
+        // Session ready — show syncing info immediately
+        setStep("syncing");
+        // Fire-and-forget A-Cube completion
+        fetch(
+          `https://yzhonmuhywdiqaxxbnsj.supabase.co/functions/v1/acube-banking`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${session.access_token}`,
+              apikey: "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Inl6aG9ubXVoeXdkaXFheHhibnNqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzAzNzEzMTMsImV4cCI6MjA4NTk0NzMxM30.7oaiC1P4pwNdj8mIv4rU5Jsdm2jgkxKwz85PzUxWcvY",
+            },
+            body: JSON.stringify({
+              action: "complete_connection",
+              fiscal_id: acubeFiscalId,
+            }),
           }
+        ).then(async (response) => {
+          if (!response.ok) throw new Error("Errore nel completamento A-Cube");
           const data = await response.json();
           const mapped: BankAccount[] = (data.accounts || []).map((a: Record<string, unknown>) => ({
             id: a.id as string,
@@ -164,23 +159,17 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
             last_sync_at: a.last_sync_at as string,
           }));
           setConnectedAccounts(mapped);
-          setStep("success");
-          // Immediately invalidate so the page behind the modal refreshes
           queryClient.invalidateQueries({ queryKey: ["bank-accounts"] });
           queryClient.invalidateQueries({ queryKey: ["bank-transactions-count"] });
           queryClient.invalidateQueries({ queryKey: ["bank-accounts-balances"] });
-        } catch (error) {
-          console.error("A-Cube complete error:", error);
-          setErrorMessage(error instanceof Error ? error.message : "Errore A-Cube");
-          setStep("error");
-        }
+        }).catch((error) => {
+          console.error("A-Cube background sync error:", error);
+          toast.error("Errore sincronizzazione", {
+            description: "Il collegamento potrebbe essere avvenuto correttamente. Ricarica la pagina per verificare.",
+          });
+        });
       };
-      // 120s timeout for A-Cube too
-      const timeout = setTimeout(() => {
-        setErrorMessage("Timeout: il collegamento sta impiegando troppo tempo. Riprova.");
-        setStep("error");
-      }, 120000);
-      completeAcube().finally(() => clearTimeout(timeout));
+      waitForAcubeSession();
     }
   }, [completeSession, onOpenChange]);
 
@@ -314,22 +303,24 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
       <DialogContent className="sm:max-w-[520px] max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
           <DialogTitle>
-            {step === "connecting" ? "Collegamento in corso..." :
-             step === "redirecting" ? "Reindirizzamento..." :
-             step === "success" ? "Connessione riuscita!" :
-             step === "error" ? "Errore di connessione" :
-             provider === "choose" ? "Scegli il metodo di collegamento" :
-             "Seleziona la tua banca"}
-          </DialogTitle>
-          <DialogDescription>
-            {step === "connecting" ? "Sincronizzazione transazioni in corso, potrebbe richiedere qualche minuto..." :
-             step === "redirecting" ? `Stai per essere reindirizzato a ${selectedBank?.name || "la tua banca"}...` :
-             step === "success" ? `${connectedAccounts.length} conto/i collegati con successo` :
-             step === "error" ? "Si è verificato un errore durante il collegamento" :
-             provider === "choose" ? "Seleziona come vuoi collegare il tuo conto bancario" :
-             "Cerca e seleziona la tua banca per collegare i conti"}
-          </DialogDescription>
-        </DialogHeader>
+             {step === "connecting" ? "Collegamento in corso..." :
+              step === "redirecting" ? "Reindirizzamento..." :
+              step === "syncing" ? "Collegamento avviato!" :
+              step === "success" ? "Connessione riuscita!" :
+              step === "error" ? "Errore di connessione" :
+              provider === "choose" ? "Scegli il metodo di collegamento" :
+              "Seleziona la tua banca"}
+           </DialogTitle>
+           <DialogDescription>
+             {step === "connecting" ? "Verifica della sessione in corso..." :
+              step === "redirecting" ? `Stai per essere reindirizzato a ${selectedBank?.name || "la tua banca"}...` :
+              step === "syncing" ? "La sincronizzazione è in corso in background" :
+              step === "success" ? `${connectedAccounts.length} conto/i collegati con successo` :
+              step === "error" ? "Si è verificato un errore durante il collegamento" :
+              provider === "choose" ? "Seleziona come vuoi collegare il tuo conto bancario" :
+              "Cerca e seleziona la tua banca per collegare i conti"}
+           </DialogDescription>
+         </DialogHeader>
 
         {/* Provider Choice */}
         {provider === "choose" && step === "select_bank" && (
@@ -534,11 +525,32 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
           </div>
         )}
 
-        {/* Connecting State */}
+        {/* Connecting State (brief session check) */}
         {step === "connecting" && (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <Loader2 className="h-12 w-12 text-primary animate-spin" />
-            <p className="text-muted-foreground">Sincronizzazione transazioni in corso, potrebbe richiedere qualche minuto...</p>
+            <p className="text-muted-foreground">Verifica della sessione in corso...</p>
+          </div>
+        )}
+
+        {/* Syncing State — non-blocking info */}
+        {step === "syncing" && (
+          <div className="space-y-6 py-4">
+            <div className="flex items-center justify-center">
+              <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <CheckCircle2 className="h-10 w-10 text-primary" />
+              </div>
+            </div>
+            <div className="text-center space-y-2">
+              <p className="font-medium text-foreground">Collegamento avviato con successo</p>
+              <p className="text-sm text-muted-foreground">
+                La sincronizzazione delle transazioni è in corso e potrebbe richiedere qualche minuto. 
+                Puoi continuare a usare l'app, la pagina si aggiornerà automaticamente.
+              </p>
+            </div>
+            <Button onClick={handleComplete} className="w-full">
+              Continua
+            </Button>
           </div>
         )}
 
