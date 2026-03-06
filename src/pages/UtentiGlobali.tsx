@@ -17,7 +17,8 @@ import {
   Filter,
   Clock,
   Shield,
-  Activity
+  Activity,
+  CreditCard
 } from "lucide-react";
 import {
   DropdownMenu,
@@ -62,12 +63,16 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 import { useGlobalUsers, useUpdateUserRole, GlobalUser } from "@/hooks/useGlobalUsers";
+import { useSubscriptionPlans } from "@/hooks/useSubscriptionPlans";
+import { useAssignPlan, useUserSubscriptions } from "@/hooks/useManageSubscriptions";
 
 export default function UtentiGlobali() {
   const [selectedUser, setSelectedUser] = useState<GlobalUser | null>(null);
   const [detailSheetOpen, setDetailSheetOpen] = useState(false);
   const [roleDialogOpen, setRoleDialogOpen] = useState(false);
+  const [planDialogOpen, setPlanDialogOpen] = useState(false);
   const [newRole, setNewRole] = useState<'user' | 'admin_aziendale' | 'super_admin'>('user');
+  const [selectedPlanId, setSelectedPlanId] = useState<string>("");
   const [roleChangeReason, setRoleChangeReason] = useState("");
   const [filterStatus, setFilterStatus] = useState<string>("all");
   const [filterRole, setFilterRole] = useState<string>("all");
@@ -75,6 +80,20 @@ export default function UtentiGlobali() {
 
   const { data: users, isLoading } = useGlobalUsers();
   const updateUserRole = useUpdateUserRole();
+  const { data: plans } = useSubscriptionPlans();
+  const assignPlan = useAssignPlan();
+  const { data: userSubs } = useUserSubscriptions();
+
+  // Map user_id -> plan name
+  const userPlanMap = new Map<string, string>();
+  if (userSubs && plans) {
+    userSubs.forEach(sub => {
+      const plan = plans.find(p => p.id === sub.plan_id);
+      if (plan && sub.status === 'active') {
+        userPlanMap.set(sub.user_id, plan.name);
+      }
+    });
+  }
 
   const getRoleBadge = (role: string) => {
     switch (role) {
@@ -89,6 +108,18 @@ export default function UtentiGlobali() {
     }
   };
 
+  const getPlanBadge = (userId: string) => {
+    const planName = userPlanMap.get(userId);
+    if (!planName) return <Badge variant="outline" className="text-muted-foreground">Nessun piano</Badge>;
+    const colorMap: Record<string, string> = {
+      Basic: "bg-blue-500/20 text-blue-600 border-blue-500/30",
+      Small: "bg-teal-500/20 text-teal-600 border-teal-500/30",
+      Pro: "bg-primary/20 text-primary border-primary/30",
+      Full: "bg-emerald-500/20 text-emerald-600 border-emerald-500/30",
+    };
+    return <Badge className={colorMap[planName] || ""}>{planName}</Badge>;
+  };
+
   const handleViewDetails = (user: GlobalUser) => {
     setSelectedUser(user);
     setDetailSheetOpen(true);
@@ -98,6 +129,28 @@ export default function UtentiGlobali() {
     setSelectedUser(user);
     setNewRole(user.role);
     setRoleDialogOpen(true);
+  };
+
+  const handleAssignPlan = (user: GlobalUser) => {
+    setSelectedUser(user);
+    setSelectedPlanId("");
+    setPlanDialogOpen(true);
+  };
+
+  const handleConfirmPlanAssignment = () => {
+    if (!selectedPlanId || !selectedUser) {
+      toast.error("Seleziona un piano");
+      return;
+    }
+    assignPlan.mutate({
+      userId: selectedUser.id,
+      planId: selectedPlanId,
+    }, {
+      onSuccess: () => {
+        setPlanDialogOpen(false);
+        setSelectedPlanId("");
+      }
+    });
   };
 
   const handleConfirmRoleChange = () => {
@@ -236,9 +289,9 @@ export default function UtentiGlobali() {
                 <TableRow>
                   <TableHead>Nome</TableHead>
                   <TableHead>Email</TableHead>
-                  <TableHead>Telefono</TableHead>
                   <TableHead>Azienda</TableHead>
                   <TableHead>Ruolo</TableHead>
+                  <TableHead>Piano</TableHead>
                   <TableHead>Registrato</TableHead>
                   <TableHead className="text-right">Azioni</TableHead>
                 </TableRow>
@@ -253,9 +306,9 @@ export default function UtentiGlobali() {
                       }
                     </TableCell>
                     <TableCell className="text-muted-foreground">{user.email}</TableCell>
-                    <TableCell className="text-muted-foreground">{user.phone || '-'}</TableCell>
                     <TableCell>{user.companyName || '-'}</TableCell>
                     <TableCell>{getRoleBadge(user.role)}</TableCell>
+                    <TableCell>{getPlanBadge(user.id)}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {new Date(user.createdAt).toLocaleDateString('it-IT')}
                     </TableCell>
@@ -270,6 +323,10 @@ export default function UtentiGlobali() {
                           <DropdownMenuItem onClick={() => handleViewDetails(user)}>
                             <Eye className="mr-2 h-4 w-4" />
                             Visualizza Profilo
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => handleAssignPlan(user)}>
+                            <CreditCard className="mr-2 h-4 w-4" />
+                            Assegna Piano
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => handleChangeRole(user)}>
                             <Shield className="mr-2 h-4 w-4" />
@@ -356,6 +413,10 @@ export default function UtentiGlobali() {
                     {getRoleBadge(selectedUser.role)}
                   </div>
                   <div>
+                    <p className="text-muted-foreground">Piano</p>
+                    {getPlanBadge(selectedUser.id)}
+                  </div>
+                  <div>
                     <p className="text-muted-foreground">Ultimo Accesso</p>
                     <p className="font-medium">{selectedUser.lastSignIn ? new Date(selectedUser.lastSignIn).toLocaleString('it-IT') : 'Mai'}</p>
                   </div>
@@ -369,6 +430,10 @@ export default function UtentiGlobali() {
                   Azioni Rapide
                 </h4>
                 <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" size="sm" onClick={() => handleAssignPlan(selectedUser)}>
+                    <CreditCard className="mr-2 h-4 w-4" />
+                    Assegna Piano
+                  </Button>
                   <Button variant="outline" size="sm" onClick={() => handleChangeRole(selectedUser)}>
                     <Shield className="mr-2 h-4 w-4" />
                     Modifica Ruolo
@@ -431,6 +496,52 @@ export default function UtentiGlobali() {
               disabled={updateUserRole.isPending}
             >
               Conferma Modifica
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Plan Assignment Dialog */}
+      <Dialog open={planDialogOpen} onOpenChange={setPlanDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Assegna Piano</DialogTitle>
+            <DialogDescription>
+              Assegna un piano a {selectedUser?.firstName || selectedUser?.email || 'questo utente'}
+              {userPlanMap.get(selectedUser?.id || '') && (
+                <span className="block mt-1">
+                  Piano attuale: <strong>{userPlanMap.get(selectedUser?.id || '')}</strong> (verrà sostituito)
+                </span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Piano</Label>
+              <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Seleziona un piano" />
+                </SelectTrigger>
+                <SelectContent>
+                  {plans?.filter(p => p.isActive).map(plan => (
+                    <SelectItem key={plan.id} value={plan.id}>
+                      {plan.name} — €{plan.priceMonthly}/mese
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setPlanDialogOpen(false)}>
+              Annulla
+            </Button>
+            <Button 
+              className="bg-violet-600 hover:bg-violet-700" 
+              onClick={handleConfirmPlanAssignment}
+              disabled={assignPlan.isPending}
+            >
+              Assegna Piano
             </Button>
           </DialogFooter>
         </DialogContent>
