@@ -101,11 +101,11 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
         }
       };
 
-      // Add 15s timeout
+      // 120s timeout — transaction sync can paginate through thousands of records
       const timeout = setTimeout(() => {
         setErrorMessage("Timeout: il collegamento sta impiegando troppo tempo. Riprova.");
         setStep("error");
-      }, 15000);
+      }, 120000);
       complete().finally(() => clearTimeout(timeout));
     } else if (acubeDone && acubeFiscalId) {
       // A-Cube callback after bank authorization
