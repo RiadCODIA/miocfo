@@ -525,11 +525,32 @@ export function ConnectBankModal({ open, onOpenChange, onConnect }: ConnectBankM
           </div>
         )}
 
-        {/* Connecting State */}
+        {/* Connecting State (brief session check) */}
         {step === "connecting" && (
           <div className="flex flex-col items-center justify-center py-12 space-y-4">
             <Loader2 className="h-12 w-12 text-primary animate-spin" />
-            <p className="text-muted-foreground">Sincronizzazione transazioni in corso, potrebbe richiedere qualche minuto...</p>
+            <p className="text-muted-foreground">Verifica della sessione in corso...</p>
+          </div>
+        )}
+
+        {/* Syncing State — non-blocking info */}
+        {step === "syncing" && (
+          <div className="space-y-6 py-4">
+            <div className="flex items-center justify-center">
+              <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center">
+                <CheckCircle2 className="h-10 w-10 text-primary" />
+              </div>
+            </div>
+            <div className="text-center space-y-2">
+              <p className="font-medium text-foreground">Collegamento avviato con successo</p>
+              <p className="text-sm text-muted-foreground">
+                La sincronizzazione delle transazioni è in corso e potrebbe richiedere qualche minuto. 
+                Puoi continuare a usare l'app, la pagina si aggiornerà automaticamente.
+              </p>
+            </div>
+            <Button onClick={handleComplete} className="w-full">
+              Continua
+            </Button>
           </div>
         )}
 
