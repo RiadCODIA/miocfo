@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { z } from "zod";
 import miocfoLogo from "@/assets/miocfo-logo.png";
-import { Eye, EyeOff, Mail, Lock, User, Building2, FlaskConical, ShieldCheck, Crown } from "lucide-react";
+import { Eye, EyeOff, Mail, Lock, User, Building2 } from "lucide-react";
 
 const loginSchema = z.object({
   email: z.string().email("Email non valida"),
