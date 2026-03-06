@@ -1,63 +1,45 @@
 
 
-## Plan: Restructure Subscription Plans and Implement Feature Gating
+## Problem
 
-### Overview
-Update the 4 subscription tiers with new pricing and implement access control so each plan only shows the allowed sections in the sidebar.
+In `invoiceToDeadline()` (useDeadlines.ts, line 59-66), invoices **without a `due_date`** are unconditionally marked as `status: "completed"`. Even when a user unchecks "Saldato" (which sets `payment_status` back to `"pending"` on the invoice), the deadline still shows as completed because the `!inv.due_date` check takes priority over `payment_status`.
 
-### New Plan Structure
+This creates a loop: the user unchecks → DB updates to `pending` → but the UI re-derives `completed` from the missing `due_date`.
 
-```text
-Plan        Price    Sections Accessible
-─────────   ──────   ─────────────────────────────────────────────────────
-Basic       €49/mo   Dashboard, Flussi di Cassa, Transazioni, Conti Correnti
-Small       €79/mo   Basic + Collegamenti (solo Conti Bancari)
-Pro         €239/mo  Small + Conto Economico, Fatture, Scadenzario, Collegamenti (full)
-Full        €479/mo  Pro + Budget & Previsioni, AI Assistant (with chat credits)
+## Fix
+
+**File: `src/hooks/useDeadlines.ts`** — Change `invoiceToDeadline()` logic:
+
+Currently (lines 59-77):
+```
+if (!inv.due_date) {
+  status = "completed";  // ← always completed, ignores payment_status
+  dueDate = inv.invoice_date || today;
+} else { ... }
 ```
 
-### Changes Required
+Change to: check `payment_status` **first**, then use `due_date` absence only as a fallback hint:
 
-#### 1. Database: Create `user_subscriptions` table
-A new table to track each user's active plan:
-- `id`, `user_id`, `plan_id` (FK to subscription_plans), `status` (active/expired/trial), `started_at`, `expires_at`, `ai_credits_remaining` (for Full plan chat limits)
-- RLS: users can view their own subscription; super_admins can manage all
-- Default: new users get no plan (or a trial period -- to discuss)
+```typescript
+const isPaid = inv.payment_status === "paid" || inv.payment_status === "matched";
 
-#### 2. Database: Seed the 4 plans into `subscription_plans`
-Insert the 4 plans with their `features` JSON arrays containing the section IDs they unlock:
-- **Basic**: `["dashboard", "flussi_cassa", "transazioni", "conti_bancari"]`
-- **Small**: `["dashboard", "collegamenti_banche", "flussi_cassa", "transazioni", "conti_bancari"]`
-- **Pro**: `["dashboard", "collegamenti", "flussi_cassa", "transazioni", "conti_bancari", "conto_economico", "fatture", "scadenzario"]`
-- **Full**: `["dashboard", "collegamenti", "flussi_cassa", "transazioni", "conti_bancari", "conto_economico", "budget_previsioni", "fatture", "scadenzario", "kpi_report", "alert_notifiche", "ai_assistant"]`
+if (isPaid) {
+  status = "completed";
+  dueDate = inv.due_date || inv.invoice_date || today;
+} else if (!inv.due_date) {
+  // No due date and not explicitly paid → treat as pending (user can manage)
+  status = "pending";
+  dueDate = inv.invoice_date || today;
+} else if (inv.due_date < today) {
+  status = "overdue";
+  dueDate = inv.due_date;
+} else {
+  status = "pending";
+  dueDate = inv.due_date;
+}
+```
 
-#### 3. Hook: `useUserSubscription`
-New hook that fetches the current user's active subscription and returns the list of allowed feature IDs. Used by the Sidebar and route protection.
+Same logic fix in `useDeadlinesSummary()` (line 229-233) and `useAccrualForecast()` (line 326) where the same pattern `!inv.due_date → completed` is used.
 
-#### 4. Sidebar: Filter nav items by plan
-Update `Sidebar.tsx` to use `useUserSubscription` and hide nav items the user's plan doesn't include. Items not in the user's `features` list are hidden or shown as locked (grayed out with upgrade prompt).
-
-#### 5. Route Protection
-Update `ProtectedRoute.tsx` (or create a wrapper) to redirect users who try to access a section not included in their plan to an upgrade page.
-
-#### 6. Public Pricing Page (`PianiPricing.tsx`)
-Update the hardcoded plans array with the 4 new plans (Basic €49, Small €79, Pro €239, Full €479), their descriptions and feature lists matching the user's specification. Update yearly prices proportionally.
-
-#### 7. Admin Plans Page (`Piani.tsx`)
-Update the `allFeatures` list to match the actual app sections (dashboard, collegamenti, flussi_cassa, transazioni, conti_bancari, conto_economico, budget_previsioni, fatture, scadenzario, kpi_report, alert_notifiche, ai_assistant).
-
-### Technical Details
-
-**Files to create:**
-- `supabase/migrations/xxx_create_user_subscriptions.sql`
-- `src/hooks/useUserSubscription.ts`
-
-**Files to modify:**
-- `src/pages/PianiPricing.tsx` -- new plan cards
-- `src/pages/Piani.tsx` -- updated features list
-- `src/components/layout/Sidebar.tsx` -- filter items by subscription
-- `src/components/auth/ProtectedRoute.tsx` -- plan-based route guard
-
-### Open Question: AI Credits
-For the Full plan, you mentioned defining a chat interaction limit. What limit should we set initially? (e.g., 50 chats/month, 100 chats/month?) This can be changed later via the admin panel.
+**3 locations to fix**, all in `src/hooks/useDeadlines.ts`. No other files need changes.
 
