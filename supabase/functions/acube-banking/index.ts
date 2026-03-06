@@ -374,7 +374,7 @@ async function syncAccountsToDatabase(
     const { data: savedAccount, error: accountError } = await supabase
       .from("bank_accounts")
       .upsert(accountData, { 
-        onConflict: "acube_account_id",
+        onConflict: "acube_account_id,user_id",
         ignoreDuplicates: false 
       })
       .select()
@@ -429,7 +429,7 @@ async function syncAccountsToDatabase(
       const { error: txError } = await supabase
         .from("bank_transactions")
         .upsert(transactionData, { 
-          onConflict: "external_id",
+          onConflict: "external_id,user_id",
           ignoreDuplicates: true 
         });
       
