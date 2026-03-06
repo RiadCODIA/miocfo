@@ -9,9 +9,10 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Brain, Loader2, AlertCircle, Users, Info } from "lucide-react";
+import { Brain, Loader2, AlertCircle, Users, Info, Upload } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useQueryClient } from "@tanstack/react-query";
 
 const fmt = (v: number) => v === 0 ? "" : v.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
@@ -68,6 +69,8 @@ export function ContoEconomicoTab() {
   const [personnel, setPersonnel] = useState<PersonnelData>(() => loadPersonnel(year));
   const [aiReport, setAiReport] = useState<AIReport | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [autoLoading, setAutoLoading] = useState(false);
+  const queryClient = useQueryClient();
 
   const { data: employeesData } = useQuery({
     queryKey: ["employees-active"],
@@ -93,6 +96,37 @@ export function ContoEconomicoTab() {
     const updated = { ...personnel, [field]: { ...personnel[field], [month]: num } };
     setPersonnel(updated);
     savePersonnel(year, updated);
+  };
+
+  const handleAutoLoad = async () => {
+    setAutoLoading(true);
+    try {
+      toast.info("Categorizzazione transazioni in corso...");
+      const { data: result, error } = await supabase.functions.invoke("categorize-transactions", {
+        body: { batch_mode: true },
+      });
+      if (error) throw error;
+      if (result?.error) {
+        if (result.error.includes("Rate limit")) {
+          toast.error("Limite di richieste raggiunto. Riprova tra qualche secondo.");
+        } else if (result.error.includes("Payment required")) {
+          toast.error("Crediti AI esauriti. Aggiungi crediti nelle impostazioni workspace.");
+        } else {
+          toast.error(result.error);
+        }
+        return;
+      }
+      const count = result?.results?.length || 0;
+      toast.success(`${count} transazioni categorizzate con successo`);
+      // Refresh P&L data
+      queryClient.invalidateQueries({ queryKey: ["conto-economico"] });
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Errore durante la categorizzazione automatica";
+      console.error("Auto-load error:", e);
+      toast.error("Errore", { description: msg });
+    } finally {
+      setAutoLoading(false);
+    }
   };
 
   const handleAIAnalysis = async () => {
@@ -258,9 +292,13 @@ export function ContoEconomicoTab() {
         {/* Year selector + AI button */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <p className="text-sm text-muted-foreground">
-            Analisi economica mensile basata su fatture emesse e ricevute — Anno <strong>{year}</strong>
+            Analisi economica mensile basata su fatture e transazioni categorizzate — Anno <strong>{year}</strong>
           </p>
           <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={handleAutoLoad} disabled={autoLoading} className="gap-2">
+              {autoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
+              {autoLoading ? "Caricamento..." : "Carica dati in automatico"}
+            </Button>
             <Button variant="outline" size="sm" onClick={handleAIAnalysis} disabled={aiLoading} className="gap-2">
               {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
               {aiLoading ? "Analisi in corso..." : "Analisi AI"}

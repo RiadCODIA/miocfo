@@ -41,7 +41,7 @@ export function useContoEconomico(year: number) {
       const startDate = `${year}-01-01`;
       const endDate = `${year}-12-31`;
 
-      const [emesseRes, ricevuteRes, expenseCatsRes, revenueCatsRes] = await Promise.all([
+      const [emesseRes, ricevuteRes, expenseCatsRes, revenueCatsRes, transactionsRes, matchedTxRes] = await Promise.all([
         supabase
           .from("invoices")
           .select("amount, total_amount, vat_amount, invoice_date, category_id")
@@ -64,6 +64,20 @@ export function useContoEconomico(year: number) {
           .select("id, name, cost_type, category_type")
           .eq("category_type", "revenue")
           .order("sort_order"),
+        // Fetch categorized bank transactions
+        supabase
+          .from("bank_transactions")
+          .select("id, amount, date, ai_category_id")
+          .not("ai_category_id", "is", null)
+          .gte("date", startDate)
+          .lte("date", endDate),
+        // Fetch invoice-matched transaction IDs to avoid double-counting
+        supabase
+          .from("invoices")
+          .select("matched_transaction_id")
+          .not("matched_transaction_id", "is", null)
+          .gte("invoice_date", startDate)
+          .lte("invoice_date", endDate),
       ]);
 
       if (emesseRes.error) throw emesseRes.error;
@@ -145,7 +159,36 @@ export function useContoEconomico(year: number) {
         costi[catId][month] = (costi[catId][month] || 0) + Number(inv.amount);
       });
 
-      // Total costs
+      // ── Bank transactions (categorized, not matched to invoices) ──
+      const matchedTxIds = new Set(
+        (matchedTxRes.data || []).map((r) => r.matched_transaction_id).filter(Boolean)
+      );
+
+      (transactionsRes.data || []).forEach((tx) => {
+        if (!tx.date || !tx.ai_category_id) return;
+        if (matchedTxIds.has(tx.id)) return; // skip already-invoiced transactions
+        const month = new Date(tx.date).getMonth();
+        const amount = Math.abs(Number(tx.amount));
+        const catId = tx.ai_category_id;
+
+        if (tx.amount > 0 && revenueCatById[catId]) {
+          // Income transaction → revenue
+          if (!ricaviPerCategoria[catId]) ricaviPerCategoria[catId] = {};
+          ricaviPerCategoria[catId][month] = (ricaviPerCategoria[catId][month] || 0) + amount;
+        } else if (tx.amount > 0 && !revenueCatById[catId] && altriRicaviCat) {
+          // Income but category is expense-type → fallback to "Altri ricavi"
+          ricaviPerCategoria[altriRicaviCat.id][month] = (ricaviPerCategoria[altriRicaviCat.id][month] || 0) + amount;
+        } else if (tx.amount < 0 && expenseCatById[catId]) {
+          // Expense transaction → cost
+          if (!costi[catId]) costi[catId] = {};
+          costi[catId][month] = (costi[catId][month] || 0) + amount;
+        } else if (tx.amount < 0) {
+          // Expense but no matching expense category
+          costiNonCategorizzati[month] = (costiNonCategorizzati[month] || 0) + amount;
+        }
+      });
+
+      // Total costs (recalculate after adding transactions)
       const costiTotali: MonthlyData = {};
       for (let m = 0; m < 12; m++) {
         let total = 0;
@@ -154,9 +197,17 @@ export function useContoEconomico(year: number) {
         if (total > 0) costiTotali[m] = total;
       }
 
+      // Recalculate total revenue after adding transactions
+      const ricaviTotaliFinal: MonthlyData = {};
+      for (let m = 0; m < 12; m++) {
+        let total = 0;
+        revenueCategories.forEach((c) => { total += ricaviPerCategoria[c.id]?.[m] || 0; });
+        if (total > 0) ricaviTotaliFinal[m] = total;
+      }
+
       return {
         ricaviPerCategoria,
-        ricaviTotali,
+        ricaviTotali: ricaviTotaliFinal,
         revenueCategories,
         costi,
         costiNonCategorizzati,
