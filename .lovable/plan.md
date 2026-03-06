@@ -1,45 +1,48 @@
 
 
-## Problem
+## Problem Analysis
 
-In `invoiceToDeadline()` (useDeadlines.ts, line 59-66), invoices **without a `due_date`** are unconditionally marked as `status: "completed"`. Even when a user unchecks "Saldato" (which sets `payment_status` back to `"pending"` on the invoice), the deadline still shows as completed because the `!inv.due_date` check takes priority over `payment_status`.
+Two issues in Budget & Previsioni:
 
-This creates a loop: the user unchecks → DB updates to `pending` → but the UI re-derives `completed` from the missing `due_date`.
+### 1. Budget entries are not editable
+The table (lines 143-163 in `BudgetPrevisioni.tsx`) renders budgets as read-only rows with no edit or delete actions. The `editedValues` state is initialized but never populated — there are no input fields or action buttons on each row.
 
-## Fix
+### 2. Budget entries not visible on chart
+`useBudgetChartData()` (lines 55-136 in `useBudgets.ts`) builds chart data from:
+- **Actuals**: `bank_transactions` (solid bars)
+- **Expected**: unpaid `invoices` with `due_date` (dashed bars)
 
-**File: `src/hooks/useDeadlines.ts`** — Change `invoiceToDeadline()` logic:
+It **never queries the `budgets` table**, so manually inserted budgets don't appear on the chart at all.
 
-Currently (lines 59-77):
-```
-if (!inv.due_date) {
-  status = "completed";  // ← always completed, ignores payment_status
-  dueDate = inv.invoice_date || today;
-} else { ... }
-```
+---
 
-Change to: check `payment_status` **first**, then use `due_date` absence only as a fallback hint:
+## Fix Plan
 
+### A. Make budget rows editable + deletable
+
+In `BudgetPrevisioni.tsx`:
+- Add a new column "Azioni" to the table header
+- Add inline edit (pencil icon) and delete (trash icon) buttons per row
+- On edit click: open a modal or enable inline editing for name, amount, type, and month
+- On delete: call a new `useDeleteBudget()` mutation
+- Create `useDeleteBudget()` in `useBudgets.ts` that sets `is_active = false` (soft delete) or deletes the row
+
+### B. Include budgets in chart data
+
+In `useBudgetChartData()`:
+- Fetch active budgets from the `budgets` table
+- For each budget, map its `start_date` to a month key
+- Add budget amounts to `ricaviPrevisti` / `costiPrevisti` alongside the invoice-based expected values
+- This makes the dashed bars reflect both manual budgets and pending invoices
+
+### C. Add delete mutation
+
+In `useBudgets.ts`, add:
 ```typescript
-const isPaid = inv.payment_status === "paid" || inv.payment_status === "matched";
-
-if (isPaid) {
-  status = "completed";
-  dueDate = inv.due_date || inv.invoice_date || today;
-} else if (!inv.due_date) {
-  // No due date and not explicitly paid → treat as pending (user can manage)
-  status = "pending";
-  dueDate = inv.invoice_date || today;
-} else if (inv.due_date < today) {
-  status = "overdue";
-  dueDate = inv.due_date;
-} else {
-  status = "pending";
-  dueDate = inv.due_date;
+export function useDeleteBudget() {
+  // delete from "budgets" by id, invalidate queries
 }
 ```
 
-Same logic fix in `useDeadlinesSummary()` (line 229-233) and `useAccrualForecast()` (line 326) where the same pattern `!inv.due_date → completed` is used.
-
-**3 locations to fix**, all in `src/hooks/useDeadlines.ts`. No other files need changes.
+**Files to modify**: `src/pages/BudgetPrevisioni.tsx`, `src/hooks/useBudgets.ts`
 
