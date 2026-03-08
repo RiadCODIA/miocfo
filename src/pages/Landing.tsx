@@ -485,6 +485,41 @@ export default function Landing() {
       </section>
 
       {/* ═══════════════════════════════════════════════════
+          CONSULENZA ON TOP SECTION
+          ═══════════════════════════════════════════════════ */}
+      <section className="py-16 md:py-24 relative overflow-hidden bg-muted/30">
+        <div className="container mx-auto px-4 max-w-3xl">
+          <motion.div
+            className="text-center"
+            initial={{ opacity: 0, y: 20 }}
+            whileInView={{ opacity: 1, y: 0 }}
+            viewport={{ once: true }}
+            transition={{ duration: 0.6 }}
+          >
+            <h2 className="text-2xl md:text-3xl font-bold text-foreground mb-4">
+              Cerchi un supporto strategico su misura?
+            </h2>
+            <p className="text-muted-foreground leading-relaxed mb-8 max-w-2xl mx-auto">
+              Per le aziende che desiderano un partner strategico oltre al software, offriamo un
+              percorso di consulenza "On Top". Analizza i tuoi dati con un controller specialist e
+              un innovation manager del nostro team per definire un piano d'azione dettagliato.
+            </p>
+            <Button
+              variant="outline"
+              size="lg"
+              className="rounded-full gap-2"
+              asChild
+            >
+              <a href="#contatti">
+                <Phone className="h-4 w-4" />
+                Richiedi una call
+              </a>
+            </Button>
+          </motion.div>
+        </div>
+      </section>
+
+      {/* ═══════════════════════════════════════════════════
           FAQ SECTION
           ═══════════════════════════════════════════════════ */}
       <section id="faq" className="py-20 md:py-32 relative overflow-hidden bg-muted/20 scroll-mt-20">
