@@ -455,7 +455,7 @@ export default function Landing() {
           </div>
 
           {/* All plans include */}
-          <div className="text-center mb-10">
+          <div className="text-center mb-6">
             <h3 className="text-lg font-semibold text-foreground mb-6">Tutti i piani includono:</h3>
             <div className="flex flex-wrap justify-center gap-4">
               {allInclude.map((item) => (
@@ -464,6 +464,21 @@ export default function Landing() {
                   {item}
                 </span>
               ))}
+            </div>
+          </div>
+
+          {/* Payment Methods Accepted */}
+          <div className="text-center mb-10">
+            <p className="text-xs text-muted-foreground mb-3">Metodi di pagamento accettati</p>
+            <div className="flex items-center justify-center gap-4">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded-full">
+                <CreditCard className="h-3.5 w-3.5" />
+                <span>Visa / Mastercard / Amex</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded-full opacity-50">
+                <span className="font-bold text-[10px]">PP</span>
+                <span>PayPal (in arrivo)</span>
+              </div>
             </div>
           </div>
         </div>
