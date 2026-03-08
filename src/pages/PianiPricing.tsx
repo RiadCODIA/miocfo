@@ -3,7 +3,10 @@ import { LandingHeader } from "@/components/landing/LandingHeader";
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, UserPlus, Link2, LayoutDashboard, Phone, X, Sparkles } from "lucide-react";
+import { ArrowRight, Check, UserPlus, Link2, LayoutDashboard, Phone, X, Sparkles, CreditCard } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSubscriptionPlans } from "@/hooks/useSubscriptionPlans";
+import { PaymentMethodModal } from "@/components/payment/PaymentMethodModal";
 
 const steps = [
   {
@@ -108,6 +111,24 @@ const checklistItems = [
 
 export default function PianiPricing() {
   const [isAnnual, setIsAnnual] = useState(false);
+  const [paymentModal, setPaymentModal] = useState<{ open: boolean; planName: string; planId?: string; price: number } | null>(null);
+  const { user } = useAuth();
+  const { data: dbPlans } = useSubscriptionPlans();
+
+  const getPlanId = (planName: string) => {
+    return dbPlans?.find((p) => p.name.toLowerCase() === planName.toLowerCase())?.id;
+  };
+
+  const handlePlanClick = (plan: typeof plans[0]) => {
+    if (!user) return; // Link will handle redirect
+    const price = isAnnual ? plan.priceYearly * 12 : plan.priceMonthly;
+    setPaymentModal({
+      open: true,
+      planName: plan.name,
+      planId: getPlanId(plan.name),
+      price: isAnnual ? plan.priceYearly * 12 : plan.priceMonthly,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -231,18 +252,33 @@ export default function PianiPricing() {
                   </ul>
                 )}
 
-                <Button
-                  asChild
-                  size="lg"
-                  className={`w-full rounded-full ${
-                    plan.popular
-                      ? "bg-primary-foreground text-primary hover:bg-primary-foreground/90"
-                      : ""
-                  }`}
-                  variant={plan.popular ? "default" : "outline"}
-                >
-                  <Link to="/auth?tab=register">{plan.cta}</Link>
-                </Button>
+                {user ? (
+                  <Button
+                    size="lg"
+                    className={`w-full rounded-full ${
+                      plan.popular
+                        ? "bg-primary-foreground text-primary hover:bg-primary-foreground/90"
+                        : ""
+                    }`}
+                    variant={plan.popular ? "default" : "outline"}
+                    onClick={() => handlePlanClick(plan)}
+                  >
+                    {plan.cta}
+                  </Button>
+                ) : (
+                  <Button
+                    asChild
+                    size="lg"
+                    className={`w-full rounded-full ${
+                      plan.popular
+                        ? "bg-primary-foreground text-primary hover:bg-primary-foreground/90"
+                        : ""
+                    }`}
+                    variant={plan.popular ? "default" : "outline"}
+                  >
+                    <Link to="/auth?tab=register">{plan.cta}</Link>
+                  </Button>
+                )}
               </div>
             ))}
           </div>
@@ -340,9 +376,36 @@ export default function PianiPricing() {
               </Link>
             </Button>
           </div>
+
+          {/* Payment Methods Accepted */}
+          <div className="text-center mt-12 mb-8">
+            <p className="text-xs text-muted-foreground mb-3">Metodi di pagamento accettati</p>
+            <div className="flex items-center justify-center gap-4">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded-full">
+                <CreditCard className="h-3.5 w-3.5" />
+                <span>Visa / Mastercard / Amex</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded-full opacity-50">
+                <span className="font-bold text-[10px]">PP</span>
+                <span>PayPal (in arrivo)</span>
+              </div>
+            </div>
+          </div>
         </div>
       </main>
       <LandingFooter />
+
+      {/* Payment Modal */}
+      {paymentModal && (
+        <PaymentMethodModal
+          open={paymentModal.open}
+          onOpenChange={(open) => setPaymentModal(open ? paymentModal : null)}
+          planName={paymentModal.planName}
+          planId={paymentModal.planId}
+          price={paymentModal.price}
+          isAnnual={isAnnual}
+        />
+      )}
     </div>
   );
 }
