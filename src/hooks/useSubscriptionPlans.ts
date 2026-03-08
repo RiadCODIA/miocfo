@@ -17,6 +17,9 @@ export interface SubscriptionPlan {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+  aiMonthlyLimitEur: number;
+  aiTopupMinEur: number;
+  aiUpgradeSuggestionAfter: number | null;
 }
 
 export function useSubscriptionPlans() {
