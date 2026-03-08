@@ -2,6 +2,7 @@ import { ReactNode, useState, createContext, useContext } from "react";
 import { useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { AlertListener } from "@/components/AlertListener";
+import { AIBlockBanner } from "@/components/AIBlockBanner";
 import { TopBar } from "./TopBar";
 import { DateRangeProvider } from "@/contexts/DateRangeContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
