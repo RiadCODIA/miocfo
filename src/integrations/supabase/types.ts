@@ -76,6 +76,42 @@ export type Database = {
         }
         Relationships: []
       }
+      ai_usage_monthly: {
+        Row: {
+          cost_accumulated: number
+          created_at: string
+          credit_recharged: number
+          id: string
+          is_blocked: boolean
+          month_year: string
+          num_recharges: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          cost_accumulated?: number
+          created_at?: string
+          credit_recharged?: number
+          id?: string
+          is_blocked?: boolean
+          month_year: string
+          num_recharges?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          cost_accumulated?: number
+          created_at?: string
+          credit_recharged?: number
+          id?: string
+          is_blocked?: boolean
+          month_year?: string
+          num_recharges?: number
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       alerts: {
         Row: {
           action_url: string | null
@@ -1138,6 +1174,44 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
+      }
+      supplier_category_mappings: {
+        Row: {
+          category_id: string | null
+          created_at: string
+          id: string
+          supplier_name: string | null
+          supplier_vat: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          supplier_name?: string | null
+          supplier_vat: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          category_id?: string | null
+          created_at?: string
+          id?: string
+          supplier_name?: string | null
+          supplier_vat?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_category_mappings_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "cost_categories"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sync_jobs: {
         Row: {

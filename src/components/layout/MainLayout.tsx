@@ -2,6 +2,7 @@ import { ReactNode, useState, createContext, useContext } from "react";
 import { useLocation } from "react-router-dom";
 import { Sidebar } from "./Sidebar";
 import { AlertListener } from "@/components/AlertListener";
+import { AIBlockBanner } from "@/components/AIBlockBanner";
 import { TopBar } from "./TopBar";
 import { DateRangeProvider } from "@/contexts/DateRangeContext";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
@@ -33,6 +34,7 @@ export function MainLayout({ children }: MainLayoutProps) {
       <DateRangeProvider>
         <div className="min-h-screen bg-background">
           <AlertListener />
+          <AIBlockBanner />
           <Sidebar />
           <main className={`min-h-screen transition-all duration-300 pointer-events-auto ${collapsed ? "pl-16" : "pl-64"}`}>
             <div className="p-6 lg:p-8">

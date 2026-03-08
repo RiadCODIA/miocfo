@@ -1,72 +1,85 @@
-import { useState, useEffect, useRef } from "react";
-import { Download, FileText, BarChart3, TrendingUp, Percent, Clock, Loader2, Brain, ArrowRight, Settings2 } from "lucide-react";
+import { useState } from "react";
+import { TrendingUp, TrendingDown, ArrowRight, BarChart3, DollarSign, Percent, Clock, Wallet, Info, Settings2, Loader2, Brain } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { useKPIData, useKPITargets, useUpdateKPITargets } from "@/hooks/useKPIData";
+import { useKPIData, useKPITargets, useUpdateKPITargets, type KPIPeriod, type KPIResult } from "@/hooks/useKPIData";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AIReportSection, type AIReport } from "@/components/area-economica/AIReportSection";
-import { useNavigate } from "react-router-dom";
-import miocfoLogo from "@/assets/miocfo-logo.png";
 
-const KPI_LABELS: Record<string, { label: string; unit: string }> = {
-  ros: { label: "ROS (Return on Sales)", unit: "%" },
-  dso: { label: "DSO (Days Sales Outstanding)", unit: " giorni" },
-  current_ratio: { label: "Current Ratio", unit: "" },
-  margine_operativo: { label: "Margine Operativo", unit: "%" },
-  burn_rate: { label: "Burn Rate Mensile", unit: " €" },
-  revenue_growth: { label: "Crescita Ricavi", unit: "%" },
+const KPI_ICONS: Record<string, React.ReactNode> = {
+  ricavi: <DollarSign className="h-5 w-5" />,
+  primo_margine: <Percent className="h-5 w-5" />,
+  ebitda: <BarChart3 className="h-5 w-5" />,
+  cashflow: <Wallet className="h-5 w-5" />,
+  dso: <Clock className="h-5 w-5" />,
+  dpo: <Clock className="h-5 w-5" />,
 };
 
-const getKPIIcon = (id: string, categoria: string) => {
-  const colorClass = categoria === "standard" ? "text-primary" : "text-warning";
-  switch (id) {
-    case "ros":
-    case "burn_rate":
-    case "revenue_growth":
-      return <TrendingUp className={cn("h-4 w-4", colorClass)} />;
-    case "dso":
-      return <Clock className={cn("h-4 w-4", colorClass)} />;
-    case "current_ratio":
-      return <BarChart3 className={cn("h-4 w-4", colorClass)} />;
-    case "margine_operativo":
-      return <Percent className={cn("h-4 w-4", colorClass)} />;
-    default:
-      return <BarChart3 className={cn("h-4 w-4", colorClass)} />;
-  }
+const KPI_COLORS: Record<string, string> = {
+  ricavi: "bg-primary/10 text-primary",
+  primo_margine: "bg-success/10 text-success",
+  ebitda: "bg-warning/10 text-warning",
+  cashflow: "bg-primary/10 text-primary",
+  dso: "bg-destructive/10 text-destructive",
+  dpo: "bg-muted text-muted-foreground",
 };
+
+function KPICard({ kpi }: { kpi: KPIResult }) {
+  const isPositiveTrend = kpi.trend !== null && kpi.trend >= 0;
+  // For DSO and DPO, a decrease is positive
+  const isGoodTrend = kpi.id === "dso" || kpi.id === "dpo"
+    ? kpi.trend !== null && kpi.trend <= 0
+    : isPositiveTrend;
+
+  return (
+    <div className="glass rounded-xl p-5 space-y-3">
+      <div className="flex items-start justify-between">
+        <div className="flex items-center gap-2.5">
+          <div className={cn("p-2 rounded-lg", KPI_COLORS[kpi.id] || "bg-muted text-muted-foreground")}>
+            {KPI_ICONS[kpi.id] || <BarChart3 className="h-5 w-5" />}
+          </div>
+          <span className="text-sm font-medium text-muted-foreground">{kpi.label}</span>
+        </div>
+        {kpi.trend !== null && (
+          <Badge className={cn(
+            "text-xs gap-1",
+            isGoodTrend
+              ? "bg-success/10 text-success border-success/20"
+              : "bg-destructive/10 text-destructive border-destructive/20"
+          )}>
+            {isPositiveTrend ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
+            {kpi.trend >= 0 ? "+" : ""}{kpi.trend.toFixed(1)}{kpi.unit === "%" || kpi.unit === "giorni" ? "" : "%"}
+          </Badge>
+        )}
+      </div>
+      <p className="text-3xl font-bold text-foreground">{kpi.value}</p>
+      <p className="text-xs text-muted-foreground">{kpi.trendLabel}</p>
+      {kpi.note && (
+        <div className="flex items-start gap-1.5 pt-1">
+          <Info className="h-3 w-3 text-muted-foreground/60 mt-0.5 shrink-0" />
+          <p className="text-[11px] text-muted-foreground/70 leading-tight">{kpi.note}</p>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function KPIReport() {
-  const { data, isLoading } = useKPIData();
+  const [period, setPeriod] = useState<KPIPeriod>("year");
+  const { data, isLoading } = useKPIData(period);
   const { data: targets } = useKPITargets();
   const updateTargets = useUpdateKPITargets();
   const [aiReport, setAiReport] = useState<AIReport | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiSummary, setAiSummary] = useState<string | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(false);
   const [targetModalOpen, setTargetModalOpen] = useState(false);
   const [editTargets, setEditTargets] = useState<Record<string, number>>({});
-  const navigate = useNavigate();
-  const printRef = useRef<HTMLDivElement>(null);
-
-  // Fetch AI summary when KPIs load
-  useEffect(() => {
-    if (data?.kpis?.length && !aiSummary && !summaryLoading) {
-      setSummaryLoading(true);
-      supabase.functions.invoke("analyze-kpi", {
-        body: { kpis: data.kpis, mode: "summary" },
-      }).then(({ data: result, error }) => {
-        if (!error && result?.summary) {
-          setAiSummary(result.summary);
-        }
-      }).finally(() => setSummaryLoading(false));
-    }
-  }, [data?.kpis?.length]);
 
   const handleAIAnalysis = async () => {
     if (!data?.kpis.length) {
@@ -105,86 +118,16 @@ export default function KPIReport() {
     }
   };
 
-  const handleDownloadPDF = () => {
-    if (!aiReport) {
-      toast.error("Genera prima l'Analisi AI per scaricare il PDF");
-      return;
-    }
-
-    const printWindow = window.open("", "_blank");
-    if (!printWindow) {
-      toast.error("Popup bloccato dal browser");
-      return;
-    }
-
-    const kpiRows = data?.kpis.map(k => `
-      <tr>
-        <td style="padding:8px;border-bottom:1px solid #eee;">${k.nome}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;font-weight:bold;">${k.valore}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;">${k.target}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;color:${k.raggiunto ? '#16a34a' : '#dc2626'}">${k.raggiunto ? '✓ Raggiunto' : '✗ Non raggiunto'}</td>
-        <td style="padding:8px;border-bottom:1px solid #eee;">${k.trend}</td>
-      </tr>
-    `).join("") || "";
-
-    const criticalHtml = aiReport.criticalAreas?.map(a =>
-      `<li><strong>${a.area}</strong> (${a.severity}): ${a.description}</li>`
-    ).join("") || "";
-
-    const suggestionsHtml = aiReport.suggestions?.map(s =>
-      `<li><strong>${s.title}</strong> [${s.priority}]: ${s.description} (${s.timeline})</li>`
-    ).join("") || "";
-
-    printWindow.document.write(`<!DOCTYPE html><html><head><title>Report KPI - MioCFO</title>
-      <style>
-        body { font-family: Arial, sans-serif; padding: 40px; color: #333; max-width: 900px; margin: 0 auto; }
-        .header { display: flex; align-items: center; gap: 16px; margin-bottom: 32px; border-bottom: 2px solid #2563eb; padding-bottom: 16px; }
-        .header img { height: 40px; }
-        .header h1 { font-size: 22px; color: #2563eb; margin: 0; }
-        .header .date { margin-left: auto; color: #666; font-size: 14px; }
-        h2 { color: #2563eb; font-size: 18px; margin-top: 28px; }
-        table { width: 100%; border-collapse: collapse; margin-top: 12px; }
-        th { text-align: left; padding: 8px; background: #f1f5f9; border-bottom: 2px solid #cbd5e1; font-size: 13px; }
-        .score { display: inline-block; padding: 4px 12px; border-radius: 8px; font-weight: bold; font-size: 18px; }
-        ul { padding-left: 20px; }
-        li { margin-bottom: 6px; }
-        @media print { body { padding: 20px; } }
-      </style>
-    </head><body>
-      <div class="header">
-        <img src="${miocfoLogo}" alt="MioCFO" />
-        <h1>Report Analisi KPI</h1>
-        <span class="date">${new Date().toLocaleDateString("it-IT", { day: "2-digit", month: "long", year: "numeric" })}</span>
-      </div>
-
-      <h2>Panoramica</h2>
-      <p>Health Score: <span class="score" style="background:${aiReport.healthScore >= 70 ? '#dcfce7;color:#16a34a' : aiReport.healthScore >= 40 ? '#fef9c3;color:#ca8a04' : '#fee2e2;color:#dc2626'}">${aiReport.healthScore}/100 - ${aiReport.healthLabel}</span></p>
-      <p>${aiReport.summary}</p>
-
-      <h2>KPI Dettaglio</h2>
-      <table>
-        <thead><tr><th>KPI</th><th>Valore</th><th>Target</th><th>Stato</th><th>Trend</th></tr></thead>
-        <tbody>${kpiRows}</tbody>
-      </table>
-
-      ${criticalHtml ? `<h2>Aree Critiche</h2><ul>${criticalHtml}</ul>` : ""}
-      ${suggestionsHtml ? `<h2>Suggerimenti</h2><ul>${suggestionsHtml}</ul>` : ""}
-      ${aiReport.forecasts ? `<h2>Previsioni</h2><p>${aiReport.forecasts}</p>` : ""}
-    </body></html>`);
-    printWindow.document.close();
-    setTimeout(() => printWindow.print(), 500);
-  };
-
   if (isLoading) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">KPI & Report</h1>
-          <p className="text-muted-foreground mt-1">Indicatori calcolati dai tuoi dati reali</p>
+          <h1 className="text-2xl font-bold text-foreground">Dati & Statistiche</h1>
+          <p className="text-muted-foreground mt-1">6 KPI aggiornati in tempo reale</p>
         </div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {[...Array(6)].map((_, i) => (
-            <Skeleton key={i} className="h-40 rounded-xl" />
+            <Skeleton key={i} className="h-44 rounded-xl" />
           ))}
         </div>
       </div>
@@ -196,120 +139,60 @@ export default function KPIReport() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">KPI & Report</h1>
-            <p className="text-muted-foreground mt-1">
-              Indicatori calcolati in tempo reale dai tuoi dati finanziari
-            </p>
-          </div>
-          <div className="flex gap-2">
-            <Button variant="outline" onClick={handleOpenTargetModal} className="gap-2">
-              <Settings2 className="h-4 w-4" />
-              Modifica Target
-            </Button>
-            <Button onClick={handleAIAnalysis} disabled={aiLoading || !kpis.length} className="gap-2">
-              {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
-              Analisi AI
-            </Button>
-          </div>
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Dati & Statistiche</h1>
+          <p className="text-muted-foreground mt-1">
+            Indicatori calcolati in tempo reale da fatture e transazioni bancarie
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <Select value={period} onValueChange={(v) => setPeriod(v as KPIPeriod)}>
+            <SelectTrigger className="w-40 h-9 text-sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="month">Mese corrente</SelectItem>
+              <SelectItem value="quarter">Trimestre</SelectItem>
+              <SelectItem value="year">Anno corrente</SelectItem>
+            </SelectContent>
+          </Select>
+          <Button variant="outline" size="sm" onClick={handleOpenTargetModal} className="gap-2">
+            <Settings2 className="h-4 w-4" />
+            Target
+          </Button>
+          <Button size="sm" onClick={handleAIAnalysis} disabled={aiLoading || !kpis.length} className="gap-2">
+            {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
+            Analisi AI
+          </Button>
         </div>
       </div>
 
       {/* KPI Grid */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold text-foreground">Indicatori Chiave</h3>
-          <div className="flex gap-2">
-            <Badge variant="outline" className="border-primary/50 text-primary">Standard</Badge>
-            <Badge variant="outline" className="border-warning/50 text-warning">Personalizzati</Badge>
-          </div>
+      {kpis.length === 0 ? (
+        <div className="glass rounded-xl p-8 text-center">
+          <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+          <p className="text-muted-foreground">Nessun dato disponibile per calcolare i KPI</p>
+          <p className="text-sm text-muted-foreground mt-1">Aggiungi fatture o transazioni per visualizzare gli indicatori</p>
         </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {kpis.map((kpi) => (
+            <KPICard key={kpi.id} kpi={kpi} />
+          ))}
+        </div>
+      )}
 
-        {kpis.length === 0 ? (
-          <div className="glass rounded-xl p-8 text-center">
-            <BarChart3 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <p className="text-muted-foreground">Nessun dato disponibile per calcolare i KPI</p>
-            <p className="text-sm text-muted-foreground mt-1">Aggiungi transazioni o fatture per visualizzare gli indicatori</p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {kpis.map((kpi) => (
-              <div key={kpi.id} className="glass rounded-xl p-5">
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex items-center gap-2">
-                    <div className={cn(
-                      "p-2 rounded-lg",
-                      kpi.categoria === "standard" ? "bg-primary/10" : "bg-warning/10"
-                    )}>
-                      {getKPIIcon(kpi.id, kpi.categoria)}
-                    </div>
-                    <span className="text-sm text-muted-foreground">{kpi.nome}</span>
-                  </div>
-                  <Badge className={cn(
-                    "text-xs",
-                    kpi.raggiunto ? "bg-success/10 text-success border-success/20" : "bg-destructive/10 text-destructive border-destructive/20"
-                  )}>
-                    {kpi.raggiunto ? "✓ Target" : "✗ Target"}
-                  </Badge>
-                </div>
-                <p className="text-2xl font-bold text-foreground">{kpi.valore}</p>
-                <div className="flex items-center justify-between mt-3">
-                  <span className="text-xs text-muted-foreground">Target: {kpi.target}</span>
-                  <span className={cn(
-                    "text-xs font-medium",
-                    kpi.raggiunto ? "text-success" : "text-destructive"
-                  )}>
-                    {kpi.trend}
-                  </span>
-                </div>
-                <Progress value={kpi.progressValue} className="mt-3 h-1.5 bg-secondary" />
-              </div>
-            ))}
-          </div>
-        )}
+      {/* Legend */}
+      <div className="glass rounded-xl p-4 text-xs text-muted-foreground space-y-1">
+        <p>· <strong>KPI 1-2-3</strong> (Ricavi, Primo Margine, EBITDA) usano logica di <strong>competenza</strong> (data fattura)</p>
+        <p>· <strong>KPI 4</strong> (Cash Flow) usa logica di <strong>cassa</strong> (data movimento bancario)</p>
+        <p>· <strong>KPI 5-6</strong> (DSO, DPO) usano la scadenza contrattuale, non il pagamento effettivo</p>
+        <p>· Se Ricavi = 0, i KPI percentuali mostrano "N/D"</p>
       </div>
-
-      {/* AI Summary */}
-      {summaryLoading && (
-        <div className="glass rounded-xl p-5">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Loader2 className="h-4 w-4 animate-spin" />
-            <span className="text-sm">Generazione sommario AI...</span>
-          </div>
-        </div>
-      )}
-      {aiSummary && !summaryLoading && (
-        <div className="glass rounded-xl p-5 border-l-4 border-primary">
-          <div className="flex items-center gap-2 mb-2">
-            <Brain className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold text-foreground">Sommario AI</span>
-          </div>
-          <p className="text-sm text-muted-foreground">{aiSummary}</p>
-        </div>
-      )}
 
       {/* AI Report */}
-      {aiReport && (
-        <div>
-          <AIReportSection report={aiReport} />
-        </div>
-      )}
-
-      {/* Download PDF */}
-      <div className="glass rounded-xl p-5 flex items-center justify-between">
-        <div>
-          <h3 className="text-lg font-semibold text-foreground">Scarica Report</h3>
-          <p className="text-sm text-muted-foreground">
-            {aiReport ? "Scarica il report AI completo in formato PDF" : "Genera prima l'Analisi AI per scaricare il PDF"}
-          </p>
-        </div>
-        <Button onClick={handleDownloadPDF} disabled={!aiReport} className="gap-2">
-          <Download className="h-4 w-4" />
-          Scarica PDF
-        </Button>
-      </div>
+      {aiReport && <AIReportSection report={aiReport} />}
 
       {/* Target Modal */}
       <Dialog open={targetModalOpen} onOpenChange={setTargetModalOpen}>
@@ -318,20 +201,26 @@ export default function KPIReport() {
             <DialogTitle>Modifica Target KPI</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 py-2">
-            {Object.entries(KPI_LABELS).map(([id, { label, unit }]) => (
-              <div key={id} className="flex items-center justify-between gap-4">
-                <label className="text-sm text-foreground flex-1">{label}</label>
-                <div className="flex items-center gap-1">
-                  <Input
-                    type="number"
-                    className="w-28 text-right"
-                    value={editTargets[id] ?? ""}
-                    onChange={(e) => setEditTargets(prev => ({ ...prev, [id]: Number(e.target.value) }))}
-                  />
-                  <span className="text-xs text-muted-foreground w-8">{unit}</span>
-                </div>
-              </div>
-            ))}
+            <div className="flex items-center justify-between gap-4">
+              <label className="text-sm text-foreground flex-1">Target Ricavi (€)</label>
+              <Input
+                type="number"
+                className="w-32 text-right"
+                value={editTargets.ricavi ?? ""}
+                onChange={(e) => setEditTargets(prev => ({ ...prev, ricavi: Number(e.target.value) }))}
+                placeholder="es. 500000"
+              />
+            </div>
+            <div className="flex items-center justify-between gap-4">
+              <label className="text-sm text-foreground flex-1">Target Cash Flow (€)</label>
+              <Input
+                type="number"
+                className="w-32 text-right"
+                value={editTargets.cashflow ?? ""}
+                onChange={(e) => setEditTargets(prev => ({ ...prev, cashflow: Number(e.target.value) }))}
+                placeholder="es. 100000"
+              />
+            </div>
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setTargetModalOpen(false)}>Annulla</Button>

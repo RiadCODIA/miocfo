@@ -9,48 +9,43 @@ interface IVASectionProps {
 const fmt = (v: number) => `${v.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 export function IVASection({ year, ivaRicavi, ivaCosti }: IVASectionProps) {
-  const aDebito = Object.values(ivaRicavi).reduce((s, v) => s + v, 0);
-  const aCredito = Object.values(ivaCosti).reduce((s, v) => s + v, 0);
-  const ivaNetta = aDebito - aCredito;
+  // Per spec: IVA a credito = fatture emesse, IVA a debito = fatture ricevute
+  const ivaCredito = Object.values(ivaRicavi).reduce((s, v) => s + v, 0);
+  const ivaDebito = Object.values(ivaCosti).reduce((s, v) => s + v, 0);
+  const ivaNetta = ivaCredito - ivaDebito;
 
   return (
     <div className="glass rounded-xl p-5 space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-foreground">IVA Totale</h3>
-          <p className="text-sm text-muted-foreground">Calcolo IVA {year}</p>
-        </div>
-        <div className="flex gap-4 text-sm text-muted-foreground">
-          <span>Anno: <strong className="text-foreground">{year}</strong></span>
-          <span>Divisione: <strong className="text-foreground">Mensile</strong></span>
+          <h3 className="text-lg font-semibold text-foreground">Riepilogo IVA</h3>
+          <p className="text-sm text-muted-foreground">Schema sintetico IVA — Anno {year}</p>
         </div>
       </div>
 
       <div className="text-xs text-muted-foreground space-y-1">
-        <p>· I ricavi sono calcolati automaticamente dalle fatture emesse</p>
-        <p>· I costi sono calcolati automaticamente dalle fatture ricevute dai fornitori</p>
-        <p>· I costi del personale devono essere inseriti manualmente</p>
-        <p>· Il calcolo IVA è automatico</p>
-      </div>
-
-      <div className="flex items-center gap-2 text-sm">
-        <span className="text-muted-foreground">Imponibile {year}</span>
+        <p>· IVA a credito: somma IVA di tutte le fatture <strong>emesse</strong> nel periodo</p>
+        <p>· IVA a debito: somma IVA di tutte le fatture <strong>ricevute</strong> nel periodo</p>
+        <p>· Se il saldo è positivo → più IVA da incassare che da versare</p>
+        <p>· Se il saldo è negativo → IVA netta da versare al fisco</p>
       </div>
 
       <div className="overflow-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left py-2 px-3 text-muted-foreground font-medium">IVA a credito</th>
-              <th className="text-left py-2 px-3 text-muted-foreground font-medium">IVA a debito</th>
-              <th className="text-left py-2 px-3 text-muted-foreground font-medium">IVA netta</th>
+              <th className="text-left py-2 px-3 text-muted-foreground font-medium">IVA a credito (fatture emesse)</th>
+              <th className="text-left py-2 px-3 text-muted-foreground font-medium">IVA a debito (fatture ricevute)</th>
+              <th className="text-left py-2 px-3 text-muted-foreground font-medium">Saldo IVA netto</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className="py-2 px-3 font-medium text-success">{fmt(aCredito)}</td>
-              <td className="py-2 px-3 font-medium text-destructive">{fmt(aDebito)}</td>
-              <td className="py-2 px-3 font-bold">={fmt(ivaNetta)}</td>
+              <td className="py-2 px-3 font-medium text-success">{fmt(ivaCredito)}</td>
+              <td className="py-2 px-3 font-medium text-destructive">{fmt(ivaDebito)}</td>
+              <td className={`py-2 px-3 font-bold ${ivaNetta >= 0 ? "text-success" : "text-destructive"}`}>
+                {fmt(ivaNetta)}
+              </td>
             </tr>
           </tbody>
         </table>
