@@ -112,7 +112,6 @@ export default function UtentiGlobali() {
     const planName = userPlanMap.get(userId);
     if (!planName) return <Badge variant="outline" className="text-muted-foreground">Nessun piano</Badge>;
     const colorMap: Record<string, string> = {
-      Basic: "bg-blue-500/20 text-blue-600 border-blue-500/30",
       Small: "bg-teal-500/20 text-teal-600 border-teal-500/30",
       Pro: "bg-primary/20 text-primary border-primary/30",
       Full: "bg-emerald-500/20 text-emerald-600 border-emerald-500/30",

@@ -17,6 +17,9 @@ export interface SubscriptionPlan {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+  aiMonthlyLimitEur: number;
+  aiTopupMinEur: number;
+  aiUpgradeSuggestionAfter: number | null;
 }
 
 export function useSubscriptionPlans() {
@@ -44,6 +47,9 @@ export function useSubscriptionPlans() {
         sortOrder: plan.sort_order ?? 0,
         createdAt: plan.created_at,
         updatedAt: plan.updated_at,
+        aiMonthlyLimitEur: (plan as any).ai_monthly_limit_eur ?? 0,
+        aiTopupMinEur: (plan as any).ai_topup_min_eur ?? 5,
+        aiUpgradeSuggestionAfter: (plan as any).ai_upgrade_suggestion_after ?? null,
       })) as SubscriptionPlan[];
     },
   });
@@ -99,6 +105,9 @@ export function useUpdatePlan() {
       max_invoices_monthly: number;
       is_active: boolean;
       sort_order: number;
+      ai_monthly_limit_eur: number;
+      ai_topup_min_eur: number;
+      ai_upgrade_suggestion_after: number | null;
     }>) => {
       const { data, error } = await supabase
         .from("subscription_plans")
