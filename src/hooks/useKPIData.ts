@@ -88,11 +88,32 @@ function getDateRange(period: KPIPeriod, customFrom?: Date, customTo?: Date) {
   return { from, to };
 }
 
-function getPrevRange(from: Date, to: Date) {
-  const diff = to.getTime() - from.getTime();
-  const prevTo = new Date(from.getTime() - 1);
-  const prevFrom = new Date(prevTo.getTime() - diff);
-  return { prevFrom, prevTo };
+function getPrevRange(period: KPIPeriod, from: Date, to: Date) {
+  switch (period) {
+    case "month": {
+      const prevFrom = startOfMonth(subMonths(from, 1));
+      const prevTo = endOfMonth(subMonths(from, 1));
+      return { prevFrom, prevTo };
+    }
+    case "quarter": {
+      const prevFrom = startOfQuarter(subQuarters(from, 1));
+      const prevTo = endOfQuarter(subQuarters(from, 1));
+      return { prevFrom, prevTo };
+    }
+    case "year": {
+      const prevFrom = startOfYear(subYears(from, 1));
+      // Compare same day range in previous year
+      const prevTo = subYears(to, 1);
+      return { prevFrom, prevTo };
+    }
+    default: {
+      // Custom: mirror the exact duration before
+      const diff = to.getTime() - from.getTime();
+      const prevTo = new Date(from.getTime() - 1);
+      const prevFrom = new Date(prevTo.getTime() - diff);
+      return { prevFrom, prevTo };
+    }
+  }
 }
 
 const fmtEur = (v: number) => `€${v.toLocaleString("it-IT", { maximumFractionDigits: 0 })}`;
