@@ -91,6 +91,9 @@ export default function Piani() {
     setFormUnlimitedUsers(plan.maxUsers === -1);
     setFormUnlimitedAccounts(plan.maxBankAccounts === -1);
     setFormUnlimitedTransactions(plan.maxInvoicesMonthly === -1);
+    setFormAiMonthlyLimit((plan as any).aiMonthlyLimitEur ?? 5);
+    setFormAiTopupMin((plan as any).aiTopupMinEur ?? 5);
+    setFormAiUpgradeSuggestion((plan as any).aiUpgradeSuggestionAfter ?? null);
     setEditSheetOpen(true);
   };
 
