@@ -1,34 +1,27 @@
 /**
- * Fixed category lists for invoice categorization.
+ * Fixed P&L category lists per client specification.
  * These names must match exactly the cost_categories table in the DB.
  * Used to filter dropdowns in invoice matching, invoice table, and transaction modals.
  */
 
 export const INVOICE_REVENUE_CATEGORIES = [
-  "Ricavi delle vendite",
-  "Ricavi delle prestazioni",
-  "Altri ricavi e proventi",
+  "Ricavi da vendita prodotti",
+  "Ricavi da prestazione servizi",
+  "Ricavi da canoni/abbonamenti",
+  "Altre entrate",
 ];
 
 export const INVOICE_EXPENSE_CATEGORIES = [
-  "Acquisto materie prime",
-  "Energia e combustibili",
-  "Lavorazioni di terzi",
-  "Provvigioni",
-  "Carburanti",
-  "Manutenzioni",
-  "Assicurazioni",
-  "Formazione e ricerca",
+  "Costi per materie prime / merci",
+  "Costi per servizi esterni",
+  "Affitti e locazioni",
+  "Utenze",
   "Marketing e pubblicità",
-  "God. Beni di terzi",
-  "Canoni di leasing",
-  "Consulenze",
-  "Oneri bancari",
-  "Canoni vari",
-  "Altre spese",
-  "Affitto e utenze",
-  "Software",
-  "Servizi generali",
+  "Software e licenze",
+  "Spese bancarie e assicurative",
+  "Spese di viaggio e trasferte",
+  "Spese di formazione",
+  "Altre uscite",
 ];
 
 /** Set for O(1) lookup */

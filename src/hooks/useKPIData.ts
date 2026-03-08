@@ -1,37 +1,24 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, subDays, differenceInDays } from "date-fns";
-import { useDateRange } from "@/contexts/DateRangeContext";
+import { format, startOfMonth, endOfMonth, subMonths, startOfYear, startOfQuarter, endOfQuarter } from "date-fns";
 
-interface KPIData {
+export type KPIPeriod = "month" | "quarter" | "year" | "custom";
+
+export interface KPIResult {
   id: string;
-  nome: string;
-  valore: string;
-  target: string;
-  raggiunto: boolean;
-  trend: string;
-  categoria: "standard" | "personalizzato";
-  progressValue: number;
+  label: string;
+  value: string;
   rawValue: number;
-  rawTarget: number;
+  unit: string;
+  trend: number | null; // % change vs previous period
+  trendLabel: string;
+  note?: string;
 }
 
-interface ReportData {
-  id: string;
-  nome: string;
-  tipo: string;
-  dataCreazione: string;
-  stato: "completato" | "in elaborazione" | "programmato";
+export interface KPITargets {
+  ricavi: number;
+  cashflow: number;
 }
-
-const DEFAULT_TARGETS: Record<string, number> = {
-  ros: 10,
-  dso: 45,
-  current_ratio: 1.5,
-  margine_operativo: 28,
-  burn_rate: 60000,
-  revenue_growth: 10,
-};
 
 export function useKPITargets() {
   return useQuery({
@@ -40,7 +27,7 @@ export function useKPITargets() {
       const { data } = await supabase
         .from("kpi_targets")
         .select("kpi_id, target_value");
-      const map: Record<string, number> = { ...DEFAULT_TARGETS };
+      const map: Record<string, number> = {};
       data?.forEach((row: any) => {
         map[row.kpi_id] = Number(row.target_value);
       });
@@ -55,13 +42,11 @@ export function useUpdateKPITargets() {
     mutationFn: async (targets: Record<string, number>) => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Non autenticato");
-      
       const rows = Object.entries(targets).map(([kpi_id, target_value]) => ({
         user_id: user.id,
         kpi_id,
         target_value,
       }));
-
       for (const row of rows) {
         const { error } = await supabase
           .from("kpi_targets")
@@ -76,212 +61,211 @@ export function useUpdateKPITargets() {
   });
 }
 
-export function useKPIData() {
-  const { data: targets } = useKPITargets();
-  const { dateRange } = useDateRange();
-  const from = format(dateRange.from, "yyyy-MM-dd");
-  const to = format(dateRange.to, "yyyy-MM-dd");
+function getDateRange(period: KPIPeriod, customFrom?: Date, customTo?: Date) {
+  const now = new Date();
+  let from: Date, to: Date;
+  switch (period) {
+    case "month":
+      from = startOfMonth(now);
+      to = endOfMonth(now);
+      break;
+    case "quarter":
+      from = startOfQuarter(now);
+      to = endOfQuarter(now);
+      break;
+    case "year":
+      from = startOfYear(now);
+      to = now;
+      break;
+    case "custom":
+      from = customFrom || startOfMonth(now);
+      to = customTo || now;
+      break;
+    default:
+      from = startOfMonth(now);
+      to = now;
+  }
+  return { from, to };
+}
 
-  // Previous period of same length
-  const periodDays = differenceInDays(dateRange.to, dateRange.from);
-  const prevFrom = format(subDays(dateRange.from, periodDays + 1), "yyyy-MM-dd");
-  const prevTo = format(subDays(dateRange.from, 1), "yyyy-MM-dd");
+function getPrevRange(from: Date, to: Date) {
+  const diff = to.getTime() - from.getTime();
+  const prevTo = new Date(from.getTime() - 1);
+  const prevFrom = new Date(prevTo.getTime() - diff);
+  return { prevFrom, prevTo };
+}
+
+const fmtEur = (v: number) => `€${v.toLocaleString("it-IT", { maximumFractionDigits: 0 })}`;
+const fmtPct = (v: number) => v === 0 ? "N/D" : `${v.toFixed(1)}%`;
+const fmtDays = (v: number) => `${Math.round(v)} gg`;
+
+export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, customTo?: Date) {
+  const { data: targets } = useKPITargets();
+
+  const { from, to } = getDateRange(period, customFrom, customTo);
+  const { prevFrom, prevTo } = getPrevRange(from, to);
+
+  const fromStr = format(from, "yyyy-MM-dd");
+  const toStr = format(to, "yyyy-MM-dd");
+  const prevFromStr = format(prevFrom, "yyyy-MM-dd");
+  const prevToStr = format(prevTo, "yyyy-MM-dd");
 
   return useQuery({
-    queryKey: ["kpi-data", targets, from, to],
-    enabled: !!targets,
+    queryKey: ["kpi-data", fromStr, toStr, targets],
     queryFn: async () => {
-      const t = targets || DEFAULT_TARGETS;
-      const now = new Date();
+      // Fetch invoices and bank transactions in parallel
+      const [emesseRes, ricevuteRes, prevEmesseRes, prevRicevuteRes, txRes, prevTxRes, employeesRes] = await Promise.all([
+        supabase.from("invoices").select("amount, invoice_date, due_date")
+          .in("invoice_type", ["emessa", "active", "income"])
+          .gte("invoice_date", fromStr).lte("invoice_date", toStr),
+        supabase.from("invoices").select("amount, invoice_date, due_date")
+          .in("invoice_type", ["ricevuta", "passive", "expense"])
+          .gte("invoice_date", fromStr).lte("invoice_date", toStr),
+        supabase.from("invoices").select("amount, invoice_date, due_date")
+          .in("invoice_type", ["emessa", "active", "income"])
+          .gte("invoice_date", prevFromStr).lte("invoice_date", prevToStr),
+        supabase.from("invoices").select("amount, invoice_date, due_date")
+          .in("invoice_type", ["ricevuta", "passive", "expense"])
+          .gte("invoice_date", prevFromStr).lte("invoice_date", prevToStr),
+        supabase.from("bank_transactions").select("amount, date")
+          .gte("date", fromStr).lte("date", toStr),
+        supabase.from("bank_transactions").select("amount, date")
+          .gte("date", prevFromStr).lte("date", prevToStr),
+        supabase.from("employees").select("monthly_cost").eq("is_active", true),
+      ]);
 
-      // Get transactions for current period
-      const { data: transactions } = await supabase
-        .from("bank_transactions")
-        .select("*")
-        .gte("date", from)
-        .lte("date", to)
-        .order("date", { ascending: false });
+      // KPI 1: Ricavi (sum of taxable amounts from issued invoices)
+      const ricavi = (emesseRes.data || []).reduce((s, inv) => s + Number(inv.amount || 0), 0);
+      const prevRicavi = (prevEmesseRes.data || []).reduce((s, inv) => s + Number(inv.amount || 0), 0);
+      const ricaviTrend = prevRicavi > 0 ? ((ricavi - prevRicavi) / prevRicavi) * 100 : null;
 
-      // Get transactions for previous period
-      const { data: prevTransactions } = await supabase
-        .from("bank_transactions")
-        .select("*")
-        .gte("date", prevFrom)
-        .lte("date", prevTo);
+      // KPI 2: Primo Margine % = (Ricavi - Costi) / Ricavi * 100
+      const costi = (ricevuteRes.data || []).reduce((s, inv) => s + Number(inv.amount || 0), 0);
+      const prevCosti = (prevRicevuteRes.data || []).reduce((s, inv) => s + Number(inv.amount || 0), 0);
+      const marginePreStipendi = ricavi - costi;
+      const primoMargine = ricavi > 0 ? (marginePreStipendi / ricavi) * 100 : 0;
+      const prevMargine = prevRicavi > 0 ? ((prevRicavi - prevCosti) / prevRicavi) * 100 : 0;
+      const margineTrend = prevRicavi > 0 ? primoMargine - prevMargine : null;
 
-      // Get bank accounts for balance
-      const { data: accounts } = await supabase
-        .from("bank_accounts")
-        .select("balance")
-        .eq("is_connected", true);
+      // KPI 3: EBITDA % = (EBITDA / Ricavi) * 100
+      const monthlySalary = (employeesRes.data || []).reduce((s, e) => s + Number(e.monthly_cost || 0), 0);
+      // Approximate salary for the period
+      const periodMonths = Math.max(1, (to.getTime() - from.getTime()) / (30 * 24 * 60 * 60 * 1000));
+      const salaryForPeriod = monthlySalary * periodMonths;
+      const ebitda = marginePreStipendi - salaryForPeriod;
+      const ebitdaPct = ricavi > 0 ? (ebitda / ricavi) * 100 : 0;
+      const prevEbitda = (prevRicavi - prevCosti) - salaryForPeriod;
+      const prevEbitdaPct = prevRicavi > 0 ? (prevEbitda / prevRicavi) * 100 : 0;
+      const ebitdaTrend = prevRicavi > 0 ? ebitdaPct - prevEbitdaPct : null;
 
-      // Get invoices for ROS and DSO
-      const { data: invoices } = await supabase
-        .from("invoices")
-        .select("*")
-        .gte("invoice_date", from)
-        .lte("invoice_date", to);
+      // KPI 4: Cash Flow (bank inflows - outflows)
+      const bankInflows = (txRes.data || []).filter(tx => Number(tx.amount) > 0).reduce((s, tx) => s + Number(tx.amount), 0);
+      const bankOutflows = Math.abs((txRes.data || []).filter(tx => Number(tx.amount) < 0).reduce((s, tx) => s + Number(tx.amount), 0));
+      const cashFlow = bankInflows - bankOutflows;
+      const prevInflows = (prevTxRes.data || []).filter(tx => Number(tx.amount) > 0).reduce((s, tx) => s + Number(tx.amount), 0);
+      const prevOutflows = Math.abs((prevTxRes.data || []).filter(tx => Number(tx.amount) < 0).reduce((s, tx) => s + Number(tx.amount), 0));
+      const prevCashFlow = prevInflows - prevOutflows;
+      const cashFlowTrend = prevCashFlow !== 0 ? ((cashFlow - prevCashFlow) / Math.abs(prevCashFlow)) * 100 : null;
+      // Collection ratio: bank inflows / total issued invoices (total_amount for cash comparison)
+      const collectionRatio = ricavi > 0 ? (bankInflows / ricavi) * 100 : 0;
 
-      const { data: prevInvoices } = await supabase
-        .from("invoices")
-        .select("*")
-        .gte("invoice_date", prevFrom)
-        .lte("invoice_date", prevTo);
+      // KPI 5: DSO (Days Sales Outstanding) - issued invoices
+      const dsoDays = (emesseRes.data || []).map(inv => {
+        if (!inv.due_date || !inv.invoice_date) return 0;
+        const due = new Date(inv.due_date).getTime();
+        const issue = new Date(inv.invoice_date).getTime();
+        return Math.max(0, Math.round((due - issue) / (24 * 60 * 60 * 1000)));
+      });
+      const dso = dsoDays.length > 0 ? dsoDays.reduce((s, d) => s + d, 0) / dsoDays.length : 0;
+      const prevDsoDays = (prevEmesseRes.data || []).map(inv => {
+        if (!inv.due_date || !inv.invoice_date) return 0;
+        const due = new Date(inv.due_date).getTime();
+        const issue = new Date(inv.invoice_date).getTime();
+        return Math.max(0, Math.round((due - issue) / (24 * 60 * 60 * 1000)));
+      });
+      const prevDso = prevDsoDays.length > 0 ? prevDsoDays.reduce((s, d) => s + d, 0) / prevDsoDays.length : 0;
+      const dsoTrend = prevDso > 0 ? dso - prevDso : null;
 
-      // Get deadlines for receivables
-      const { data: deadlines } = await supabase
-        .from("deadlines")
-        .select("*")
-        .eq("deadline_type", "incasso")
-        .eq("status", "pending");
+      // KPI 6: DPO (Days Payable Outstanding) - received invoices
+      const dpoDays = (ricevuteRes.data || []).map(inv => {
+        if (!inv.due_date || !inv.invoice_date) return 0;
+        const due = new Date(inv.due_date).getTime();
+        const issue = new Date(inv.invoice_date).getTime();
+        return Math.max(0, Math.round((due - issue) / (24 * 60 * 60 * 1000)));
+      });
+      const dpo = dpoDays.length > 0 ? dpoDays.reduce((s, d) => s + d, 0) / dpoDays.length : 0;
+      const prevDpoDays = (prevRicevuteRes.data || []).map(inv => {
+        if (!inv.due_date || !inv.invoice_date) return 0;
+        const due = new Date(inv.due_date).getTime();
+        const issue = new Date(inv.invoice_date).getTime();
+        return Math.max(0, Math.round((due - issue) / (24 * 60 * 60 * 1000)));
+      });
+      const prevDpo = prevDpoDays.length > 0 ? prevDpoDays.reduce((s, d) => s + d, 0) / prevDpoDays.length : 0;
+      const dpoTrend = prevDpo > 0 ? dpo - prevDpo : null;
 
-      const currentBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0) || 0;
-
-      // Current period
-      const currentIncome = (transactions || []).filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
-      const currentExpenses = Math.abs((transactions || []).filter(tx => tx.amount < 0).reduce((sum, tx) => sum + tx.amount, 0));
-      const currentProfit = currentIncome - currentExpenses;
-
-      // Previous period
-      const prevIncome = (prevTransactions || []).filter(tx => tx.amount > 0).reduce((sum, tx) => sum + tx.amount, 0);
-      const prevExpensesVal = Math.abs((prevTransactions || []).filter(tx => tx.amount < 0).reduce((sum, tx) => sum + tx.amount, 0));
-      const prevProfit = prevIncome - prevExpensesVal;
-
-      // ---- ROS (Return on Sales) from invoices ----
-      const ricaviCurrent = (invoices || [])
-        .filter(inv => inv.invoice_type === "emessa" || inv.invoice_type === "income")
-        .reduce((s, inv) => s + Number(inv.amount), 0);
-      const costiCurrent = (invoices || [])
-        .filter(inv => inv.invoice_type === "ricevuta" || inv.invoice_type === "expense")
-        .reduce((s, inv) => s + Number(inv.amount), 0);
-      const ebitdaCurrent = ricaviCurrent - costiCurrent;
-      const ros = ricaviCurrent > 0 ? (ebitdaCurrent / ricaviCurrent) * 100 : 0;
-
-      const ricaviLast = (prevInvoices || [])
-        .filter(inv => inv.invoice_type === "emessa" || inv.invoice_type === "income")
-        .reduce((s, inv) => s + Number(inv.amount), 0);
-      const costiLast = (prevInvoices || [])
-        .filter(inv => inv.invoice_type === "ricevuta" || inv.invoice_type === "expense")
-        .reduce((s, inv) => s + Number(inv.amount), 0);
-      const ebitdaLast = ricaviLast - costiLast;
-      const rosLast = ricaviLast > 0 ? (ebitdaLast / ricaviLast) * 100 : 0;
-      const rosTrend = ros - rosLast;
-      const rosTarget = t.ros;
-
-      // DSO
-      const pendingReceivables = deadlines?.reduce((sum, d) => sum + Number(d.amount), 0) || 0;
-      const avgDailyRevenue = currentIncome / (periodDays || 1) || 1;
-      const dso = Math.round(pendingReceivables / avgDailyRevenue);
-      const dsoTarget = t.dso;
-
-      // Current Ratio
-      const currentLiabilities = currentExpenses || 1;
-      const currentRatio = currentBalance / currentLiabilities;
-      const currentRatioTarget = t.current_ratio;
-
-      // Operating Margin
-      const operatingMargin = currentIncome > 0 ? ((currentProfit / currentIncome) * 100) : 0;
-      const lastOperatingMargin = prevIncome > 0 ? ((prevProfit / prevIncome) * 100) : 0;
-      const operatingMarginTarget = t.margine_operativo;
-      const operatingMarginTrend = operatingMargin - lastOperatingMargin;
-
-      // Burn Rate
-      const burnRate = currentExpenses;
-      const lastBurnRate = prevExpensesVal;
-      const burnRateTarget = t.burn_rate;
-      const burnRateTrend = burnRate - lastBurnRate;
-
-      // Revenue Growth
-      const revenueGrowth = prevIncome > 0 ? ((currentIncome - prevIncome) / prevIncome * 100) : 0;
-      const revenueGrowthTarget = t.revenue_growth;
-
-      const kpis: KPIData[] = [
+      const kpis: KPIResult[] = [
         {
-          id: "ros",
-          nome: "ROS (Return on Sales)",
-          valore: `${ros.toFixed(1)}%`,
-          target: `${rosTarget}%`,
-          raggiunto: ros >= rosTarget,
-          trend: `${rosTrend >= 0 ? "+" : ""}${rosTrend.toFixed(1)}%`,
-          categoria: "standard",
-          progressValue: Math.min((ros / (rosTarget || 1)) * 100, 100),
-          rawValue: ros,
-          rawTarget: rosTarget,
+          id: "ricavi",
+          label: "Ricavi",
+          value: fmtEur(ricavi),
+          rawValue: ricavi,
+          unit: "€",
+          trend: ricaviTrend,
+          trendLabel: ricaviTrend !== null ? `${ricaviTrend >= 0 ? "+" : ""}${ricaviTrend.toFixed(1)}% vs periodo prec.` : "N/D",
+        },
+        {
+          id: "primo_margine",
+          label: "Primo Margine",
+          value: fmtPct(primoMargine),
+          rawValue: primoMargine,
+          unit: "%",
+          trend: margineTrend,
+          trendLabel: margineTrend !== null ? `${margineTrend >= 0 ? "+" : ""}${margineTrend.toFixed(1)}pp vs periodo prec.` : "N/D",
+          note: "Margine prima degli stipendi / Ricavi",
+        },
+        {
+          id: "ebitda",
+          label: "EBITDA",
+          value: fmtPct(ebitdaPct),
+          rawValue: ebitdaPct,
+          unit: "%",
+          trend: ebitdaTrend,
+          trendLabel: ebitdaTrend !== null ? `${ebitdaTrend >= 0 ? "+" : ""}${ebitdaTrend.toFixed(1)}pp vs periodo prec.` : "N/D",
+          note: "Calcolato sui costi da fattura. Esclude ammortamenti e poste non fatturate.",
+        },
+        {
+          id: "cashflow",
+          label: "Cash Flow",
+          value: fmtEur(cashFlow),
+          rawValue: cashFlow,
+          unit: "€",
+          trend: cashFlowTrend,
+          trendLabel: cashFlowTrend !== null ? `${cashFlowTrend >= 0 ? "+" : ""}${cashFlowTrend.toFixed(1)}% vs periodo prec.` : "N/D",
+          note: `Significatività incassi: ${collectionRatio.toFixed(0)}%`,
         },
         {
           id: "dso",
-          nome: "DSO (Days Sales Outstanding)",
-          valore: `${dso} giorni`,
-          target: `${dsoTarget} giorni`,
-          raggiunto: dso <= dsoTarget,
-          trend: `${dso <= dsoTarget ? "-" : "+"}${Math.abs(dso - dsoTarget)} giorni`,
-          categoria: "standard",
-          progressValue: dso <= dsoTarget ? 100 : Math.max(0, 100 - ((dso - dsoTarget) / dsoTarget) * 100),
+          label: "DSO",
+          value: fmtDays(dso),
           rawValue: dso,
-          rawTarget: dsoTarget,
+          unit: "giorni",
+          trend: dsoTrend,
+          trendLabel: dsoTrend !== null ? `${dsoTrend >= 0 ? "+" : ""}${dsoTrend.toFixed(0)} gg vs periodo prec.` : "N/D",
+          note: "Days Sales Outstanding — Tempo medio incasso fatture emesse",
         },
         {
-          id: "current_ratio",
-          nome: "Current Ratio",
-          valore: currentRatio.toFixed(1),
-          target: currentRatioTarget.toString(),
-          raggiunto: currentRatio >= currentRatioTarget,
-          trend: `${currentRatio >= currentRatioTarget ? "+" : ""}${(currentRatio - currentRatioTarget).toFixed(1)}`,
-          categoria: "standard",
-          progressValue: Math.min((currentRatio / currentRatioTarget) * 100, 100),
-          rawValue: currentRatio,
-          rawTarget: currentRatioTarget,
-        },
-        {
-          id: "margine_operativo",
-          nome: "Margine Operativo",
-          valore: `${operatingMargin.toFixed(1)}%`,
-          target: `${operatingMarginTarget}%`,
-          raggiunto: operatingMargin >= operatingMarginTarget,
-          trend: `${operatingMarginTrend >= 0 ? "+" : ""}${operatingMarginTrend.toFixed(1)}%`,
-          categoria: "standard",
-          progressValue: Math.min((operatingMargin / operatingMarginTarget) * 100, 100),
-          rawValue: operatingMargin,
-          rawTarget: operatingMarginTarget,
-        },
-        {
-          id: "burn_rate",
-          nome: "Burn Rate Mensile",
-          valore: `€${burnRate.toLocaleString("it-IT", { maximumFractionDigits: 0 })}`,
-          target: `€${burnRateTarget.toLocaleString("it-IT")}`,
-          raggiunto: burnRate <= burnRateTarget,
-          trend: `${burnRateTrend <= 0 ? "" : "+"}${burnRateTrend.toLocaleString("it-IT", { maximumFractionDigits: 0 })}`,
-          categoria: "personalizzato",
-          progressValue: burnRate <= burnRateTarget ? 100 : Math.max(0, 100 - ((burnRate - burnRateTarget) / burnRateTarget) * 100),
-          rawValue: burnRate,
-          rawTarget: burnRateTarget,
-        },
-        {
-          id: "revenue_growth",
-          nome: "Crescita Ricavi",
-          valore: `${revenueGrowth.toFixed(1)}%`,
-          target: `${revenueGrowthTarget}%`,
-          raggiunto: revenueGrowth >= revenueGrowthTarget,
-          trend: `${revenueGrowth >= 0 ? "+" : ""}${revenueGrowth.toFixed(1)}%`,
-          categoria: "personalizzato",
-          progressValue: Math.min((revenueGrowth / revenueGrowthTarget) * 100, 100),
-          rawValue: revenueGrowth,
-          rawTarget: revenueGrowthTarget,
+          id: "dpo",
+          label: "DPO",
+          value: fmtDays(dpo),
+          rawValue: dpo,
+          unit: "giorni",
+          trend: dpoTrend,
+          trendLabel: dpoTrend !== null ? `${dpoTrend >= 0 ? "+" : ""}${dpoTrend.toFixed(0)} gg vs periodo prec.` : "N/D",
+          note: "Days Payable Outstanding — Tempo medio pagamento fatture ricevute",
         },
       ];
 
-      // Generate dynamic reports
-      const reports: ReportData[] = [
-        {
-          id: `report-${format(now, "yyyy-MM")}`,
-          nome: `Report ${format(dateRange.from, "dd/MM")} - ${format(dateRange.to, "dd/MM/yyyy")}`,
-          tipo: "Periodo",
-          dataCreazione: format(now, "dd/MM/yyyy"),
-          stato: "in elaborazione",
-        },
-      ];
-
-      return { kpis, reports, transactionCount: transactions?.length ?? 0 };
+      return { kpis, targets: targets || {} };
     },
   });
 }
