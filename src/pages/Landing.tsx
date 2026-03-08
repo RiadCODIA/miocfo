@@ -9,13 +9,16 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@/components/ui/accordion";
-import { ArrowRight, FileSpreadsheet, AlertCircle, Unlink, HelpCircle, Building2, LineChart, Gauge, Linkedin, Instagram, Facebook, LayoutDashboard, Bot, Link2, Eye, Smartphone, Check, X, UserPlus, Phone, Mail } from "lucide-react";
+import { ArrowRight, FileSpreadsheet, AlertCircle, Unlink, HelpCircle, Building2, LineChart, Gauge, Linkedin, Instagram, Facebook, LayoutDashboard, Bot, Link2, Eye, Smartphone, Check, X, UserPlus, Phone, Mail, CreditCard } from "lucide-react";
 import { Link } from "react-router-dom";
 import { motion } from "framer-motion";
 import { toast } from "sonner";
 import miocfoLogo from "@/assets/miocfo-logo-blue.png";
 import { HeroSection } from "@/components/landing/HeroSection";
 import React from "react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSubscriptionPlans } from "@/hooks/useSubscriptionPlans";
+import { PaymentMethodModal } from "@/components/payment/PaymentMethodModal";
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 30 },
