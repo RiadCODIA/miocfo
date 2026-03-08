@@ -52,6 +52,30 @@ export type Database = {
           },
         ]
       }
+      ai_credit_topups: {
+        Row: {
+          amount_eur: number
+          created_at: string
+          id: string
+          month_year: string
+          user_id: string
+        }
+        Insert: {
+          amount_eur: number
+          created_at?: string
+          id?: string
+          month_year: string
+          user_id: string
+        }
+        Update: {
+          amount_eur?: number
+          created_at?: string
+          id?: string
+          month_year?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       alerts: {
         Row: {
           action_url: string | null
@@ -927,6 +951,44 @@ export type Database = {
         }
         Relationships: []
       }
+      plan_requests: {
+        Row: {
+          created_at: string
+          id: string
+          plan_id: string
+          processed_at: string | null
+          processed_by: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          plan_id: string
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          plan_id?: string
+          processed_at?: string | null
+          processed_by?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "plan_requests_plan_id_fkey"
+            columns: ["plan_id"]
+            isOneToOne: false
+            referencedRelation: "subscription_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -1022,6 +1084,9 @@ export type Database = {
       }
       subscription_plans: {
         Row: {
+          ai_monthly_limit_eur: number | null
+          ai_topup_min_eur: number | null
+          ai_upgrade_suggestion_after: number | null
           created_at: string
           description: string | null
           features: Json | null
@@ -1037,6 +1102,9 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_monthly_limit_eur?: number | null
+          ai_topup_min_eur?: number | null
+          ai_upgrade_suggestion_after?: number | null
           created_at?: string
           description?: string | null
           features?: Json | null
@@ -1052,6 +1120,9 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_monthly_limit_eur?: number | null
+          ai_topup_min_eur?: number | null
+          ai_upgrade_suggestion_after?: number | null
           created_at?: string
           description?: string | null
           features?: Json | null
@@ -1157,6 +1228,7 @@ export type Database = {
       }
       user_subscriptions: {
         Row: {
+          ai_cost_used_eur: number | null
           ai_credits_remaining: number | null
           created_at: string
           expires_at: string | null
@@ -1168,6 +1240,7 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          ai_cost_used_eur?: number | null
           ai_credits_remaining?: number | null
           created_at?: string
           expires_at?: string | null
@@ -1179,6 +1252,7 @@ export type Database = {
           user_id: string
         }
         Update: {
+          ai_cost_used_eur?: number | null
           ai_credits_remaining?: number | null
           created_at?: string
           expires_at?: string | null
