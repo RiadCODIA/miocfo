@@ -105,6 +105,9 @@ export function useUpdatePlan() {
       max_invoices_monthly: number;
       is_active: boolean;
       sort_order: number;
+      ai_monthly_limit_eur: number;
+      ai_topup_min_eur: number;
+      ai_upgrade_suggestion_after: number | null;
     }>) => {
       const { data, error } = await supabase
         .from("subscription_plans")
