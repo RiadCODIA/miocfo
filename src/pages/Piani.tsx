@@ -149,6 +149,9 @@ export default function Piani() {
       max_bank_accounts: formUnlimitedAccounts ? -1 : formMaxBankAccounts,
       max_invoices_monthly: formUnlimitedTransactions ? -1 : formMaxTransactions,
       features: formFeatures,
+      ai_monthly_limit_eur: formAiMonthlyLimit,
+      ai_topup_min_eur: formAiTopupMin,
+      ai_upgrade_suggestion_after: formAiUpgradeSuggestion,
     };
 
     if (isCreating) {
