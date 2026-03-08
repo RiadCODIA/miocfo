@@ -3,7 +3,10 @@ import { LandingHeader } from "@/components/landing/LandingHeader";
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, UserPlus, Link2, LayoutDashboard, Phone, X, Sparkles } from "lucide-react";
+import { ArrowRight, Check, UserPlus, Link2, LayoutDashboard, Phone, X, Sparkles, CreditCard } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import { useSubscriptionPlans } from "@/hooks/useSubscriptionPlans";
+import { PaymentMethodModal } from "@/components/payment/PaymentMethodModal";
 
 const steps = [
   {
