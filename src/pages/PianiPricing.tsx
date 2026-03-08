@@ -376,9 +376,36 @@ export default function PianiPricing() {
               </Link>
             </Button>
           </div>
+
+          {/* Payment Methods Accepted */}
+          <div className="text-center mt-12 mb-8">
+            <p className="text-xs text-muted-foreground mb-3">Metodi di pagamento accettati</p>
+            <div className="flex items-center justify-center gap-4">
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded-full">
+                <CreditCard className="h-3.5 w-3.5" />
+                <span>Visa / Mastercard / Amex</span>
+              </div>
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded-full opacity-50">
+                <span className="font-bold text-[10px]">PP</span>
+                <span>PayPal (in arrivo)</span>
+              </div>
+            </div>
+          </div>
         </div>
       </main>
       <LandingFooter />
+
+      {/* Payment Modal */}
+      {paymentModal && (
+        <PaymentMethodModal
+          open={paymentModal.open}
+          onOpenChange={(open) => setPaymentModal(open ? paymentModal : null)}
+          planName={paymentModal.planName}
+          planId={paymentModal.planId}
+          price={paymentModal.price}
+          isAnnual={isAnnual}
+        />
+      )}
     </div>
   );
 }
