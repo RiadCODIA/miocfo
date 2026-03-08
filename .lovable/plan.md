@@ -1,38 +1,32 @@
 
 
-## Plan: Convert Nav Links to Scroll-to-Section Navigation
+## Fix: Update Landing Plans to 3 Tiers and Remove Unused Routes
 
-The current nav menu (`Chi Siamo`, `Piani`, `FAQ`, `Contatti`) links to separate pages via React Router. Instead, each nav item will scroll smoothly to the corresponding section on the landing page.
+### Problems Found
+1. **Landing.tsx has old 4 plans** (Basic €49, Small €79, Pro €239, Full €479) hardcoded -- never updated
+2. **Separate route pages** (`/chi-siamo`, `/pricing`, `/faq`, `/contatti`) exist but are redundant since Landing.tsx already has all these as inline sections with anchor IDs (`#chi-siamo`, `#piani`, `#faq`, `#contatti`)
+3. **LandingHeader** links to separate routes instead of same-page anchors
 
 ### Changes
 
-**1. `src/pages/Landing.tsx`** — Add `id` attributes to sections:
-- Problems section → `id="chi-siamo"`
-- Process section → `id="piani"` (or a pricing-like section)
-- Features section → `id="faq"`
-- CTA section → `id="contatti"`
+#### 1. `src/pages/Landing.tsx`
+- Replace the `plans` array (lines 52-96) with 3 plans: Small (€49), Pro (€79), Full (€199) -- same data as PianiPricing.tsx
+- Change the grid from `lg:grid-cols-4` to `md:grid-cols-3` (line 393)
 
-More logically mapped:
-- `id="problemi"` on Problems section
-- `id="soluzione"` on Process section  
-- `id="funzionalita"` on Features section
-- `id="contatti"` on CTA section
+#### 2. `src/components/landing/LandingHeader.tsx`
+- Change navLinks from separate routes to anchor links:
+  - `"Chi Siamo" → "/#chi-siamo"`
+  - `"Piani" → "/#piani"`
+  - `"FAQ" → "/#faq"`
+  - `"Contatti" → "/#contatti"`
+- Add smooth scroll behavior for anchor navigation
 
-The nav items will be renamed/remapped to match these sections.
+#### 3. `src/App.tsx`
+- Remove routes: `/landing`, `/chi-siamo`, `/faq`, `/contatti`
+- Keep `/pricing` route (used by LockedPageOverlay for authenticated upgrade flow)
+- Remove imports for ChiSiamo, FAQLanding, ContattiPage
 
-**2. `src/components/landing/HeroSection.tsx`** — Change nav from `<Link to="...">` to `<a href="#section-id">` with smooth scroll:
-- Update `menuItems` array to use anchor `href`s (`#problemi`, `#soluzione`, `#funzionalita`, `#contatti`)
-- Replace `<Link>` with `<a>` tags that call `scrollIntoView({ behavior: 'smooth' })` on click
-- Close mobile menu on click
-
-### Section ↔ Nav Mapping
-
-| Nav Label | Section ID | Landing Section |
-|-----------|-----------|-----------------|
-| Chi Siamo | `#chi-siamo` | Problems section |
-| Piani | `#piani` | Process section |
-| FAQ | `#funzionalita` | Features section |
-| Contatti | `#contatti` | CTA/Footer section |
-
-**Files to modify**: `src/components/landing/HeroSection.tsx`, `src/pages/Landing.tsx`
+#### 4. Files to keep
+- `PianiPricing.tsx` stays -- it's the standalone pricing page for authenticated users accessing from the app
+- Legal pages (`/privacy`, `/terms`, `/cookies`) stay
 
