@@ -203,6 +203,8 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
       const prevDpo = prevDpoDays.length > 0 ? prevDpoDays.reduce((s, d) => s + d, 0) / prevDpoDays.length : 0;
       const dpoTrend = prevDpo > 0 ? dpo - prevDpo : null;
 
+      const noCompare = "Nessun dato nel periodo precedente per il confronto";
+
       const kpis: KPIResult[] = [
         {
           id: "ricavi",
@@ -211,7 +213,7 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
           rawValue: ricavi,
           unit: "€",
           trend: ricaviTrend,
-          trendLabel: ricaviTrend !== null ? `${ricaviTrend >= 0 ? "+" : ""}${ricaviTrend.toFixed(1)}% vs periodo prec.` : "N/D",
+          trendLabel: ricaviTrend !== null ? `${ricaviTrend >= 0 ? "+" : ""}${ricaviTrend.toFixed(1)}% vs periodo prec.` : noCompare,
         },
         {
           id: "primo_margine",
@@ -220,7 +222,7 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
           rawValue: primoMargine,
           unit: "%",
           trend: margineTrend,
-          trendLabel: margineTrend !== null ? `${margineTrend >= 0 ? "+" : ""}${margineTrend.toFixed(1)}pp vs periodo prec.` : "N/D",
+          trendLabel: margineTrend !== null ? `${margineTrend >= 0 ? "+" : ""}${margineTrend.toFixed(1)}pp vs periodo prec.` : noCompare,
           note: "Margine prima degli stipendi / Ricavi",
         },
         {
@@ -230,7 +232,7 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
           rawValue: ebitdaPct,
           unit: "%",
           trend: ebitdaTrend,
-          trendLabel: ebitdaTrend !== null ? `${ebitdaTrend >= 0 ? "+" : ""}${ebitdaTrend.toFixed(1)}pp vs periodo prec.` : "N/D",
+          trendLabel: ebitdaTrend !== null ? `${ebitdaTrend >= 0 ? "+" : ""}${ebitdaTrend.toFixed(1)}pp vs periodo prec.` : noCompare,
           note: "Calcolato sui costi da fattura. Esclude ammortamenti e poste non fatturate.",
         },
         {
@@ -240,7 +242,7 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
           rawValue: cashFlow,
           unit: "€",
           trend: cashFlowTrend,
-          trendLabel: cashFlowTrend !== null ? `${cashFlowTrend >= 0 ? "+" : ""}${cashFlowTrend.toFixed(1)}% vs periodo prec.` : "N/D",
+          trendLabel: cashFlowTrend !== null ? `${cashFlowTrend >= 0 ? "+" : ""}${cashFlowTrend.toFixed(1)}% vs periodo prec.` : noCompare,
           note: `Significatività incassi: ${collectionRatio.toFixed(0)}%`,
         },
         {
@@ -250,7 +252,7 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
           rawValue: dso,
           unit: "giorni",
           trend: dsoTrend,
-          trendLabel: dsoTrend !== null ? `${dsoTrend >= 0 ? "+" : ""}${dsoTrend.toFixed(0)} gg vs periodo prec.` : "N/D",
+          trendLabel: dsoTrend !== null ? `${dsoTrend >= 0 ? "+" : ""}${dsoTrend.toFixed(0)} gg vs periodo prec.` : noCompare,
           note: "Days Sales Outstanding — Tempo medio incasso fatture emesse",
         },
         {
@@ -260,7 +262,7 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
           rawValue: dpo,
           unit: "giorni",
           trend: dpoTrend,
-          trendLabel: dpoTrend !== null ? `${dpoTrend >= 0 ? "+" : ""}${dpoTrend.toFixed(0)} gg vs periodo prec.` : "N/D",
+          trendLabel: dpoTrend !== null ? `${dpoTrend >= 0 ? "+" : ""}${dpoTrend.toFixed(0)} gg vs periodo prec.` : noCompare,
           note: "Days Payable Outstanding — Tempo medio pagamento fatture ricevute",
         },
       ];
