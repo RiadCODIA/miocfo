@@ -1,6 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, startOfMonth, endOfMonth, subMonths, startOfYear, startOfQuarter, endOfQuarter } from "date-fns";
+import { format, startOfMonth, endOfMonth, subMonths, subYears, startOfYear, endOfYear, startOfQuarter, endOfQuarter, subQuarters } from "date-fns";
 
 export type KPIPeriod = "month" | "quarter" | "year" | "custom";
 
