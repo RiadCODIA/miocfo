@@ -38,17 +38,18 @@ export function LandingHeader() {
         {/* Desktop Navigation */}
         <nav className="hidden md:flex items-center gap-8">
           {navLinks.map((link) => (
-            <Link
+            <a
               key={link.to}
-              to={link.to}
-              className={`text-sm font-medium transition-colors ${
-                location.pathname === link.to
-                  ? "text-primary"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
+              href={link.to}
+              onClick={(e) => {
+                e.preventDefault();
+                const id = link.to.replace("/#", "");
+                document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+              }}
+              className={`text-sm font-medium transition-colors text-muted-foreground hover:text-foreground`}
             >
               {link.label}
-            </Link>
+            </a>
           ))}
         </nav>
 
