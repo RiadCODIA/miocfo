@@ -124,7 +124,7 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
   const { data: targets } = useKPITargets();
 
   const { from, to } = getDateRange(period, customFrom, customTo);
-  const { prevFrom, prevTo } = getPrevRange(from, to);
+  const { prevFrom, prevTo } = getPrevRange(period, from, to);
 
   const fromStr = format(from, "yyyy-MM-dd");
   const toStr = format(to, "yyyy-MM-dd");
