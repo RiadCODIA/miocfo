@@ -69,11 +69,7 @@ const App = () => (
           <Routes>
             {/* Landing page - root */}
             <Route path="/" element={<Landing />} />
-            <Route path="/landing" element={<Landing />} />
-            <Route path="/chi-siamo" element={<ChiSiamo />} />
             <Route path="/pricing" element={<PianiPricing />} />
-            <Route path="/faq" element={<FAQLanding />} />
-            <Route path="/contatti" element={<ContattiPage />} />
             
             {/* Auth route - no layout */}
             <Route path="/auth" element={<Auth />} />

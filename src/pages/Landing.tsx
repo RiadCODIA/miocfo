@@ -379,7 +379,7 @@ export default function Landing() {
           </motion.div>
 
           {/* Plans Grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
+          <div className="grid md:grid-cols-3 gap-6 mb-20 max-w-5xl mx-auto">
             {plans.map((plan, i) => (
               <motion.div
                 key={plan.name}
