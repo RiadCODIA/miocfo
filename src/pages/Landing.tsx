@@ -118,6 +118,23 @@ const faqCategories = [
 export default function Landing() {
   const [isAnnual, setIsAnnual] = useState(false);
   const [contactLoading, setContactLoading] = useState(false);
+  const [paymentModal, setPaymentModal] = useState<{ open: boolean; planName: string; planId?: string; price: number } | null>(null);
+  const { user } = useAuth();
+  const { data: dbPlans } = useSubscriptionPlans();
+
+  const getPlanId = (planName: string) => {
+    return dbPlans?.find((p) => p.name.toLowerCase() === planName.toLowerCase())?.id;
+  };
+
+  const handlePlanClick = (plan: typeof plans[0]) => {
+    if (!user) return;
+    setPaymentModal({
+      open: true,
+      planName: plan.name,
+      planId: getPlanId(plan.name),
+      price: isAnnual ? plan.priceYearly * 12 : plan.priceMonthly,
+    });
+  };
 
   const handleContactSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
