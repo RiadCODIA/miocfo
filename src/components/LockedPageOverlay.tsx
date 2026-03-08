@@ -20,15 +20,24 @@ export function LockedPageOverlay() {
         </h3>
         <p className="text-sm text-muted-foreground">
           {hasSubscription
-            ? "Questa sezione non è disponibile con il tuo piano attuale. Contatta l'amministratore per effettuare l'upgrade."
-            : "Per accedere a questa funzionalità è necessario un piano attivo. Contatta l'amministratore."}
+            ? "Questa sezione non è disponibile con il tuo piano attuale. Effettua l'upgrade per sbloccarla."
+            : "Per accedere a questa funzionalità è necessario un piano attivo. Scegli il piano più adatto a te."}
         </p>
-        <Button
-          onClick={() => navigate("/dashboard")}
-          className="mt-2"
-        >
-          Torna alla Dashboard
-        </Button>
+        <div className="flex flex-col gap-2 w-full mt-2">
+          <Button
+            onClick={() => navigate("/piani-pricing")}
+            className="w-full"
+          >
+            {hasSubscription ? "Upgrade Piano" : "Scegli un Piano"}
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => navigate("/dashboard")}
+            className="w-full"
+          >
+            Torna alla Dashboard
+          </Button>
+        </div>
       </div>
     </div>
   );

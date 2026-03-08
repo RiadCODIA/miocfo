@@ -3,7 +3,7 @@ import { LandingHeader } from "@/components/landing/LandingHeader";
 import { LandingFooter } from "@/components/landing/LandingFooter";
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-import { ArrowRight, Check, UserPlus, Link2, LayoutDashboard, Phone, X } from "lucide-react";
+import { ArrowRight, Check, UserPlus, Link2, LayoutDashboard, Phone, X, Sparkles } from "lucide-react";
 
 const steps = [
   {
@@ -25,71 +25,56 @@ const steps = [
 
 const plans = [
   {
-    name: "Basic",
-    description: "Analisi dati bancari con caricamento estratti conto.",
+    name: "Small",
+    description: "Analisi dati bancari con upload estratti conto e collegamento Home Banking via API.",
     priceMonthly: 49,
     priceYearly: 41,
     popular: false,
+    aiLimit: "5€/mese inclusi",
     features: [
       "Dashboard con KPI finanziari",
       "Flussi di Cassa",
       "Transazioni con categorizzazione",
-      "Conti correnti (solo upload)",
-    ],
-    notIncluded: [
-      "Connessione Home Banking API",
-      "Conto Economico",
-      "Fatture e Scadenzario",
-      "Budget & Previsioni",
-      "AI Assistant",
-    ],
-    cta: "Inizia con Basic",
-  },
-  {
-    name: "Small",
-    description: "Analisi bancaria con connessione Home Banking via API.",
-    priceMonthly: 79,
-    priceYearly: 66,
-    popular: false,
-    includes: "Tutto del piano Basic",
-    features: [
-      "Connessione Home Banking API",
+      "Conti Correnti (upload + API)",
       "Collegamenti (solo Conti Bancari)",
-      "Sincronizzazione automatica",
+      "AI: max 5€/mese inclusi",
     ],
     notIncluded: [
       "Conto Economico",
       "Fatture e Scadenzario",
       "Budget & Previsioni",
-      "AI Assistant",
+      "AI Assistant dedicato",
     ],
     cta: "Inizia con Small",
   },
   {
     name: "Pro",
-    description: "Analisi completa: dati bancari e fatture, upload e collegamento.",
-    priceMonthly: 239,
-    priceYearly: 199,
+    description: "Analisi completa: dati bancari e fatture, con upload e collegamento via API.",
+    priceMonthly: 79,
+    priceYearly: 66,
     popular: true,
+    aiLimit: "8€/mese inclusi",
     includes: "Tutto del piano Small",
     features: [
       "Conto Economico completo",
       "Gestione Fatture",
       "Scadenzario",
       "Collegamenti completi (Banche + Cassetto Fiscale)",
+      "AI: max 8€/mese inclusi",
     ],
     notIncluded: [
       "Budget & Previsioni",
-      "AI Assistant",
+      "AI Assistant dedicato",
     ],
     cta: "Inizia con Pro",
   },
   {
     name: "Full",
-    description: "Controllo totale della tua attività con AI integrata.",
-    priceMonthly: 479,
-    priceYearly: 399,
+    description: "Controllo totale della tua attività con AI integrata e Budget & Previsioni.",
+    priceMonthly: 199,
+    priceYearly: 166,
     popular: false,
+    aiLimit: "20€/mese inclusi",
     includes: "Tutto del piano Pro",
     features: [
       "Budget & Previsioni avanzate",
@@ -97,6 +82,7 @@ const plans = [
       "Analisi e report con AI",
       "Dati & Statistiche avanzate",
       "Notifiche intelligenti",
+      "AI: max 20€/mese inclusi",
     ],
     notIncluded: [],
     cta: "Inizia con Full",
@@ -190,7 +176,7 @@ export default function PianiPricing() {
           </div>
 
           {/* Plans Grid */}
-          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-20">
+          <div className="grid md:grid-cols-3 gap-6 mb-20">
             {plans.map((plan) => (
               <div
                 key={plan.name}
@@ -258,6 +244,18 @@ export default function PianiPricing() {
                 </Button>
               </div>
             ))}
+          </div>
+
+          {/* AI Credits Info */}
+          <div className="text-center mb-20 rounded-2xl border border-border/50 bg-muted/30 p-8">
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <Sparkles className="h-5 w-5 text-primary" />
+              <h3 className="text-lg font-semibold text-foreground">Crediti AI inclusi in ogni piano</h3>
+            </div>
+            <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
+              Ogni piano include un budget mensile per le funzionalità AI (categorizzazione automatica, analisi, report).
+              Superato il limite, puoi ricaricare il credito AI direttamente dalla piattaforma per continuare a utilizzare le funzionalità avanzate.
+            </p>
           </div>
 
           {/* All plans include */}
