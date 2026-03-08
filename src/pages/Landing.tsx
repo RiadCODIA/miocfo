@@ -441,9 +441,15 @@ export default function Landing() {
                     ))}
                   </ul>
                 )}
-                <Button asChild size="lg" className={`w-full rounded-full ${plan.popular ? "bg-primary-foreground text-primary hover:bg-primary-foreground/90" : ""}`} variant={plan.popular ? "default" : "outline"}>
-                  <Link to="/auth?tab=register">{plan.cta}</Link>
-                </Button>
+                {user ? (
+                  <Button size="lg" className={`w-full rounded-full ${plan.popular ? "bg-primary-foreground text-primary hover:bg-primary-foreground/90" : ""}`} variant={plan.popular ? "default" : "outline"} onClick={() => handlePlanClick(plan)}>
+                    {plan.cta}
+                  </Button>
+                ) : (
+                  <Button asChild size="lg" className={`w-full rounded-full ${plan.popular ? "bg-primary-foreground text-primary hover:bg-primary-foreground/90" : ""}`} variant={plan.popular ? "default" : "outline"}>
+                    <Link to="/auth?tab=register">{plan.cta}</Link>
+                  </Button>
+                )}
               </motion.div>
             ))}
           </div>
