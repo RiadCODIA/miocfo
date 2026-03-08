@@ -437,7 +437,39 @@ export default function Piani() {
               </div>
             </div>
 
-            {/* Features */}
+            {/* AI Credit Limits */}
+            <div className="space-y-4">
+              <h4 className="font-medium text-foreground">Limiti AI (€)</h4>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Budget AI Mensile (€)</Label>
+                  <Input 
+                    type="number"
+                    value={formAiMonthlyLimit}
+                    onChange={(e) => setFormAiMonthlyLimit(Number(e.target.value))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Ricarica Minima (€)</Label>
+                  <Input 
+                    type="number"
+                    value={formAiTopupMin}
+                    onChange={(e) => setFormAiTopupMin(Number(e.target.value))}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Suggerisci upgrade dopo N ricariche</Label>
+                  <Input 
+                    type="number"
+                    value={formAiUpgradeSuggestion ?? ""}
+                    onChange={(e) => setFormAiUpgradeSuggestion(e.target.value ? Number(e.target.value) : null)}
+                    placeholder="Mai"
+                  />
+                </div>
+              </div>
+            </div>
+
+
             <div className="space-y-4">
               <h4 className="font-medium text-foreground">Feature Incluse</h4>
               <div className="grid grid-cols-2 gap-3">

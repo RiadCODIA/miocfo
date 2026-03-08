@@ -47,6 +47,9 @@ export function useSubscriptionPlans() {
         sortOrder: plan.sort_order ?? 0,
         createdAt: plan.created_at,
         updatedAt: plan.updated_at,
+        aiMonthlyLimitEur: (plan as any).ai_monthly_limit_eur ?? 0,
+        aiTopupMinEur: (plan as any).ai_topup_min_eur ?? 5,
+        aiUpgradeSuggestionAfter: (plan as any).ai_upgrade_suggestion_after ?? null,
       })) as SubscriptionPlan[];
     },
   });
