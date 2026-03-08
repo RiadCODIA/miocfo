@@ -657,6 +657,18 @@ export default function Landing() {
           </div>
         </div>
       </footer>
+
+      {/* Payment Modal */}
+      {paymentModal && (
+        <PaymentMethodModal
+          open={paymentModal.open}
+          onOpenChange={(open) => setPaymentModal(open ? paymentModal : null)}
+          planName={paymentModal.planName}
+          planId={paymentModal.planId}
+          price={paymentModal.price}
+          isAnnual={isAnnual}
+        />
+      )}
     </div>
   );
 }
