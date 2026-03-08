@@ -94,6 +94,7 @@ const allInclude = [
   "Crittografia end-to-end",
   "Aggiornamenti automatici",
   "Nessun costo nascosto",
+  "Analisi AI in tempo reale",
 ];
 
 const checklistItems = [
