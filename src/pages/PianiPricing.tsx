@@ -111,6 +111,24 @@ const checklistItems = [
 
 export default function PianiPricing() {
   const [isAnnual, setIsAnnual] = useState(false);
+  const [paymentModal, setPaymentModal] = useState<{ open: boolean; planName: string; planId?: string; price: number } | null>(null);
+  const { user } = useAuth();
+  const { data: dbPlans } = useSubscriptionPlans();
+
+  const getPlanId = (planName: string) => {
+    return dbPlans?.find((p) => p.name.toLowerCase() === planName.toLowerCase())?.id;
+  };
+
+  const handlePlanClick = (plan: typeof plans[0]) => {
+    if (!user) return; // Link will handle redirect
+    const price = isAnnual ? plan.priceYearly * 12 : plan.priceMonthly;
+    setPaymentModal({
+      open: true,
+      planName: plan.name,
+      planId: getPlanId(plan.name),
+      price: isAnnual ? plan.priceYearly * 12 : plan.priceMonthly,
+    });
+  };
 
   return (
     <div className="min-h-screen bg-background">
