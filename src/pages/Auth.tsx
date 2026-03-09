@@ -284,6 +284,18 @@ export default function Auth() {
                   </div>
                 </div>
                 
+                <div className="space-y-2">
+                  <Label htmlFor="vatNumber">Partita IVA (opzionale)</Label>
+                  <Input
+                    id="vatNumber"
+                    type="text"
+                    placeholder="IT12345678901"
+                    value={vatNumber}
+                    onChange={(e) => setVatNumber(e.target.value)}
+                    maxLength={16}
+                  />
+                </div>
+                
                 
                 <div className="space-y-2">
                   <Label htmlFor="signup-email">Email</Label>
