@@ -228,6 +228,14 @@ export default function Fatture() {
 
   // When user drops/selects files, show type dialog first
   const handleUpload = (files: File[]) => {
+    // Check AI block status before allowing upload
+    if (isAIBlocked) {
+      toast.error("Limite AI raggiunto", {
+        description: "Hai esaurito il credito AI del tuo piano. Ricarica per caricare nuove fatture.",
+      });
+      setRechargeModalOpen(true);
+      return;
+    }
     setPendingFiles(files);
     setIsTypeDialogOpen(true);
   };
