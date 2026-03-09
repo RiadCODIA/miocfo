@@ -104,8 +104,10 @@ export default function Fatture() {
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
   const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false);
+  const [rechargeModalOpen, setRechargeModalOpen] = useState(false);
   
   const queryClient = useQueryClient();
+  const { isBlocked: isAIBlocked, usage: aiUsage } = useAIUsage();
 
   // Fetch invoices from database
   const { data: invoices = [], isLoading } = useQuery({
