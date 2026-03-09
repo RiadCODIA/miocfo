@@ -50,7 +50,6 @@ serve(async (req) => {
 
     const origin = req.headers.get('origin') || 'https://miocfo.lovable.app';
     const amountCents = amount_eur * 100;
-    const { format } = await import("https://deno.land/x/date_fns@v2.22.1/index.js");
     const monthYear = new Date().toISOString().substring(0, 7); // yyyy-MM
 
     // Create Stripe Checkout Session
