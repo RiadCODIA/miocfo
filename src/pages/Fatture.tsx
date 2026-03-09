@@ -287,16 +287,48 @@ export default function Fatture() {
     setUploadingFiles((prev) => prev.filter((f) => f.id !== id));
   };
 
-  // Inline category change handler
+  // Inline category change handler — also updates supplier learning mapping
   const handleCategoryChange = async (invoiceId: string, categoryId: string | null) => {
     try {
       const { error } = await supabase
         .from('invoices')
-        .update({ category_id: categoryId })
+        .update({ category_id: categoryId, needs_review: false })
         .eq('id', invoiceId);
       if (error) throw error;
+
+      // Update supplier learning mapping if category is set
+      if (categoryId) {
+        const invoice = invoices.find(i => i.id === invoiceId);
+        if (invoice) {
+          // Fetch extracted_data to get supplier VAT
+          const { data: dbInvoice } = await supabase
+            .from('invoices')
+            .select('extracted_data, vendor_name')
+            .eq('id', invoiceId)
+            .single();
+          
+          const extractedData = dbInvoice?.extracted_data as Record<string, unknown> | null;
+          const supplierVat = (extractedData?.sender_vat as string) || '';
+          const supplierName = dbInvoice?.vendor_name || invoice.supplier;
+
+          if (supplierVat) {
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+              await supabase.from('supplier_category_mappings').upsert({
+                user_id: user.id,
+                supplier_vat: supplierVat,
+                supplier_name: supplierName,
+                category_id: categoryId,
+                updated_at: new Date().toISOString(),
+              }, { onConflict: 'user_id,supplier_vat' });
+            }
+          }
+        }
+      }
+
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
       queryClient.invalidateQueries({ queryKey: ['conto-economico'] });
+      toast.success("Categoria aggiornata", { description: "La categoria è stata aggiornata e il mapping fornitore salvato." });
     } catch {
       toast.error("Errore", { description: "Impossibile aggiornare la categoria." });
     }
