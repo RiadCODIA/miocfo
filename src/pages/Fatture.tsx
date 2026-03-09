@@ -24,6 +24,8 @@ import { InvoiceTypeDialog } from "@/components/fatture/InvoiceTypeDialog";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAIUsage } from "@/hooks/useAIUsage";
+import { AIRechargeModal } from "@/components/payment/AIRechargeModal";
 
 interface DbInvoice {
   id: string;
