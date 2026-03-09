@@ -82,6 +82,8 @@ function transformInvoice(dbInvoice: DbInvoice): Invoice {
     fileName: dbInvoice.file_name || "",
     filePath: dbInvoice.file_path || "",
     fileType: null,
+    needsReview: dbInvoice.needs_review ?? false,
+    aiConfidence: dbInvoice.ai_confidence,
   };
 }
 
