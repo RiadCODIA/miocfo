@@ -34,20 +34,22 @@ export function IVASection({ year, ivaRicavi, ivaCosti }: IVASectionProps) {
   const [selectedQuarter, setSelectedQuarter] = useState<number>(Math.floor(new Date().getMonth() / 3));
 
   const computeValues = () => {
+    // Italian accounting: IVA a debito = IVA sulle vendite (fatture emesse/ricavi)
+    //                     IVA a credito = IVA sugli acquisti (fatture ricevute/costi)
     if (period === "annuale") {
-      const ivaCredito = Object.values(ivaRicavi).reduce((s, v) => s + v, 0);
-      const ivaDebito = Object.values(ivaCosti).reduce((s, v) => s + v, 0);
-      return { ivaCredito, ivaDebito, ivaNetta: ivaCredito - ivaDebito, label: `Anno ${year}` };
+      const ivaDebito = Object.values(ivaRicavi).reduce((s, v) => s + v, 0);
+      const ivaCredito = Object.values(ivaCosti).reduce((s, v) => s + v, 0);
+      return { ivaCredito, ivaDebito, ivaNetta: ivaDebito - ivaCredito, label: `Anno ${year}` };
     } else if (period === "mensile") {
       const months = [selectedMonth];
-      const ivaCredito = filterByMonths(ivaRicavi, months);
-      const ivaDebito = filterByMonths(ivaCosti, months);
-      return { ivaCredito, ivaDebito, ivaNetta: ivaCredito - ivaDebito, label: `${MONTHS[selectedMonth]} ${year}` };
+      const ivaDebito = filterByMonths(ivaRicavi, months);
+      const ivaCredito = filterByMonths(ivaCosti, months);
+      return { ivaCredito, ivaDebito, ivaNetta: ivaDebito - ivaCredito, label: `${MONTHS[selectedMonth]} ${year}` };
     } else {
       const q = QUARTERS[selectedQuarter];
-      const ivaCredito = filterByMonths(ivaRicavi, q.months);
-      const ivaDebito = filterByMonths(ivaCosti, q.months);
-      return { ivaCredito, ivaDebito, ivaNetta: ivaCredito - ivaDebito, label: `${q.label} ${year}` };
+      const ivaDebito = filterByMonths(ivaRicavi, q.months);
+      const ivaCredito = filterByMonths(ivaCosti, q.months);
+      return { ivaCredito, ivaDebito, ivaNetta: ivaDebito - ivaCredito, label: `${q.label} ${year}` };
     }
   };
 

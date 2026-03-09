@@ -86,6 +86,41 @@ serve(async (req) => {
 
     console.log(`[Categorize] Processing for user: ${userId}`);
 
+    // Check AI usage block before proceeding
+    const currentMonthYear = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+    const { data: aiUsage } = await supabase
+      .from('ai_usage_monthly')
+      .select('cost_accumulated, credit_recharged')
+      .eq('user_id', userId)
+      .eq('month_year', currentMonthYear)
+      .maybeSingle();
+
+    if (aiUsage) {
+      // Fetch user's plan limit
+      let planLimit = 5;
+      const { data: subData } = await supabase
+        .from('user_subscriptions')
+        .select('plan_id')
+        .eq('user_id', userId)
+        .eq('status', 'active')
+        .maybeSingle();
+      if (subData?.plan_id) {
+        const { data: planData } = await supabase
+          .from('subscription_plans')
+          .select('ai_monthly_limit_eur')
+          .eq('id', subData.plan_id)
+          .single();
+        if (planData?.ai_monthly_limit_eur) planLimit = Number(planData.ai_monthly_limit_eur);
+      }
+      const budgetAvailable = planLimit + Number(aiUsage.credit_recharged || 0);
+      if (Number(aiUsage.cost_accumulated || 0) >= budgetAvailable) {
+        return new Response(
+          JSON.stringify({ error: "Limite AI raggiunto. Ricarica il credito AI per continuare.", blocked: true }),
+          { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
+    }
+
     // Fetch available categories (global + user's own)
     const { data: categories, error: catError } = await supabase
       .from("cost_categories")

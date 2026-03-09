@@ -80,7 +80,26 @@ serve(async (req) => {
       if (existing) {
         const newCreditRecharged = Number(existing.credit_recharged || 0) + amountEur;
         const newNumRecharges = Number(existing.num_recharges || 0) + 1;
-        const planLimit = 5; // Will be recalculated client-side
+
+        // Read actual plan limit from user's subscription
+        let planLimit = 5; // default fallback
+        const { data: subData } = await serviceClient
+          .from('user_subscriptions')
+          .select('plan_id')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .maybeSingle();
+        if (subData?.plan_id) {
+          const { data: planData } = await serviceClient
+            .from('subscription_plans')
+            .select('ai_monthly_limit_eur')
+            .eq('id', subData.plan_id)
+            .single();
+          if (planData?.ai_monthly_limit_eur) {
+            planLimit = Number(planData.ai_monthly_limit_eur);
+          }
+        }
+
         const isBlocked = Number(existing.cost_accumulated || 0) >= (planLimit + newCreditRecharged);
 
         await serviceClient
