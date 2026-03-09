@@ -55,7 +55,7 @@ interface AuthContextType {
   permissions: AdminPermissions | null;
   superAdminPermissions: SuperAdminPermissions | null;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string, metadata?: { first_name?: string; last_name?: string; company_name?: string; role?: string }) => Promise<{ error: Error | null }>;
+  signUp: (email: string, password: string, metadata?: { first_name?: string; last_name?: string; company_name?: string; vat_number?: string; role?: string }) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
   signInAsDemo: () => Promise<{ error: Error | null }>;
   signInAsDemoAdmin: () => Promise<{ error: Error | null }>;
