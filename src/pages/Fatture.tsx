@@ -46,6 +46,8 @@ interface DbInvoice {
   created_at: string;
   updated_at: string;
   user_id: string;
+  needs_review: boolean | null;
+  ai_confidence: number | null;
 }
 
 interface DbCategory {
