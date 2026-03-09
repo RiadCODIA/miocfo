@@ -112,25 +112,25 @@ export function IVASection({ year, ivaRicavi, ivaCosti }: IVASectionProps) {
       )}
 
       <div className="text-xs text-muted-foreground space-y-1">
-        <p>· IVA a credito: somma IVA di tutte le fatture <strong>emesse</strong> nel periodo</p>
-        <p>· IVA a debito: somma IVA di tutte le fatture <strong>ricevute</strong> nel periodo</p>
-        <p>· Se il saldo è positivo → più IVA da incassare che da versare</p>
-        <p>· Se il saldo è negativo → IVA netta da versare al fisco</p>
+        <p>· IVA a debito: somma IVA di tutte le fatture <strong>emesse</strong> (vendite) nel periodo</p>
+        <p>· IVA a credito: somma IVA di tutte le fatture <strong>ricevute</strong> (acquisti) nel periodo</p>
+        <p>· Se il saldo è positivo → IVA netta da versare al fisco</p>
+        <p>· Se il saldo è negativo → credito IVA a favore dell'azienda</p>
       </div>
 
       <div className="overflow-auto">
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border">
-              <th className="text-left py-2 px-3 text-muted-foreground font-medium">IVA a credito (fatture emesse)</th>
-              <th className="text-left py-2 px-3 text-muted-foreground font-medium">IVA a debito (fatture ricevute)</th>
+              <th className="text-left py-2 px-3 text-muted-foreground font-medium">IVA a debito (fatture emesse)</th>
+              <th className="text-left py-2 px-3 text-muted-foreground font-medium">IVA a credito (fatture ricevute)</th>
               <th className="text-left py-2 px-3 text-muted-foreground font-medium">Saldo IVA netto</th>
             </tr>
           </thead>
           <tbody>
             <tr>
-              <td className="py-2 px-3 font-medium text-success">{fmt(ivaCredito)}</td>
               <td className="py-2 px-3 font-medium text-destructive">{fmt(ivaDebito)}</td>
+              <td className="py-2 px-3 font-medium text-success">{fmt(ivaCredito)}</td>
               <td className={`py-2 px-3 font-bold ${ivaNetta >= 0 ? "text-success" : "text-destructive"}`}>
                 {fmt(ivaNetta)}
               </td>
