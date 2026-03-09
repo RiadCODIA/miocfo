@@ -5,6 +5,7 @@ import { useAuth } from "@/contexts/AuthContext";
 interface UpdateProfileData {
   first_name?: string;
   last_name?: string;
+  vat_number?: string;
 }
 
 export function useUpdateProfile() {
@@ -20,6 +21,7 @@ export function useUpdateProfile() {
         .update({
           first_name: data.first_name,
           last_name: data.last_name,
+          vat_number: data.vat_number,
           updated_at: new Date().toISOString(),
         })
         .eq("id", user.id);

@@ -801,6 +801,7 @@ export type Database = {
       invoices: {
         Row: {
           acube_invoice_id: string | null
+          ai_confidence: number | null
           amount: number
           category_id: string | null
           client_name: string | null
@@ -814,6 +815,7 @@ export type Database = {
           invoice_number: string | null
           invoice_type: string
           matched_transaction_id: string | null
+          needs_review: boolean | null
           notes: string | null
           payment_status: string | null
           source: string | null
@@ -825,6 +827,7 @@ export type Database = {
         }
         Insert: {
           acube_invoice_id?: string | null
+          ai_confidence?: number | null
           amount: number
           category_id?: string | null
           client_name?: string | null
@@ -838,6 +841,7 @@ export type Database = {
           invoice_number?: string | null
           invoice_type?: string
           matched_transaction_id?: string | null
+          needs_review?: boolean | null
           notes?: string | null
           payment_status?: string | null
           source?: string | null
@@ -849,6 +853,7 @@ export type Database = {
         }
         Update: {
           acube_invoice_id?: string | null
+          ai_confidence?: number | null
           amount?: number
           category_id?: string | null
           client_name?: string | null
@@ -862,6 +867,7 @@ export type Database = {
           invoice_number?: string | null
           invoice_type?: string
           matched_transaction_id?: string | null
+          needs_review?: boolean | null
           notes?: string | null
           payment_status?: string | null
           source?: string | null
@@ -1035,6 +1041,7 @@ export type Database = {
           last_name: string | null
           phone: string | null
           updated_at: string
+          vat_number: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -1045,6 +1052,7 @@ export type Database = {
           last_name?: string | null
           phone?: string | null
           updated_at?: string
+          vat_number?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -1055,6 +1063,7 @@ export type Database = {
           last_name?: string | null
           phone?: string | null
           updated_at?: string
+          vat_number?: string | null
         }
         Relationships: []
       }

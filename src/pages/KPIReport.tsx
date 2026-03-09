@@ -1,17 +1,23 @@
 import { useState } from "react";
-import { TrendingUp, TrendingDown, ArrowRight, BarChart3, DollarSign, Percent, Clock, Wallet, Info, Settings2, Loader2, Brain } from "lucide-react";
+import { TrendingUp, TrendingDown, ArrowRight, BarChart3, DollarSign, Percent, Clock, Wallet, Info, Settings2, Loader2, Brain, CalendarRange, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useKPIData, useKPITargets, useUpdateKPITargets, type KPIPeriod, type KPIResult } from "@/hooks/useKPIData";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { AIReportSection, type AIReport } from "@/components/area-economica/AIReportSection";
+import { format } from "date-fns";
+import { it } from "date-fns/locale";
+import { useAIUsage } from "@/hooks/useAIUsage";
 
 const KPI_ICONS: Record<string, React.ReactNode> = {
   ricavi: <DollarSign className="h-5 w-5" />,
@@ -33,7 +39,6 @@ const KPI_COLORS: Record<string, string> = {
 
 function KPICard({ kpi }: { kpi: KPIResult }) {
   const isPositiveTrend = kpi.trend !== null && kpi.trend >= 0;
-  // For DSO and DPO, a decrease is positive
   const isGoodTrend = kpi.id === "dso" || kpi.id === "dpo"
     ? kpi.trend !== null && kpi.trend <= 0
     : isPositiveTrend;
@@ -73,17 +78,61 @@ function KPICard({ kpi }: { kpi: KPIResult }) {
 
 export default function KPIReport() {
   const [period, setPeriod] = useState<KPIPeriod>("year");
-  const { data, isLoading } = useKPIData(period);
+  const [customFrom, setCustomFrom] = useState<Date | undefined>(undefined);
+  const [customTo, setCustomTo] = useState<Date | undefined>(undefined);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarStep, setCalendarStep] = useState<"from" | "to">("from");
+
+  const { data, isLoading } = useKPIData(period, customFrom, customTo);
   const { data: targets } = useKPITargets();
   const updateTargets = useUpdateKPITargets();
   const [aiReport, setAiReport] = useState<AIReport | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [targetModalOpen, setTargetModalOpen] = useState(false);
   const [editTargets, setEditTargets] = useState<Record<string, number>>({});
+  const { isBlocked } = useAIUsage();
+
+  const handlePeriodChange = (v: string) => {
+    if (v !== "custom") {
+      setCustomFrom(undefined);
+      setCustomTo(undefined);
+    }
+    setPeriod(v as KPIPeriod);
+  };
+
+  const handleCalendarSelect = (date: Date | undefined) => {
+    if (!date) return;
+    if (calendarStep === "from") {
+      setCustomFrom(date);
+      setCalendarStep("to");
+    } else {
+      setCustomTo(date);
+      setCalendarOpen(false);
+      setCalendarStep("from");
+      setPeriod("custom");
+    }
+  };
+
+  const clearCustomRange = () => {
+    setCustomFrom(undefined);
+    setCustomTo(undefined);
+    setPeriod("year");
+    setCalendarStep("from");
+  };
+
+  const customRangeLabel = customFrom && customTo
+    ? `${format(customFrom, "dd MMM yyyy", { locale: it })} – ${format(customTo, "dd MMM yyyy", { locale: it })}`
+    : customFrom
+    ? `Dal ${format(customFrom, "dd MMM yyyy", { locale: it })} — seleziona fine`
+    : null;
 
   const handleAIAnalysis = async () => {
     if (!data?.kpis.length) {
       toast.error("Nessun dato KPI disponibile per l'analisi");
+      return;
+    }
+    if (isBlocked) {
+      toast.error("Limite AI raggiunto", { description: "Ricarica il credito AI per continuare." });
       return;
     }
     setAiLoading(true);
@@ -143,25 +192,70 @@ export default function KPIReport() {
         <div>
           <h1 className="text-2xl font-bold text-foreground">Dati & Statistiche</h1>
           <p className="text-muted-foreground mt-1">
-            Indicatori calcolati in tempo reale da fatture e transazioni bancarie
+            {customRangeLabel && customFrom && customTo
+              ? <span className="text-primary font-medium">{customRangeLabel}</span>
+              : "Indicatori calcolati in tempo reale da fatture e transazioni bancarie"
+            }
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Select value={period} onValueChange={(v) => setPeriod(v as KPIPeriod)}>
-            <SelectTrigger className="w-40 h-9 text-sm">
+        <div className="flex items-center gap-2 flex-wrap">
+          <Select value={period} onValueChange={handlePeriodChange}>
+            <SelectTrigger className="w-44 h-9 text-sm">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="month">Mese corrente</SelectItem>
               <SelectItem value="quarter">Trimestre</SelectItem>
               <SelectItem value="year">Anno corrente</SelectItem>
+              <SelectItem value="custom">Personalizzato</SelectItem>
             </SelectContent>
           </Select>
+
+          {/* Custom Date Range Picker */}
+          {(period === "custom" || customFrom) && (
+            <Popover open={calendarOpen} onOpenChange={setCalendarOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={cn("gap-2 h-9 text-sm", customFrom && customTo && "border-primary text-primary")}
+                >
+                  <CalendarRange className="h-4 w-4" />
+                  {customFrom && customTo
+                    ? `${format(customFrom, "dd/MM/yy")} – ${format(customTo, "dd/MM/yy")}`
+                    : customFrom
+                    ? `Dal ${format(customFrom, "dd/MM/yy")}…`
+                    : "Seleziona intervallo"
+                  }
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <div className="p-3 text-sm font-medium text-muted-foreground border-b border-border">
+                  {calendarStep === "from" ? "Seleziona data inizio" : "Seleziona data fine"}
+                </div>
+                <Calendar
+                  mode="single"
+                  selected={calendarStep === "from" ? customFrom : customTo}
+                  onSelect={handleCalendarSelect}
+                  disabled={calendarStep === "to" && customFrom ? { before: customFrom } : undefined}
+                  locale={it}
+                  initialFocus
+                />
+              </PopoverContent>
+            </Popover>
+          )}
+
+          {customFrom && customTo && (
+            <Button variant="ghost" size="sm" onClick={clearCustomRange} className="h-9 px-2 text-muted-foreground">
+              <X className="h-4 w-4" />
+            </Button>
+          )}
+
           <Button variant="outline" size="sm" onClick={handleOpenTargetModal} className="gap-2">
             <Settings2 className="h-4 w-4" />
             Target
           </Button>
-          <Button size="sm" onClick={handleAIAnalysis} disabled={aiLoading || !kpis.length} className="gap-2">
+          <Button size="sm" onClick={handleAIAnalysis} disabled={aiLoading || !kpis.length || isBlocked} className="gap-2">
             {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
             Analisi AI
           </Button>

@@ -1,4 +1,6 @@
+import { useState } from "react";
 import { MonthlyData } from "@/hooks/useContoEconomico";
+import { Button } from "@/components/ui/button";
 
 interface IVASectionProps {
   year: number;
@@ -6,22 +8,106 @@ interface IVASectionProps {
   ivaCosti: MonthlyData;
 }
 
-const fmt = (v: number) => `${v.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+type IVAPeriod = "annuale" | "trimestrale" | "mensile";
+
+const MONTHS = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
+const QUARTERS: { label: string; months: number[] }[] = [
+  { label: "Q1 (Gen-Mar)", months: [0, 1, 2] },
+  { label: "Q2 (Apr-Giu)", months: [3, 4, 5] },
+  { label: "Q3 (Lug-Set)", months: [6, 7, 8] },
+  { label: "Q4 (Ott-Dic)", months: [9, 10, 11] },
+];
+
+const fmt = (v: number) =>
+  `${v.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
+
+function filterByMonths(data: MonthlyData, months: number[]): number {
+  return months.reduce((sum, m) => {
+    const key = String(m + 1).padStart(2, "0");
+    return sum + (data[key] || 0);
+  }, 0);
+}
 
 export function IVASection({ year, ivaRicavi, ivaCosti }: IVASectionProps) {
-  // Per spec: IVA a credito = fatture emesse, IVA a debito = fatture ricevute
-  const ivaCredito = Object.values(ivaRicavi).reduce((s, v) => s + v, 0);
-  const ivaDebito = Object.values(ivaCosti).reduce((s, v) => s + v, 0);
-  const ivaNetta = ivaCredito - ivaDebito;
+  const [period, setPeriod] = useState<IVAPeriod>("annuale");
+  const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
+  const [selectedQuarter, setSelectedQuarter] = useState<number>(Math.floor(new Date().getMonth() / 3));
+
+  const computeValues = () => {
+    if (period === "annuale") {
+      const ivaCredito = Object.values(ivaRicavi).reduce((s, v) => s + v, 0);
+      const ivaDebito = Object.values(ivaCosti).reduce((s, v) => s + v, 0);
+      return { ivaCredito, ivaDebito, ivaNetta: ivaCredito - ivaDebito, label: `Anno ${year}` };
+    } else if (period === "mensile") {
+      const months = [selectedMonth];
+      const ivaCredito = filterByMonths(ivaRicavi, months);
+      const ivaDebito = filterByMonths(ivaCosti, months);
+      return { ivaCredito, ivaDebito, ivaNetta: ivaCredito - ivaDebito, label: `${MONTHS[selectedMonth]} ${year}` };
+    } else {
+      const q = QUARTERS[selectedQuarter];
+      const ivaCredito = filterByMonths(ivaRicavi, q.months);
+      const ivaDebito = filterByMonths(ivaCosti, q.months);
+      return { ivaCredito, ivaDebito, ivaNetta: ivaCredito - ivaDebito, label: `${q.label} ${year}` };
+    }
+  };
+
+  const { ivaCredito, ivaDebito, ivaNetta, label } = computeValues();
 
   return (
     <div className="glass rounded-xl p-5 space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h3 className="text-lg font-semibold text-foreground">Riepilogo IVA</h3>
-          <p className="text-sm text-muted-foreground">Schema sintetico IVA — Anno {year}</p>
+          <p className="text-sm text-muted-foreground">Schema sintetico IVA — {label}</p>
+        </div>
+
+        {/* Period Selector */}
+        <div className="flex items-center gap-1 rounded-lg border border-border p-1 bg-muted/40">
+          {(["mensile", "trimestrale", "annuale"] as IVAPeriod[]).map((p) => (
+            <Button
+              key={p}
+              variant={period === p ? "default" : "ghost"}
+              size="sm"
+              className="h-7 px-3 text-xs capitalize"
+              onClick={() => setPeriod(p)}
+            >
+              {p.charAt(0).toUpperCase() + p.slice(1)}
+            </Button>
+          ))}
         </div>
       </div>
+
+      {/* Sub-selector for mensile/trimestrale */}
+      {period === "mensile" && (
+        <div className="flex flex-wrap gap-1.5">
+          {MONTHS.map((m, i) => (
+            <Button
+              key={i}
+              variant={selectedMonth === i ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs px-2.5"
+              onClick={() => setSelectedMonth(i)}
+            >
+              {m}
+            </Button>
+          ))}
+        </div>
+      )}
+      {period === "trimestrale" && (
+        <div className="flex flex-wrap gap-1.5">
+          {QUARTERS.map((q, i) => (
+            <Button
+              key={i}
+              variant={selectedQuarter === i ? "default" : "outline"}
+              size="sm"
+              className="h-7 text-xs px-3"
+              onClick={() => setSelectedQuarter(i)}
+            >
+              {q.label}
+            </Button>
+          ))}
+        </div>
+      )}
 
       <div className="text-xs text-muted-foreground space-y-1">
         <p>· IVA a credito: somma IVA di tutte le fatture <strong>emesse</strong> nel periodo</p>

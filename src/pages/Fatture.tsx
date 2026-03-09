@@ -46,6 +46,8 @@ interface DbInvoice {
   created_at: string;
   updated_at: string;
   user_id: string;
+  needs_review: boolean | null;
+  ai_confidence: number | null;
 }
 
 interface DbCategory {
@@ -80,6 +82,8 @@ function transformInvoice(dbInvoice: DbInvoice): Invoice {
     fileName: dbInvoice.file_name || "",
     filePath: dbInvoice.file_path || "",
     fileType: null,
+    needsReview: dbInvoice.needs_review ?? false,
+    aiConfidence: dbInvoice.ai_confidence,
   };
 }
 

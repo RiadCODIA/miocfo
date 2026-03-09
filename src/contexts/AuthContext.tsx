@@ -9,6 +9,7 @@ interface Profile {
   last_name: string | null;
   company_name: string | null;
   avatar_url: string | null;
+  vat_number: string | null;
 }
 
 export type AppRole = 'user' | 'admin_aziendale' | 'super_admin';

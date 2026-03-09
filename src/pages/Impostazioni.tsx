@@ -30,6 +30,7 @@ export default function Impostazioni() {
   // Profile state
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [vatNumber, setVatNumber] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
 
@@ -48,6 +49,7 @@ export default function Impostazioni() {
     if (profile) {
       setFirstName(profile.first_name || "");
       setLastName(profile.last_name || "");
+      setVatNumber((profile as any).vat_number || "");
     }
   }, [profile]);
 
@@ -72,6 +74,7 @@ export default function Impostazioni() {
       await updateProfile.mutateAsync({
         first_name: firstName,
         last_name: lastName,
+        vat_number: vatNumber || undefined,
       });
 
       if (newPassword.length > 0) {

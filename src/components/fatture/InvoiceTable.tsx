@@ -18,6 +18,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { Search, Eye, Link2, CheckCircle2, Clock, AlertTriangle, RefreshCw, Loader2, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -35,6 +37,8 @@ export interface Invoice {
   fileName: string;
   filePath: string;
   fileType?: string | null;
+  needsReview?: boolean;
+  aiConfidence?: number | null;
 }
 
 export interface CostCategory {
@@ -73,6 +77,7 @@ export function InvoiceTable({
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [showOnlyReview, setShowOnlyReview] = useState(false);
 
   const filteredInvoices = invoices.filter((invoice) => {
     const matchesSearch =
@@ -83,8 +88,11 @@ export function InvoiceTable({
     const normalizedType = normalizeType(invoice.invoiceType);
     const matchesType =
       typeFilter === "all" || normalizedType === typeFilter;
-    return matchesSearch && matchesStatus && matchesType;
+    const matchesReview = !showOnlyReview || invoice.needsReview;
+    return matchesSearch && matchesStatus && matchesType && matchesReview;
   });
+
+  const reviewCount = invoices.filter(i => i.needsReview).length;
 
   const statusConfig = {
     matched: {
@@ -107,8 +115,8 @@ export function InvoiceTable({
   return (
     <div className="space-y-4">
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <div className="relative flex-1">
+      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder="Cerca per numero fattura o fornitore..."
@@ -139,6 +147,24 @@ export function InvoiceTable({
             <SelectItem value="discrepancy">Discrepanza</SelectItem>
           </SelectContent>
         </Select>
+
+        {/* "Da verificare" toggle */}
+        {reviewCount > 0 && (
+          <div className="flex items-center gap-2 px-2">
+            <Switch
+              id="review-filter"
+              checked={showOnlyReview}
+              onCheckedChange={setShowOnlyReview}
+            />
+            <Label htmlFor="review-filter" className="text-sm cursor-pointer flex items-center gap-1.5">
+              <AlertTriangle className="h-3.5 w-3.5 text-warning" />
+              Da verificare
+              <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20 text-[10px] px-1.5 py-0">
+                {reviewCount}
+              </Badge>
+            </Label>
+          </div>
+        )}
       </div>
 
       {/* Table */}
@@ -187,16 +213,30 @@ export function InvoiceTable({
                 const typeConfig = invoiceTypeConfig[normalizedType];
 
                 return (
-                  <TableRow key={invoice.id}>
+                  <TableRow key={invoice.id} className={invoice.needsReview ? "bg-warning/5" : undefined}>
                     <TableCell className="font-medium">
                       {invoice.date.toLocaleDateString("it-IT")}
                     </TableCell>
                     <TableCell className="font-mono text-sm">
-                      {invoice.invoiceNumber}
+                      <div className="flex items-center gap-1.5">
+                        {invoice.needsReview && (
+                          <span title={`Confidenza AI: ${invoice.aiConfidence !== null && invoice.aiConfidence !== undefined ? Math.round(invoice.aiConfidence * 100) + '%' : 'N/D'}`}>
+                            <AlertTriangle className="h-3.5 w-3.5 text-warning shrink-0" />
+                          </span>
+                        )}
+                        {invoice.invoiceNumber}
+                      </div>
                     </TableCell>
-                    <TableCell>{invoice.supplier}</TableCell>
+                    <TableCell>
+                      <div>
+                        <span>{invoice.supplier}</span>
+                        {invoice.needsReview && (
+                          <div className="text-[10px] text-warning font-medium mt-0.5">⚠ Da verificare</div>
+                        )}
+                      </div>
+                    </TableCell>
 
-                    {/* Tipo badge — clickable to change */}
+                    {/* Tipo badge */}
                     <TableCell>
                       {onTypeChange ? (
                         <Select
@@ -223,7 +263,7 @@ export function InvoiceTable({
                       )}
                     </TableCell>
 
-                    {/* Inline category dropdown — filtered by invoice type */}
+                    {/* Inline category dropdown */}
                     <TableCell>
                       {(() => {
                         const filteredCategories = categories.filter(cat =>
@@ -231,7 +271,6 @@ export function InvoiceTable({
                             ? cat.category_type === 'revenue'
                             : cat.category_type === 'expense'
                         );
-                        // Ensure the currently assigned category is always visible
                         const currentCat = invoice.categoryId
                           ? categories.find(c => c.id === invoice.categoryId)
                           : null;
@@ -241,11 +280,11 @@ export function InvoiceTable({
                         return onCategoryChange && filteredCategories.length > 0 ? (
                           <Select
                             value={invoice.categoryId || "none"}
-                            onValueChange={(val) =>
-                              onCategoryChange(invoice.id, val === "none" ? null : val)
-                            }
+                            onValueChange={(val) => {
+                              onCategoryChange(invoice.id, val === "none" ? null : val);
+                            }}
                           >
-                            <SelectTrigger className="h-7 text-xs min-w-[140px] max-w-[180px]">
+                            <SelectTrigger className={cn("h-7 text-xs min-w-[140px] max-w-[180px]", invoice.needsReview && !invoice.categoryId && "border-warning/50")}>
                               <SelectValue placeholder="Categoria..." />
                             </SelectTrigger>
                             <SelectContent>
@@ -279,23 +318,15 @@ export function InvoiceTable({
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => onView(invoice)}
-                        >
+                        <Button variant="ghost" size="sm" onClick={() => onView(invoice)}>
                           <Eye className="h-4 w-4" />
                         </Button>
                         {invoice.matchStatus !== "matched" && (
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => onMatch(invoice)}
-                          >
+                          <Button variant="ghost" size="sm" onClick={() => onMatch(invoice)}>
                             <Link2 className="h-4 w-4" />
                           </Button>
                         )}
-                        {onReprocess && (invoice.amount === 0 || invoice.supplier === 'Fornitore Sconosciuto') && (
+                        {onReprocess && (invoice.amount === 0 || invoice.supplier === 'Fornitore Sconosciuto' || invoice.needsReview) && (
                           <Button
                             variant="ghost"
                             size="sm"
@@ -346,16 +377,7 @@ function normalizeType(t: string): "emessa" | "ricevuta" | "autofattura" {
 }
 
 const invoiceTypeConfig: Record<"emessa" | "ricevuta" | "autofattura", { label: string; className: string }> = {
-  emessa: {
-    label: "Emessa",
-    className: "bg-success/10 text-success border-success/20",
-  },
-  ricevuta: {
-    label: "Ricevuta",
-    className: "bg-primary/10 text-primary border-primary/20",
-  },
-  autofattura: {
-    label: "Autofattura",
-    className: "bg-warning/10 text-warning border-warning/20",
-  },
+  emessa: { label: "Emessa", className: "bg-success/10 text-success border-success/20" },
+  ricevuta: { label: "Ricevuta", className: "bg-primary/10 text-primary border-primary/20" },
+  autofattura: { label: "Autofattura", className: "bg-warning/10 text-warning border-warning/20" },
 };

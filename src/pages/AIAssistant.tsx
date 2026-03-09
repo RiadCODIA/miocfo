@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Bot, Send, User, Loader2 } from "lucide-react";
+import { Bot, Send, User, Loader2, Lock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,9 @@ import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
+import { useAIUsage } from "@/hooks/useAIUsage";
+import { AIRechargeModal } from "@/components/payment/AIRechargeModal";
+import { useNavigate } from "react-router-dom";
 
 interface ChatMessage {
   id: string;
@@ -28,8 +31,10 @@ export default function AIAssistant() {
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
+  const [rechargeOpen, setRechargeOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  
+  const { isBlocked, usage } = useAIUsage();
+  const navigate = useNavigate();
 
   useEffect(() => {
     scrollRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -38,6 +43,14 @@ export default function AIAssistant() {
   const handleSend = useCallback(async () => {
     const text = input.trim();
     if (!text || isStreaming) return;
+
+    if (isBlocked) {
+      toast.error("Limite AI raggiunto", {
+        description: "Ricarica il credito AI per continuare a usare l'assistente.",
+      });
+      setRechargeOpen(true);
+      return;
+    }
 
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: text };
     const historyForAI = [...messages.filter(m => m.id !== "welcome"), userMsg].map(m => ({ role: m.role, content: m.content }));
@@ -84,7 +97,8 @@ export default function AIAssistant() {
         if (resp.status === 429) {
           toast.error("Rate limit", { description: "Troppe richieste. Riprova tra poco." });
         } else if (resp.status === 402) {
-          toast.error("Crediti esauriti", { description: "Aggiungi crediti al workspace Lovable." });
+          toast.error("Crediti esauriti", { description: "Ricarica il credito AI per continuare." });
+          setRechargeOpen(true);
         } else {
           toast.error("Errore", { description: err.error || "Errore nella risposta AI." });
         }
@@ -121,7 +135,6 @@ export default function AIAssistant() {
         }
       }
 
-      // Flush remaining
       if (buffer.trim()) {
         for (let raw of buffer.split("\n")) {
           if (!raw || !raw.startsWith("data: ")) continue;
@@ -140,7 +153,7 @@ export default function AIAssistant() {
     } finally {
       setIsStreaming(false);
     }
-  }, [input, isStreaming, messages, toast]);
+  }, [input, isStreaming, messages, isBlocked]);
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
@@ -150,6 +163,29 @@ export default function AIAssistant() {
           Il tuo CFO virtuale — risposte basate esclusivamente sui tuoi dati reali
         </p>
       </div>
+
+      {/* AI Blocked Banner (inline) */}
+      {isBlocked && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Lock className="h-5 w-5 text-destructive shrink-0" />
+            <div>
+              <p className="text-sm font-medium text-foreground">Hai raggiunto il limite AI del tuo piano.</p>
+              <p className="text-xs text-muted-foreground">
+                Consumo: €{usage?.costAccumulated.toFixed(2)} / €{usage?.budgetAvailable.toFixed(2)}
+              </p>
+            </div>
+          </div>
+          <div className="flex gap-2 shrink-0">
+            <Button size="sm" variant="outline" onClick={() => setRechargeOpen(true)}>
+              Ricarica
+            </Button>
+            <Button size="sm" onClick={() => navigate("/piani-pricing")}>
+              Upgrade
+            </Button>
+          </div>
+        </div>
+      )}
 
       <Card className="flex-1 flex flex-col overflow-hidden">
         <ScrollArea className="flex-1 p-4">
@@ -207,18 +243,32 @@ export default function AIAssistant() {
             className="flex gap-2"
           >
             <Input
-              placeholder="Chiedimi dei tuoi dati finanziari..."
+              placeholder={isBlocked ? "AI bloccata — ricarica il credito per continuare..." : "Chiedimi dei tuoi dati finanziari..."}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               className="flex-1"
-              disabled={isStreaming}
+              disabled={isStreaming || isBlocked}
             />
-            <Button type="submit" size="icon" disabled={!input.trim() || isStreaming}>
+            <Button type="submit" size="icon" disabled={!input.trim() || isStreaming || isBlocked}>
               {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </form>
+          {isBlocked && (
+            <p className="text-xs text-destructive mt-2 text-center">
+              Limite AI raggiunto.{" "}
+              <button onClick={() => setRechargeOpen(true)} className="underline font-medium">
+                Ricarica credito
+              </button>
+              {" "}o{" "}
+              <button onClick={() => navigate("/piani-pricing")} className="underline font-medium">
+                passa a un piano superiore
+              </button>
+            </p>
+          )}
         </div>
       </Card>
+
+      <AIRechargeModal open={rechargeOpen} onOpenChange={setRechargeOpen} />
     </div>
   );
 }
