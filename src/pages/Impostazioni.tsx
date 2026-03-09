@@ -175,6 +175,18 @@ export default function Impostazioni() {
               </div>
 
               <div className="space-y-2">
+                <Label htmlFor="vatNumber" className="text-muted-foreground">Partita IVA</Label>
+                <Input
+                  id="vatNumber"
+                  value={vatNumber}
+                  onChange={(e) => setVatNumber(e.target.value)}
+                  placeholder="IT12345678901"
+                  className="bg-secondary border-border focus:border-primary"
+                />
+                <p className="text-xs text-muted-foreground">Usata per rilevare automaticamente la direzione fatture (emessa/ricevuta)</p>
+              </div>
+
+              <div className="space-y-2">
                 <Label htmlFor="email" className="text-muted-foreground">Email</Label>
                 <div className="relative">
                   <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />

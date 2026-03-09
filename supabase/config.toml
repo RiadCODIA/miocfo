@@ -29,3 +29,30 @@ verify_jwt = false
 
 [functions.powens]
 verify_jwt = false
+
+[functions.create-ai-recharge-checkout]
+verify_jwt = false
+
+[functions.stripe-webhook-ai-recharge]
+verify_jwt = false
+
+[functions.reset-ai-usage]
+verify_jwt = false
+
+[functions.analyze-kpi]
+verify_jwt = false
+
+[functions.analyze-spending]
+verify_jwt = false
+
+[functions.check-alerts]
+verify_jwt = false
+
+[functions.send-alert-email]
+verify_jwt = false
+
+[functions.process-bank-statement]
+verify_jwt = false
+
+[functions.create-client-user]
+verify_jwt = false

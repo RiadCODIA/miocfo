@@ -24,6 +24,8 @@ import { InvoiceTypeDialog } from "@/components/fatture/InvoiceTypeDialog";
 import { toast } from "sonner";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useAIUsage } from "@/hooks/useAIUsage";
+import { AIRechargeModal } from "@/components/payment/AIRechargeModal";
 
 interface DbInvoice {
   id: string;
@@ -102,8 +104,10 @@ export default function Fatture() {
   const [supplierFilter, setSupplierFilter] = useState<string>("all");
   const [pendingFiles, setPendingFiles] = useState<File[] | null>(null);
   const [isTypeDialogOpen, setIsTypeDialogOpen] = useState(false);
+  const [rechargeModalOpen, setRechargeModalOpen] = useState(false);
   
   const queryClient = useQueryClient();
+  const { isBlocked: isAIBlocked, usage: aiUsage } = useAIUsage();
 
   // Fetch invoices from database
   const { data: invoices = [], isLoading } = useQuery({
@@ -224,6 +228,14 @@ export default function Fatture() {
 
   // When user drops/selects files, show type dialog first
   const handleUpload = (files: File[]) => {
+    // Check AI block status before allowing upload
+    if (isAIBlocked) {
+      toast.error("Limite AI raggiunto", {
+        description: "Hai esaurito il credito AI del tuo piano. Ricarica per caricare nuove fatture.",
+      });
+      setRechargeModalOpen(true);
+      return;
+    }
     setPendingFiles(files);
     setIsTypeDialogOpen(true);
   };
@@ -751,6 +763,8 @@ export default function Fatture() {
         onCancel={handleTypeCancel}
         fileCount={pendingFiles?.length || 0}
       />
+
+      <AIRechargeModal open={rechargeModalOpen} onOpenChange={setRechargeModalOpen} />
     </div>
   );
 }
