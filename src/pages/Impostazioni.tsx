@@ -74,6 +74,7 @@ export default function Impostazioni() {
       await updateProfile.mutateAsync({
         first_name: firstName,
         last_name: lastName,
+        vat_number: vatNumber || undefined,
       });
 
       if (newPassword.length > 0) {
