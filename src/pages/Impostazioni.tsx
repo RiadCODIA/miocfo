@@ -49,6 +49,7 @@ export default function Impostazioni() {
     if (profile) {
       setFirstName(profile.first_name || "");
       setLastName(profile.last_name || "");
+      setVatNumber((profile as any).vat_number || "");
     }
   }, [profile]);
 
