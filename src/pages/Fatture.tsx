@@ -763,6 +763,8 @@ export default function Fatture() {
         onCancel={handleTypeCancel}
         fileCount={pendingFiles?.length || 0}
       />
+
+      <AIRechargeModal open={rechargeModalOpen} onOpenChange={setRechargeModalOpen} />
     </div>
   );
 }
