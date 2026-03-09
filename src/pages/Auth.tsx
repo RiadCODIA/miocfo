@@ -131,6 +131,7 @@ export default function Auth() {
       first_name: firstName,
       last_name: lastName,
       company_name: companyName || undefined,
+      vat_number: vatNumber || undefined,
       role: 'user',
     });
     setIsSubmitting(false);
