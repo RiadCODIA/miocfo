@@ -48,6 +48,7 @@ export default function Auth() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [vatNumber, setVatNumber] = useState("");
   
 
   // Redirect if already authenticated
@@ -130,6 +131,7 @@ export default function Auth() {
       first_name: firstName,
       last_name: lastName,
       company_name: companyName || undefined,
+      vat_number: vatNumber || undefined,
       role: 'user',
     });
     setIsSubmitting(false);
@@ -281,6 +283,18 @@ export default function Auth() {
                       className="pl-10"
                     />
                   </div>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="vatNumber">Partita IVA (opzionale)</Label>
+                  <Input
+                    id="vatNumber"
+                    type="text"
+                    placeholder="IT12345678901"
+                    value={vatNumber}
+                    onChange={(e) => setVatNumber(e.target.value)}
+                    maxLength={16}
+                  />
                 </div>
                 
                 
