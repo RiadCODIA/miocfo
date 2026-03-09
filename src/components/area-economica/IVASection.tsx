@@ -129,8 +129,8 @@ export function IVASection({ year, ivaRicavi, ivaCosti }: IVASectionProps) {
           </thead>
           <tbody>
             <tr>
-              <td className="py-2 px-3 font-medium text-success">{fmt(ivaCredito)}</td>
               <td className="py-2 px-3 font-medium text-destructive">{fmt(ivaDebito)}</td>
+              <td className="py-2 px-3 font-medium text-success">{fmt(ivaCredito)}</td>
               <td className={`py-2 px-3 font-bold ${ivaNetta >= 0 ? "text-success" : "text-destructive"}`}>
                 {fmt(ivaNetta)}
               </td>
