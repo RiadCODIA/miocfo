@@ -35,9 +35,42 @@ serve(async (req) => {
 
     let totalCategorized = 0;
 
-    // Process each user separately
+    // Process each user separately (skip blocked users)
+    const currentMonthYear = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+
     for (const userId of uniqueUserIds) {
       console.log(`[Auto-Categorize] Processing user: ${userId}`);
+
+      // Check if user is AI-blocked
+      const { data: aiUsage } = await supabase
+        .from('ai_usage_monthly')
+        .select('cost_accumulated, credit_recharged')
+        .eq('user_id', userId)
+        .eq('month_year', currentMonthYear)
+        .maybeSingle();
+
+      if (aiUsage) {
+        let planLimit = 5;
+        const { data: subData } = await supabase
+          .from('user_subscriptions')
+          .select('plan_id')
+          .eq('user_id', userId)
+          .eq('status', 'active')
+          .maybeSingle();
+        if (subData?.plan_id) {
+          const { data: planData } = await supabase
+            .from('subscription_plans')
+            .select('ai_monthly_limit_eur')
+            .eq('id', subData.plan_id)
+            .single();
+          if (planData?.ai_monthly_limit_eur) planLimit = Number(planData.ai_monthly_limit_eur);
+        }
+        const budgetAvailable = planLimit + Number(aiUsage.credit_recharged || 0);
+        if (Number(aiUsage.cost_accumulated || 0) >= budgetAvailable) {
+          console.log(`[Auto-Categorize] User ${userId} is AI-blocked, skipping`);
+          continue;
+        }
+      }
 
       try {
         const response = await fetch(`${supabaseUrl}/functions/v1/categorize-transactions`, {
