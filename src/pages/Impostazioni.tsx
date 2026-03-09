@@ -30,6 +30,7 @@ export default function Impostazioni() {
   // Profile state
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
+  const [vatNumber, setVatNumber] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [profileSaving, setProfileSaving] = useState(false);
 
