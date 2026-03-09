@@ -48,6 +48,7 @@ export default function Auth() {
   const [firstName, setFirstName] = useState("");
   const [lastName, setLastName] = useState("");
   const [companyName, setCompanyName] = useState("");
+  const [vatNumber, setVatNumber] = useState("");
   
 
   // Redirect if already authenticated
