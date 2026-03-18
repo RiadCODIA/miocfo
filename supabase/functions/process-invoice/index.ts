@@ -274,9 +274,9 @@ function applyVATFallback(invoice: ExtractedInvoice): ExtractedInvoice {
 }
 
 async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, userCompanyName?: string, categoryNames?: string[]): Promise<ExtractedInvoice> {
-  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!lovableApiKey) {
-    console.warn('LOVABLE_API_KEY non configurata');
+  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+  if (!openaiApiKey) {
+    console.warn('OPENAI_API_KEY non configurata');
     return {
       invoice_number: `PDF-${Date.now()}`, invoice_date: new Date().toISOString().split('T')[0],
       sender_name: 'Fornitore Sconosciuto', recipient_name: '', invoice_direction: 'ricevuta',
