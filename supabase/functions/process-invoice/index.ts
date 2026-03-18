@@ -1,6 +1,7 @@
 import "https://deno.land/x/xhr@0.1.0/mod.ts";
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { getDocument } from "https://esm.sh/pdfjs-serverless";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -23,7 +24,7 @@ interface ExtractedInvoice {
   currency: string;
   due_date?: string;
   raw_data?: Record<string, unknown>;
-  ai_confidence?: number;  // 0-1
+  ai_confidence?: number;
   parsed_from_xml?: boolean;
 }
 
@@ -98,52 +99,39 @@ function parseXMLInvoice(xmlContent: string): ExtractedInvoice | null {
       return match ? match[1] : '';
     };
 
-    // Header
     const header = getSection('FatturaElettronicaHeader') || xmlContent;
     const body = getSection('FatturaElettronicaBody') || xmlContent;
 
-    // Sender VAT (CedentePrestatore)
     const cedente = getSection('CedentePrestatore');
     const senderVat = get('IdCodice', cedente) || get('CodiceFiscale', cedente) || '';
     const senderName = get('Denominazione', cedente) || get('Nome', cedente) || 'Sconosciuto';
 
-    // Recipient VAT (CessionarioCommittente)
     const cessionario = getSection('CessionarioCommittente');
     const recipientVat = get('IdCodice', cessionario) || get('CodiceFiscale', cessionario) || '';
     const recipientName = get('Denominazione', cessionario) || get('Nome', cessionario) || '';
 
-    // Invoice number and date
     const datiGenerali = getSection('DatiGeneraliDocumento') || body;
     const invoiceNumber = get('Numero', datiGenerali) || `XML-${Date.now()}`;
     const rawDate = get('Data', datiGenerali);
     const invoiceDate = rawDate ? rawDate.substring(0, 10) : new Date().toISOString().split('T')[0];
 
-    // Totals from ImportoTotaleDocumento
     let totalAmount = parseFloat(get('ImportoTotaleDocumento', datiGenerali)) || 0;
 
-    // Line items: PrezzoTotale (already includes VAT for the line)
     const prezziTotali = getAll('PrezzoTotale').map(v => parseFloat(v) || 0);
     const prezzoTotaleSum = prezziTotali.reduce((a, b) => a + b, 0);
 
-    // VAT: Imposta (from DatiRiepilogo)
     const impostaValues = getAll('Imposta').map(v => parseFloat(v) || 0);
     const vatAmount = impostaValues.reduce((a, b) => a + b, 0);
 
-    // Imponibile (taxable base)
     const imponibileValues = getAll('ImponibileImporto').map(v => parseFloat(v) || 0);
     let taxableAmount = imponibileValues.reduce((a, b) => a + b, 0);
 
-    // Use PrezzoTotale if imponibile not found
     if (taxableAmount === 0 && prezzoTotaleSum > 0) taxableAmount = prezzoTotaleSum;
-
-    // Calculate total if missing
     if (totalAmount === 0) totalAmount = taxableAmount + vatAmount;
 
-    // VAT rate
     const aliquoteIVA = getAll('AliquotaIVA').map(v => parseFloat(v) || 0);
     const vatRate = aliquoteIVA.length > 0 ? aliquoteIVA[0] : (taxableAmount > 0 && vatAmount > 0 ? Math.round((vatAmount / taxableAmount) * 100) : 0);
 
-    // Due date
     const pagamento = getSection('DettaglioPagamento') || body;
     const rawDueDate = get('DataScadenzaPagamento', pagamento);
     const dueDate = rawDueDate ? rawDueDate.substring(0, 10) : undefined;
@@ -160,7 +148,7 @@ function parseXMLInvoice(xmlContent: string): ExtractedInvoice | null {
       sender_vat: senderVat || undefined,
       recipient_name: recipientName,
       recipient_vat: recipientVat || undefined,
-      invoice_direction: 'ricevuta', // will be corrected by VAT comparison
+      invoice_direction: 'ricevuta',
       category_name: '',
       taxable_amount: Math.round(taxableAmount * 100) / 100,
       vat_rate: vatRate,
@@ -273,7 +261,45 @@ function applyVATFallback(invoice: ExtractedInvoice): ExtractedInvoice {
   return { ...invoice, taxable_amount, vat_amount, vat_rate, total_amount };
 }
 
-async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, userCompanyName?: string, categoryNames?: string[]): Promise<ExtractedInvoice> {
+function bytesToBase64(fileData: Uint8Array): string {
+  let binaryStr = '';
+  const chunkSize = 8192;
+  for (let i = 0; i < fileData.length; i += chunkSize) {
+    const chunk = fileData.subarray(i, i + chunkSize);
+    for (let j = 0; j < chunk.length; j++) binaryStr += String.fromCharCode(chunk[j]);
+  }
+  return btoa(binaryStr);
+}
+
+async function extractTextFromPdf(fileData: Uint8Array): Promise<string> {
+  try {
+    const pdfDocument = await getDocument({
+      data: fileData,
+      useSystemFonts: true,
+    }).promise;
+
+    const maxPages = Math.min(pdfDocument.numPages, 10);
+    const pageTexts: string[] = [];
+
+    for (let pageNumber = 1; pageNumber <= maxPages; pageNumber++) {
+      const page = await pdfDocument.getPage(pageNumber);
+      const textContent = await page.getTextContent();
+      const pageText = (textContent.items as Array<{ str?: string }>)
+        .map((item) => item.str?.trim() || '')
+        .filter(Boolean)
+        .join(' ');
+
+      if (pageText) pageTexts.push(pageText);
+    }
+
+    return pageTexts.join('\n\n').replace(/\s+/g, ' ').trim();
+  } catch (error) {
+    console.error('PDF text extraction error:', error);
+    return '';
+  }
+}
+
+async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, userCompanyName?: string, _categoryNames?: string[]): Promise<ExtractedInvoice> {
   const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
   if (!openaiApiKey) {
     console.warn('OPENAI_API_KEY non configurata');
@@ -284,29 +310,13 @@ async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, user
       raw_data: { note: 'API key mancante', file_name: fileName }, ai_confidence: 0,
     };
   }
-  try {
-    let binaryStr = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < fileData.length; i += chunkSize) {
-      const chunk = fileData.subarray(i, i + chunkSize);
-      for (let j = 0; j < chunk.length; j++) binaryStr += String.fromCharCode(chunk[j]);
-    }
-    const base64Data = btoa(binaryStr);
-    const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
-    const mimeType = isImage ? `image/${fileName.split('.').pop()?.toLowerCase().replace('jpg', 'jpeg')}` : 'application/pdf';
-    const companyContext = userCompanyName ? `\nL'azienda dell'utente si chiama: "${userCompanyName}". Se appare come MITTENTE → "emessa". Se DESTINATARIO → "ricevuta".` : '';
-    const revenueCatList = REVENUE_CATEGORIES.join(', ');
-    const expenseCatList = EXPENSE_CATEGORIES.join(', ');
-    const response = await fetch('https://api.openai.com/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Authorization': `Bearer ${openaiApiKey}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: 'gpt-4o-mini',
-        messages: [{
-          role: 'user',
-          content: [{
-            type: 'text',
-            text: `Sei un ESPERTO CONTABILE italiano. Analizza questa fattura ed estrai i seguenti dati in formato JSON:
+
+  const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(fileName);
+  const isPdf = /\.pdf$/i.test(fileName);
+  const revenueCatList = REVENUE_CATEGORIES.join(', ');
+  const expenseCatList = EXPENSE_CATEGORIES.join(', ');
+  const companyContext = userCompanyName ? `\nL'azienda dell'utente si chiama: "${userCompanyName}". Se appare come MITTENTE → "emessa". Se DESTINATARIO → "ricevuta".` : '';
+  const promptText = `Sei un ESPERTO CONTABILE italiano. Analizza questa fattura ed estrai i seguenti dati in formato JSON:
 {
   "invoice_number": "numero fattura",
   "invoice_date": "YYYY-MM-DD",
@@ -327,11 +337,49 @@ CATEGORIE CONTO ECONOMICO:
 - Se EMESSA: [${revenueCatList}]
 - Se RICEVUTA: [${expenseCatList}]
 ${companyContext}
-Rispondi SOLO con il JSON valido.`
-          }, { type: 'image_url', image_url: { url: `data:${mimeType};base64,${base64Data}` } }]
-        }]
-      })
+Rispondi SOLO con il JSON valido.`;
+
+  try {
+    let content: Array<Record<string, unknown>>;
+    let inputMode: 'image' | 'pdf_text' = 'image';
+    let pdfText = '';
+
+    if (isPdf) {
+      pdfText = await extractTextFromPdf(fileData);
+      inputMode = 'pdf_text';
+
+      if (pdfText.length < 80) {
+        throw new Error('AI extraction failed: PDF input not supported as image and the PDF does not contain enough selectable text. Carica un PDF testuale o un\'immagine JPG/PNG.');
+      }
+
+      content = [{
+        type: 'text',
+        text: `${promptText}\n\nTESTO ESTRATTO DAL PDF:\n${pdfText.slice(0, 20000)}`,
+      }];
+    } else {
+      const base64Data = bytesToBase64(fileData);
+      const mimeType = isImage ? `image/${fileName.split('.').pop()?.toLowerCase().replace('jpg', 'jpeg')}` : 'application/octet-stream';
+      content = [{
+        type: 'text',
+        text: promptText,
+      }, {
+        type: 'image_url',
+        image_url: { url: `data:${mimeType};base64,${base64Data}` },
+      }];
+    }
+
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${openaiApiKey}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        messages: [{
+          role: 'user',
+          content,
+        }],
+      }),
     });
+
     if (!response.ok) {
       const errorText = await response.text();
       console.error('AI error:', response.status, errorText);
@@ -339,22 +387,25 @@ Rispondi SOLO con il JSON valido.`
       if (response.status === 402) throw new Error('Quota AI esaurita');
       throw new Error(`AI error: ${response.status}`);
     }
+
     const result = await response.json();
-    const content = result.choices?.[0]?.message?.content || '';
-    let jsonStr = content.trim();
+    const contentText = result.choices?.[0]?.message?.content || '';
+    let jsonStr = contentText.trim();
     if (jsonStr.startsWith('```json')) jsonStr = jsonStr.replace(/^```json\s*/, '').replace(/\s*```$/, '');
     else if (jsonStr.startsWith('```')) jsonStr = jsonStr.replace(/^```\s*/, '').replace(/\s*```$/, '');
     const jsonMatch = jsonStr.match(/\{[\s\S]*\}/);
     if (jsonMatch) jsonStr = jsonMatch[0];
+
     const extracted = JSON.parse(jsonStr);
     const parseNum = (val: unknown): number => {
       if (typeof val === 'number') return val;
       if (typeof val === 'string') return parseFloat(val.replace(/\./g, '').replace(',', '.')) || 0;
       return 0;
     };
-    const direction = (extracted.invoice_direction === 'emessa') ? 'emessa' : 'ricevuta';
+
+    const direction = extracted.invoice_direction === 'emessa' ? 'emessa' : 'ricevuta';
     const confidence = parseNum(extracted.confidence);
-    let result_invoice: ExtractedInvoice = {
+    let resultInvoice: ExtractedInvoice = {
       invoice_number: extracted.invoice_number || `PDF-${Date.now()}`,
       invoice_date: extracted.invoice_date || new Date().toISOString().split('T')[0],
       sender_name: extracted.sender_name || 'Sconosciuto',
@@ -369,18 +420,29 @@ Rispondi SOLO con il JSON valido.`
       total_amount: parseNum(extracted.total_amount) || (parseNum(extracted.taxable_amount) + parseNum(extracted.vat_amount)),
       due_date: extracted.due_date || undefined,
       currency: 'EUR',
-      raw_data: { ai_extracted: true, original_filename: fileName, ai_response: extracted },
+      raw_data: {
+        ai_extracted: true,
+        original_filename: fileName,
+        ai_response: extracted,
+        input_mode: inputMode,
+        ...(isPdf ? { pdf_text_length: pdfText.length } : {}),
+      },
       ai_confidence: confidence > 0 ? confidence : 0.7,
     };
-    result_invoice = applyVATFallback(result_invoice);
-    return result_invoice;
+
+    resultInvoice = applyVATFallback(resultInvoice);
+    return resultInvoice;
   } catch (error) {
     console.error('AI extraction error:', error);
     return {
       invoice_number: `PDF-${Date.now()}`, invoice_date: new Date().toISOString().split('T')[0],
       sender_name: 'Fornitore Sconosciuto', recipient_name: '', invoice_direction: 'ricevuta',
       category_name: '', taxable_amount: 0, vat_rate: 0, vat_amount: 0, total_amount: 0, currency: 'EUR',
-      raw_data: { error: error instanceof Error ? error.message : 'Unknown', file_name: fileName },
+      raw_data: {
+        error: error instanceof Error ? error.message : 'Unknown',
+        file_name: fileName,
+        input_mode: isPdf ? 'pdf_text' : (isImage ? 'image' : 'unsupported'),
+      },
       ai_confidence: 0,
     };
   }
