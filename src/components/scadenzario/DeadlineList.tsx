@@ -118,8 +118,7 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
 
   return (
     <>
-      <div className="max-h-[500px] overflow-hidden">
-      <ScrollArea className="h-full">
+      <ScrollArea className="h-[500px] max-h-[65vh]" type="always">
       <div className="space-y-3 pr-3">
         {deadlines.map((deadline, index) => {
           const dueDate = new Date(deadline.dueDate);
@@ -228,7 +227,6 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
         })}
       </div>
       </ScrollArea>
-      </div>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
