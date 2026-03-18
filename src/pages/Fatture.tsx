@@ -218,8 +218,27 @@ export default function Fatture() {
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['invoices'] });
+
+      const extractionFailures = data.results.reduce((total: number, result: any) => {
+        const invoices = Array.isArray(result?.invoices) ? result.invoices : [];
+
+        return total + invoices.filter((invoice: any) => {
+          const rawError = invoice?.raw_data && typeof invoice.raw_data === 'object'
+            ? invoice.raw_data.error
+            : undefined;
+
+          return invoice?.ai_confidence === 0 || typeof rawError === 'string';
+        }).length;
+      }, 0);
+
       const failedMsg = data.failed > 0 ? ` (${data.failed} non elaborate)` : '';
       toast.success("Fatture elaborate", { description: `${data.total_invoices} fatture estratte da ${data.processed} file.${failedMsg}` });
+
+      if (extractionFailures > 0) {
+        toast.warning("Estrazione AI fallita", {
+          description: `${extractionFailures} fatture sono state caricate ma la lettura AI non è riuscita. Se il PDF è scannerizzato, riprova con un PDF testuale o un'immagine JPG/PNG.`,
+        });
+      }
     },
     onError: (error: Error) => {
       toast.error("Errore", { description: error.message });
