@@ -300,7 +300,7 @@ export function ContoEconomicoTab() {
           <div className="flex items-center gap-3">
             <Button variant="outline" size="sm" onClick={handleAutoLoad} disabled={autoLoading} className="gap-2">
               {autoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {autoLoading ? "Caricamento..." : "Carica dati in automatico"}
+              {autoLoading ? "Categorizzazione..." : "Categorizza in automatico"}
             </Button>
             <Button variant="outline" size="sm" onClick={handleAIAnalysis} disabled={aiLoading} className="gap-2">
               {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
