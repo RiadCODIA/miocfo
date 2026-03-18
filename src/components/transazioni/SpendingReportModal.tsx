@@ -104,13 +104,19 @@ function toStringArray(value: unknown): string[] {
   return value.map((item) => toString(item)).filter(Boolean);
 }
 
-function normalizePriority(value: unknown): "urgente" | "alta" | "media" | "bassa" | undefined {
+function normalizeSuggestionPriority(value: unknown): "alta" | "media" | "bassa" | undefined {
   const normalized = toString(value).toLowerCase();
-  if (["urgente", "urgent", "critical", "critico"].includes(normalized)) return "urgente";
   if (["alta", "high", "alto"].includes(normalized)) return "alta";
   if (["media", "medium", "medio"].includes(normalized)) return "media";
   if (["bassa", "low", "basso"].includes(normalized)) return "bassa";
   return undefined;
+}
+
+function normalizeActionPriority(value: unknown): "urgente" | "alta" | "media" {
+  const normalized = toString(value).toLowerCase();
+  if (["urgente", "urgent", "critical", "critico"].includes(normalized)) return "urgente";
+  if (["alta", "high", "alto"].includes(normalized)) return "alta";
+  return "media";
 }
 
 function normalizeSupplierStatus(value: unknown, amount = 0): "high" | "ok" | "low" {
@@ -141,9 +147,9 @@ function normalizeRiskLevel(value: unknown): "low" | "medium" | "high" | "critic
 function normalizeSpendingAnalysis(analysis: SpendingAnalysis | null): SpendingAnalysis | null {
   if (!analysis) return null;
 
-  const rawAi = isRecord(analysis.aiAnalysis) ? analysis.aiAnalysis : {};
+  const rawAi: UnknownRecord = isRecord(analysis.aiAnalysis) ? analysis.aiAnalysis : {};
   const criticalAreas = toArray(rawAi.criticalAreas).map((item) => {
-    const record = isRecord(item) ? item : {};
+    const record: UnknownRecord = isRecord(item) ? item : {};
     return {
       category: toString(record.category ?? record.name ?? record.area, "Area non specificata"),
       amount: toNumber(record.amount ?? record.totalAmount ?? record.value, 0),
@@ -154,19 +160,19 @@ function normalizeSpendingAnalysis(analysis: SpendingAnalysis | null): SpendingA
   }).filter((item) => item.category || item.warning);
 
   const savingSuggestions = toArray(rawAi.savingSuggestions).map((item, index) => {
-    const record = isRecord(item) ? item : {};
+    const record: UnknownRecord = isRecord(item) ? item : {};
     return {
       title: toString(record.title ?? record.name, `Suggerimento ${index + 1}`),
       description: toString(record.description ?? record.note ?? record.rationale, "Nessun dettaglio disponibile"),
       estimatedSaving: toNumber(record.estimatedSaving ?? record.saving ?? record.amount, 0),
-      priority: normalizePriority(record.priority),
+      priority: normalizeSuggestionPriority(record.priority),
       timeline: toString(record.timeline ?? record.when, "") || undefined,
       steps: toStringArray(record.steps ?? record.actions),
     };
   }).filter((item) => item.title || item.description);
 
   const supplierAnalysis = toArray(rawAi.supplierAnalysis).map((item) => {
-    const record = isRecord(item) ? item : {};
+    const record: UnknownRecord = isRecord(item) ? item : {};
     const amount = toNumber(record.amount ?? record.totalAmount ?? record.spending, 0);
     return {
       name: toString(record.name ?? record.supplier ?? record.vendor, "Fornitore non specificato"),
@@ -178,22 +184,28 @@ function normalizeSpendingAnalysis(analysis: SpendingAnalysis | null): SpendingA
     };
   }).filter((item) => item.name);
 
-  const actionItems = toArray(rawAi.actionItems).map((item) => {
-    if (typeof item === "string") return item;
+  const actionItems: ActionItem[] = toArray(rawAi.actionItems).map((item) => {
+    if (typeof item === "string") {
+      return {
+        action: item,
+        priority: "media",
+        impact: "Da valutare",
+      };
+    }
 
-    const record = isRecord(item) ? item : {};
+    const record: UnknownRecord = isRecord(item) ? item : {};
     return {
       action: toString(record.action ?? record.description ?? record.title, "Azione consigliata"),
-      priority: normalizePriority(record.priority) ?? "media",
+      priority: normalizeActionPriority(record.priority),
       impact: toString(record.impact ?? record.expectedImpact ?? record.outcome, "Da valutare"),
-    } satisfies ActionItem;
-  }).filter((item) => typeof item === "string" ? item.trim().length > 0 : item.action.trim().length > 0);
+    };
+  }).filter((item) => item.action.trim().length > 0);
 
-  const summarySource = isRecord(rawAi.summary) ? rawAi.summary : {};
-  const trendSource = isRecord(rawAi.trendAnalysis) ? rawAi.trendAnalysis : {};
-  const cashFlowSource = isRecord(rawAi.cashFlowHealth) ? rawAi.cashFlowHealth : {};
+  const summarySource: UnknownRecord = isRecord(rawAi.summary) ? rawAi.summary : {};
+  const trendSource: UnknownRecord = isRecord(rawAi.trendAnalysis) ? rawAi.trendAnalysis : {};
+  const cashFlowSource: UnknownRecord = isRecord(rawAi.cashFlowHealth) ? rawAi.cashFlowHealth : {};
   const anomalies = toArray(rawAi.anomalies).map((item) => {
-    const record = isRecord(item) ? item : {};
+    const record: UnknownRecord = isRecord(item) ? item : {};
     return {
       description: toString(record.description ?? record.reason ?? record.note, "Anomalia rilevata"),
       amount: toNumber(record.amount ?? record.value, 0),
@@ -207,7 +219,7 @@ function normalizeSpendingAnalysis(analysis: SpendingAnalysis | null): SpendingA
   const fallbackTrend = Array.isArray(analysis.monthlyTrend)
     ? analysis.monthlyTrend
     : toArray(trendSource.monthlyTrend).map((item) => {
-        const record = isRecord(item) ? item : {};
+        const record: UnknownRecord = isRecord(item) ? item : {};
         return {
           month: toString(record.month),
           spending: toNumber(record.amount ?? record.spending, 0),
@@ -257,14 +269,12 @@ function normalizeSpendingAnalysis(analysis: SpendingAnalysis | null): SpendingA
         mainRisk: toString(summarySource.mainRisk ?? summarySource.risk ?? rawAi.mainRisk, "Monitorare le aree a maggiore assorbimento di cassa"),
         recommendation: toString(
           summarySource.recommendation ?? rawAi.recommendation,
-          savingSuggestions[0]?.description ||
-            (typeof actionItems[0] === "string" ? actionItems[0] : actionItems[0]?.action) ||
-            "Analizza i costi principali e intervieni sulle anomalie più rilevanti",
+          savingSuggestions[0]?.description || actionItems[0]?.action || "Analizza i costi principali e intervieni sulle anomalie più rilevanti",
         ),
       },
       trendAnalysis: {
         monthlyTrend: toArray(trendSource.monthlyTrend).map((item) => {
-          const record = isRecord(item) ? item : {};
+          const record: UnknownRecord = isRecord(item) ? item : {};
           return {
             month: toString(record.month),
             amount: toNumber(record.amount ?? record.spending ?? record.value, 0),
