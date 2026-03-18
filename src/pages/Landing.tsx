@@ -87,7 +87,7 @@ const plans = [
   },
 ];
 
-const allInclude = ["Connessione sicura PSD2", "Crittografia end-to-end", "Aggiornamenti automatici", "Nessun costo nascosto", "Analisi AI in tempo reale"];
+const allInclude = ["Connessione sicura PSD2", "Crittografia end-to-end", "Aggiornamento automatico", "Analisi AI in tempo reale"];
 
 // ─── FAQ Data ─────────────────────────────────────────────
 const faqCategories = [
