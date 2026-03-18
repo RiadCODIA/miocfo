@@ -1,4 +1,5 @@
 import { ArrowDownLeft, ArrowUpRight, Pencil, Trash2, Loader2, CheckCircle, FileText } from "lucide-react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
