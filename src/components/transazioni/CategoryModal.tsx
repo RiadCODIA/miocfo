@@ -21,7 +21,7 @@ import { Sparkles, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { ALLOWED_INVOICE_CATEGORIES } from "@/lib/invoice-categories";
+
 
 interface CostCategory {
   id: string;
@@ -140,10 +140,9 @@ export function CategoryModal({
 
   const isIncome = transaction ? transaction.amount >= 0 : false;
   
-  // Filter categories: income transactions see all, expense transactions see only expense categories
+  // Filter categories by type: revenue for income, expense for outflows
   const filteredCategories = categories.filter((cat) => {
-    const typeMatch = isIncome ? cat.category_type === "revenue" : cat.category_type === "expense";
-    return typeMatch && ALLOWED_INVOICE_CATEGORIES.has(cat.name);
+    return isIncome ? cat.category_type === "revenue" : cat.category_type === "expense";
   });
 
   const selectedCategory = categories.find((c) => c.id === selectedCategoryId);
