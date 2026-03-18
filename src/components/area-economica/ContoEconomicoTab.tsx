@@ -386,13 +386,7 @@ export function ContoEconomicoTab() {
         {aiReport && <div ref={aiReportRef}><AIReportSection report={aiReport} /></div>}
 
         {/* IVA Section */}
-        <IVASection
-          year={year}
-          ivaRicavi={ivaRicavi}
-          ivaCosti={ivaCosti}
-          onYearChange={setYear}
-          availableYears={[currentYear - 2, currentYear - 1, currentYear, currentYear + 1]}
-        />
+        <IVASection year={year} ivaRicavi={ivaRicavi} ivaCosti={ivaCosti} />
       </div>
     </TooltipProvider>
   );
