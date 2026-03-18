@@ -9,10 +9,9 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
-import { Brain, Loader2, AlertCircle, Users, Info, Upload } from "lucide-react";
+import { Brain, Loader2, AlertCircle, Users, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { useQueryClient } from "@tanstack/react-query";
 
 const fmt = (v: number) => v === 0 ? "" : v.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
@@ -69,8 +68,6 @@ export function ContoEconomicoTab() {
   const [personnel, setPersonnel] = useState<PersonnelData>(() => loadPersonnel(year));
   const [aiReport, setAiReport] = useState<AIReport | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
-  const [autoLoading, setAutoLoading] = useState(false);
-  const queryClient = useQueryClient();
   const aiReportRef = useRef<HTMLDivElement>(null);
 
   const { data: employeesData } = useQuery({
@@ -97,37 +94,6 @@ export function ContoEconomicoTab() {
     const updated = { ...personnel, [field]: { ...personnel[field], [month]: num } };
     setPersonnel(updated);
     savePersonnel(year, updated);
-  };
-
-  const handleAutoLoad = async () => {
-    setAutoLoading(true);
-    try {
-      toast.info("Categorizzazione transazioni in corso...");
-      const { data: result, error } = await supabase.functions.invoke("categorize-transactions", {
-        body: { batch_mode: true },
-      });
-      if (error) throw error;
-      if (result?.error) {
-        if (result.error.includes("Rate limit")) {
-          toast.error("Limite di richieste raggiunto. Riprova tra qualche secondo.");
-        } else if (result.error.includes("Payment required")) {
-          toast.error("Crediti AI esauriti. Aggiungi crediti nelle impostazioni workspace.");
-        } else {
-          toast.error(result.error);
-        }
-        return;
-      }
-      const count = result?.results?.length || 0;
-      toast.success(`${count} transazioni categorizzate con successo`);
-      // Refresh P&L data
-      queryClient.invalidateQueries({ queryKey: ["conto-economico"] });
-    } catch (e: unknown) {
-      const msg = e instanceof Error ? e.message : "Errore durante la categorizzazione automatica";
-      console.error("Auto-load error:", e);
-      toast.error("Errore", { description: msg });
-    } finally {
-      setAutoLoading(false);
-    }
   };
 
   const handleAIAnalysis = async () => {
@@ -224,13 +190,13 @@ export function ContoEconomicoTab() {
   }) => {
     const total = sumMonthly(monthlyData);
     return (
-      <tr className={cn("border-b border-border/50", options?.highlight, options?.warn && "bg-amber-500/10")}>
+      <tr className={cn("border-b border-border/50", options?.highlight, options?.warn && "bg-muted/40")}>
         <td className={cn(
           "py-1.5 px-3 text-xs whitespace-nowrap sticky left-0 z-10",
           options?.highlight ? options.highlight : "bg-card",
           options?.bold && "font-bold text-foreground",
           options?.indent && "pl-6 text-muted-foreground",
-          options?.warn && "text-amber-700 dark:text-amber-400 font-medium"
+          options?.warn && "text-foreground font-medium"
         )}>
           {options?.warn && <AlertCircle className="inline h-3 w-3 mr-1 mb-0.5" />}
           {label}
@@ -309,13 +275,9 @@ export function ContoEconomicoTab() {
         {/* Year selector + AI button */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <p className="text-sm text-muted-foreground">
-            Analisi economica mensile basata su fatture e transazioni categorizzate — Anno <strong>{year}</strong>
+            Analisi economica mensile basata solo sulle fatture — Anno <strong>{year}</strong>
           </p>
           <div className="flex items-center gap-3">
-            <Button variant="outline" size="sm" onClick={handleAutoLoad} disabled={autoLoading} className="gap-2">
-              {autoLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Upload className="h-4 w-4" />}
-              {autoLoading ? "Categorizzazione..." : "Categorizza in automatico"}
-            </Button>
             <Button variant="outline" size="sm" onClick={handleAIAnalysis} disabled={aiLoading} className="gap-2">
               {aiLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Brain className="h-4 w-4" />}
               {aiLoading ? "Analisi in corso..." : "Analisi AI"}
@@ -336,8 +298,8 @@ export function ContoEconomicoTab() {
 
         {/* Alert for uncategorized */}
         {hasUncategorized && (
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-sm">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+          <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-foreground">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <span>
               Alcune fatture ricevute non hanno una categoria abbinata e appaiono come <strong>Non categorizzato</strong>.
               Vai su <strong>Fatture</strong> per assegnare la categoria corretta a ciascuna voce.
