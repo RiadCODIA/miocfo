@@ -31,16 +31,12 @@ export function useCashFlowData() {
   return useQuery({
     queryKey: ["cashflow-monthly", fromStr, toStr],
     queryFn: async (): Promise<MonthlyData[]> => {
-      const { data: transactions, error } = await supabase
-        .from("bank_transactions")
-        .select("amount, date")
-        .gte("date", fromStr)
-        .lte("date", toStr)
-        .order("date", { ascending: true });
+      const { data: rpcData, error } = await supabase
+        .rpc("get_cashflow_summary", { p_from: fromStr, p_to: toStr });
 
       if (error) throw error;
 
-      // Build month keys spanning the selected range
+      // Build month keys spanning the selected range (so empty months appear)
       const monthlyMap = new Map<string, { incassi: number; pagamenti: number }>();
       const fromMonth = startOfMonth(dateRange.from);
       const toMonth = startOfMonth(dateRange.to);
@@ -52,12 +48,14 @@ export function useCashFlowData() {
         monthlyMap.set(key, { incassi: 0, pagamenti: 0 });
       }
 
-      transactions?.forEach((t) => {
-        const key = t.date.substring(0, 7);
+      // Merge RPC results
+      (rpcData || []).forEach((row: any) => {
+        const key = row.month_key;
         if (monthlyMap.has(key)) {
-          const current = monthlyMap.get(key)!;
-          if (t.amount > 0) current.incassi += t.amount;
-          else current.pagamenti += Math.abs(t.amount);
+          monthlyMap.set(key, {
+            incassi: Number(row.incassi),
+            pagamenti: Number(row.pagamenti),
+          });
         }
       });
 
@@ -90,21 +88,13 @@ export function useCashFlowVsBudget() {
   return useQuery({
     queryKey: ["cashflow-vs-budget", fromStr, toStr],
     queryFn: async () => {
-      const { data: transactions, error: txError } = await supabase
-        .from("bank_transactions")
-        .select("amount, date")
-        .gte("date", fromStr)
-        .lte("date", toStr)
-        .order("date", { ascending: true });
+      const [rpcRes, budgetRes] = await Promise.all([
+        supabase.rpc("get_cashflow_summary", { p_from: fromStr, p_to: toStr }),
+        supabase.from("budgets").select("*").eq("is_active", true),
+      ]);
 
-      if (txError) throw txError;
-
-      const { data: budgets, error: budgetError } = await supabase
-        .from("budgets")
-        .select("*")
-        .eq("is_active", true);
-
-      if (budgetError) throw budgetError;
+      if (rpcRes.error) throw rpcRes.error;
+      if (budgetRes.error) throw budgetRes.error;
 
       const fromMonth = startOfMonth(dateRange.from);
       const toMonth = startOfMonth(dateRange.to);
@@ -117,16 +107,16 @@ export function useCashFlowVsBudget() {
         monthlyMap.set(key, { incassi: 0, pagamenti: 0 });
       }
 
-      transactions?.forEach((t) => {
-        const key = t.date.substring(0, 7);
-        if (monthlyMap.has(key)) {
-          const current = monthlyMap.get(key)!;
-          if (t.amount > 0) current.incassi += t.amount;
-          else current.pagamenti += Math.abs(t.amount);
+      (rpcRes.data || []).forEach((row: any) => {
+        if (monthlyMap.has(row.month_key)) {
+          monthlyMap.set(row.month_key, {
+            incassi: Number(row.incassi),
+            pagamenti: Number(row.pagamenti),
+          });
         }
       });
 
-      const totalBudget = budgets?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
+      const totalBudget = budgetRes.data?.reduce((sum, b) => sum + Number(b.amount), 0) || 0;
 
       const result: { mese: string; consuntivo: number; previsionale: number }[] = [];
       monthlyMap.forEach((value, key) => {
@@ -169,6 +159,31 @@ function classifyTransaction(description: string | null): string {
   return "Altro";
 }
 
+// Helper: paginated fetch to get ALL rows (bypasses 1000-row limit)
+async function fetchAllPositiveTransactions(fromStr: string, toStr: string) {
+  const PAGE_SIZE = 1000;
+  let allRows: { amount: number; description: string | null }[] = [];
+  let offset = 0;
+  let hasMore = true;
+
+  while (hasMore) {
+    const { data, error } = await supabase
+      .from("bank_transactions")
+      .select("amount, description")
+      .gt("amount", 0)
+      .gte("date", fromStr)
+      .lte("date", toStr)
+      .range(offset, offset + PAGE_SIZE - 1);
+
+    if (error) throw error;
+    if (data) allRows = allRows.concat(data);
+    hasMore = (data?.length || 0) === PAGE_SIZE;
+    offset += PAGE_SIZE;
+  }
+
+  return allRows;
+}
+
 export function useCashFlowComposition() {
   const { dateRange } = useDateRange();
   const fromStr = dateRange.from.toISOString().split("T")[0];
@@ -177,19 +192,12 @@ export function useCashFlowComposition() {
   return useQuery({
     queryKey: ["cashflow-composition", fromStr, toStr],
     queryFn: async (): Promise<CompositionCategory[]> => {
-      const { data: transactions, error } = await supabase
-        .from("bank_transactions")
-        .select("amount, description")
-        .gt("amount", 0)
-        .gte("date", fromStr)
-        .lte("date", toStr);
-
-      if (error) throw error;
+      const transactions = await fetchAllPositiveTransactions(fromStr, toStr);
 
       const totals = new Map<string, number>();
       COMPOSITION_CATEGORIES.forEach((c) => totals.set(c.name, 0));
 
-      transactions?.forEach((t) => {
+      transactions.forEach((t) => {
         const cat = classifyTransaction(t.description);
         totals.set(cat, (totals.get(cat) || 0) + Number(t.amount));
       });
@@ -216,29 +224,17 @@ export function useCashFlowKPIs() {
   return useQuery({
     queryKey: ["cashflow-kpis", fromStr, toStr],
     queryFn: async (): Promise<CashFlowKPIs> => {
-      // Get sum of all bank account balances for Cash Flow
-      const { data: accounts } = await supabase
-        .from("bank_accounts")
-        .select("balance");
+      const [accountsRes, totalsRes] = await Promise.all([
+        supabase.from("bank_accounts").select("balance"),
+        supabase.rpc("get_cashflow_totals", { p_from: fromStr, p_to: toStr }),
+      ]);
 
-      const totalBalance = accounts?.reduce((sum, a) => sum + (Number(a.balance) || 0), 0) ?? 0;
+      const totalBalance = accountsRes.data?.reduce((sum, a) => sum + (Number(a.balance) || 0), 0) ?? 0;
 
-      // Get transactions in selected range for other KPIs
-      const { data: currentData } = await supabase
-        .from("bank_transactions")
-        .select("amount")
-        .gte("date", fromStr)
-        .lte("date", toStr);
-
-      let currentIncassi = 0;
-      let currentPagamenti = 0;
-      currentData?.forEach((t) => {
-        if (t.amount > 0) currentIncassi += t.amount;
-        else currentPagamenti += Math.abs(t.amount);
-      });
-
+      const row = totalsRes.data?.[0] || { total_income: 0, total_expenses: 0 };
+      const currentIncassi = Number(row.total_income);
+      const currentPagamenti = Number(row.total_expenses);
       const currentCashflow = currentIncassi - currentPagamenti;
-      const incidenzaCosti = currentIncassi > 0 ? (currentPagamenti / currentIncassi) * 100 : 0;
       const margineOperativo = currentIncassi > 0 ? (currentCashflow / currentIncassi) * 100 : 0;
 
       return {

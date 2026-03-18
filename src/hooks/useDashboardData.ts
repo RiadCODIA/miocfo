@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, eachDayOfInterval, parseISO, subDays, differenceInDays, startOfMonth, addMonths } from "date-fns";
+import { format, eachDayOfInterval, differenceInDays, subDays, startOfMonth, addMonths } from "date-fns";
 import { it } from "date-fns/locale";
 import { useDateRange } from "@/contexts/DateRangeContext";
 
@@ -46,41 +46,36 @@ export function useDashboardKPIs(selectedAccountId?: string | null) {
         .eq("is_connected", true);
       if (selectedAccountId) accountsQuery = accountsQuery.eq("id", selectedAccountId);
 
-      const { data: accounts, error: accountsError } = await accountsQuery;
-      if (accountsError) throw accountsError;
+      // Use RPC for totals — pick account-specific or global variant
+      const currentTotalsPromise = selectedAccountId
+        ? supabase.rpc("get_cashflow_totals_by_account", { p_from: from, p_to: to, p_account_id: selectedAccountId })
+        : supabase.rpc("get_cashflow_totals", { p_from: from, p_to: to });
 
-      const totalBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0) || 0;
+      const prevTotalsPromise = selectedAccountId
+        ? supabase.rpc("get_cashflow_totals_by_account", { p_from: prevFrom, p_to: prevTo, p_account_id: selectedAccountId })
+        : supabase.rpc("get_cashflow_totals", { p_from: prevFrom, p_to: prevTo });
 
-      // Fetch current period transactions
-      let currentTxQuery = supabase
-        .from("bank_transactions")
-        .select("amount, date")
-        .gte("date", from)
-        .lte("date", to);
-      if (selectedAccountId) currentTxQuery = currentTxQuery.eq("bank_account_id", selectedAccountId);
+      const [accountsRes, currentRes, prevRes] = await Promise.all([
+        accountsQuery,
+        currentTotalsPromise,
+        prevTotalsPromise,
+      ]);
 
-      const { data: currentTx, error: currentTxError } = await currentTxQuery;
-      if (currentTxError) throw currentTxError;
+      if (accountsRes.error) throw accountsRes.error;
+      if (currentRes.error) throw currentRes.error;
+      if (prevRes.error) throw prevRes.error;
 
-      const periodIncome = currentTx?.filter(tx => Number(tx.amount) > 0).reduce((sum, tx) => sum + Number(tx.amount), 0) || 0;
-      const periodExpenses = currentTx?.filter(tx => Number(tx.amount) < 0).reduce((sum, tx) => sum + Math.abs(Number(tx.amount)), 0) || 0;
+      const totalBalance = accountsRes.data?.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0) || 0;
+
+      const cur = currentRes.data?.[0] || { total_income: 0, total_expenses: 0 };
+      const periodIncome = Number(cur.total_income);
+      const periodExpenses = Number(cur.total_expenses);
       const netCashflow = periodIncome - periodExpenses;
 
-      // Fetch previous period transactions
-      let previousTxQuery = supabase
-        .from("bank_transactions")
-        .select("amount")
-        .gte("date", prevFrom)
-        .lte("date", prevTo);
-      if (selectedAccountId) previousTxQuery = previousTxQuery.eq("bank_account_id", selectedAccountId);
-
-      const { data: previousTx, error: previousTxError } = await previousTxQuery;
-      if (previousTxError) throw previousTxError;
-
-      const previousPeriodIncome = previousTx?.filter(tx => Number(tx.amount) > 0).reduce((sum, tx) => sum + Number(tx.amount), 0) || 0;
-      const previousPeriodExpenses = previousTx?.filter(tx => Number(tx.amount) < 0).reduce((sum, tx) => sum + Math.abs(Number(tx.amount)), 0) || 0;
-
-      const previousTotalBalance = totalBalance - (periodIncome - periodExpenses);
+      const prev = prevRes.data?.[0] || { total_income: 0, total_expenses: 0 };
+      const previousPeriodIncome = Number(prev.total_income);
+      const previousPeriodExpenses = Number(prev.total_expenses);
+      const previousTotalBalance = totalBalance - netCashflow;
 
       return {
         totalBalance,
@@ -104,32 +99,22 @@ export function useLiquidityChart() {
   return useQuery({
     queryKey: ["liquidity-chart", from, to],
     queryFn: async (): Promise<DailyBalance[]> => {
-      const { data: transactions, error: txError } = await supabase
-        .from("bank_transactions")
-        .select("amount, date")
-        .gte("date", from)
-        .lte("date", to)
-        .order("date", { ascending: true });
+      const [dailyRes, accountsRes] = await Promise.all([
+        supabase.rpc("get_daily_totals", { p_from: from, p_to: to }),
+        supabase.from("bank_accounts").select("balance").eq("is_connected", true),
+      ]);
 
-      if (txError) throw txError;
+      if (dailyRes.error) throw dailyRes.error;
+      if (accountsRes.error) throw accountsRes.error;
 
-      const { data: accounts, error: accountsError } = await supabase
-        .from("bank_accounts")
-        .select("balance")
-        .eq("is_connected", true);
+      const currentBalance = accountsRes.data?.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0) || 0;
 
-      if (accountsError) throw accountsError;
-
-      const currentBalance = accounts?.reduce((sum, acc) => sum + (Number(acc.balance) || 0), 0) || 0;
-
-      const days = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
       const dailyTotals = new Map<string, number>();
-
-      transactions?.forEach(tx => {
-        const dateKey = tx.date;
-        dailyTotals.set(dateKey, (dailyTotals.get(dateKey) || 0) + Number(tx.amount));
+      (dailyRes.data || []).forEach((row: any) => {
+        dailyTotals.set(row.day, Number(row.net_amount));
       });
 
+      const days = eachDayOfInterval({ start: dateRange.from, end: dateRange.to });
       let runningBalance = currentBalance;
       const balances: DailyBalance[] = [];
 
@@ -161,11 +146,8 @@ export function useIncomeExpenseChart() {
   return useQuery({
     queryKey: ["income-expense-chart", from, to],
     queryFn: async (): Promise<MonthlyComparison[]> => {
-      const { data: transactions, error } = await supabase
-        .from("bank_transactions")
-        .select("amount, date")
-        .gte("date", from)
-        .lte("date", to);
+      const { data: rpcData, error } = await supabase
+        .rpc("get_cashflow_summary", { p_from: from, p_to: to });
 
       if (error) throw error;
 
@@ -180,20 +162,12 @@ export function useIncomeExpenseChart() {
         cursor = addMonths(cursor, 1);
       }
 
-      transactions?.forEach(tx => {
-        const txDate = parseISO(tx.date);
-        const monthKey = format(txDate, "yyyy-MM");
-        const monthLabel = format(txDate, "MMM", { locale: it });
-        const current = monthlyData.get(monthKey) || { incassi: 0, pagamenti: 0, label: monthLabel };
-        const amount = Number(tx.amount);
-
-        if (amount > 0) {
-          current.incassi += amount;
-        } else {
-          current.pagamenti += Math.abs(amount);
+      (rpcData || []).forEach((row: any) => {
+        const existing = monthlyData.get(row.month_key);
+        if (existing) {
+          existing.incassi = Number(row.incassi);
+          existing.pagamenti = Number(row.pagamenti);
         }
-
-        monthlyData.set(monthKey, current);
       });
 
       const sortedKeys = Array.from(monthlyData.keys()).sort();
