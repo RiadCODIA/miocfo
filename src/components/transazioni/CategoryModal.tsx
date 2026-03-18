@@ -21,7 +21,7 @@ import { Sparkles, Check } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQueryClient } from "@tanstack/react-query";
-import { ALLOWED_INVOICE_CATEGORIES } from "@/lib/invoice-categories";
+
 
 interface CostCategory {
   id: string;
