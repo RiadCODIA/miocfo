@@ -62,6 +62,8 @@ interface SpendingReportModalProps {
   onOpenChange: (open: boolean) => void;
 }
 
+type UnknownRecord = Record<string, unknown>;
+
 const COLORS = [
   "hsl(var(--primary))",
   "hsl(var(--chart-2))",
@@ -70,6 +72,278 @@ const COLORS = [
   "hsl(var(--chart-5))",
   "hsl(var(--muted))",
 ];
+
+function isRecord(value: unknown): value is UnknownRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toArray<T = unknown>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (isRecord(value)) return Object.values(value) as T[];
+  return [];
+}
+
+function toString(value: unknown, fallback = ""): string {
+  if (typeof value === "string") return value.trim() || fallback;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return fallback;
+}
+
+function toNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const normalized = value.replace(/[^0-9,.-]/g, "").replace(/\.(?=.*\.)/g, "").replace(",", ".");
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => toString(item)).filter(Boolean);
+}
+
+function normalizeSuggestionPriority(value: unknown): "alta" | "media" | "bassa" | undefined {
+  const normalized = toString(value).toLowerCase();
+  if (["alta", "high", "alto"].includes(normalized)) return "alta";
+  if (["media", "medium", "medio"].includes(normalized)) return "media";
+  if (["bassa", "low", "basso"].includes(normalized)) return "bassa";
+  return undefined;
+}
+
+function normalizeActionPriority(value: unknown): "urgente" | "alta" | "media" {
+  const normalized = toString(value).toLowerCase();
+  if (["urgente", "urgent", "critical", "critico"].includes(normalized)) return "urgente";
+  if (["alta", "high", "alto"].includes(normalized)) return "alta";
+  return "media";
+}
+
+function normalizeSupplierStatus(value: unknown, amount = 0): "high" | "ok" | "low" {
+  const normalized = toString(value).toLowerCase();
+  if (["high", "alto", "critical", "critico"].includes(normalized)) return "high";
+  if (["low", "basso", "good", "buono"].includes(normalized)) return "low";
+  if (["ok", "medium", "medio", "stable", "stabile"].includes(normalized)) return "ok";
+  if (amount > 5000) return "high";
+  if (amount > 0) return "ok";
+  return "low";
+}
+
+function normalizeOverallTrend(value: unknown): "increasing" | "stable" | "decreasing" {
+  const normalized = toString(value, "stable").toLowerCase();
+  if (["increasing", "increase", "up", "crescente", "in aumento"].includes(normalized)) return "increasing";
+  if (["decreasing", "decrease", "down", "decrescente", "in calo"].includes(normalized)) return "decreasing";
+  return "stable";
+}
+
+function normalizeRiskLevel(value: unknown): "low" | "medium" | "high" | "critical" {
+  const normalized = toString(value, "medium").toLowerCase();
+  if (["low", "basso"].includes(normalized)) return "low";
+  if (["high", "alto"].includes(normalized)) return "high";
+  if (["critical", "critico"].includes(normalized)) return "critical";
+  return "medium";
+}
+
+function normalizeSpendingAnalysis(analysis: SpendingAnalysis | null): SpendingAnalysis | null {
+  if (!analysis) return null;
+
+  const rawAi: UnknownRecord = isRecord(analysis.aiAnalysis) ? analysis.aiAnalysis : {};
+  const criticalAreas = toArray(rawAi.criticalAreas).map((item) => {
+    const record: UnknownRecord = isRecord(item) ? item : {};
+    return {
+      category: toString(record.category ?? record.name ?? record.area, "Area non specificata"),
+      amount: toNumber(record.amount ?? record.totalAmount ?? record.value, 0),
+      percentage: toNumber(record.percentage ?? record.share ?? record.incidence, 0),
+      warning: toString(record.warning ?? record.description ?? record.note, "Richiede attenzione"),
+      benchmark: toString(record.benchmark ?? record.reference, "") || undefined,
+    };
+  }).filter((item) => item.category || item.warning);
+
+  const savingSuggestions = toArray(rawAi.savingSuggestions).map((item, index) => {
+    const record: UnknownRecord = isRecord(item) ? item : {};
+    return {
+      title: toString(record.title ?? record.name, `Suggerimento ${index + 1}`),
+      description: toString(record.description ?? record.note ?? record.rationale, "Nessun dettaglio disponibile"),
+      estimatedSaving: toNumber(record.estimatedSaving ?? record.saving ?? record.amount, 0),
+      priority: normalizeSuggestionPriority(record.priority),
+      timeline: toString(record.timeline ?? record.when, "") || undefined,
+      steps: toStringArray(record.steps ?? record.actions),
+    };
+  }).filter((item) => item.title || item.description);
+
+  const supplierAnalysis = toArray(rawAi.supplierAnalysis).map((item) => {
+    const record: UnknownRecord = isRecord(item) ? item : {};
+    const amount = toNumber(record.amount ?? record.totalAmount ?? record.spending, 0);
+    return {
+      name: toString(record.name ?? record.supplier ?? record.vendor, "Fornitore non specificato"),
+      amount,
+      category: toString(record.category ?? record.segment, "Non categorizzato"),
+      status: normalizeSupplierStatus(record.status ?? record.riskLevel, amount),
+      note: toString(record.note ?? record.description ?? record.reason, "") || undefined,
+      recommendation: toString(record.recommendation ?? record.action ?? record.suggestedAction, "") || undefined,
+    };
+  }).filter((item) => item.name);
+
+  const actionItems: ActionItem[] = toArray(rawAi.actionItems).map((item): ActionItem => {
+    if (typeof item === "string") {
+      return {
+        action: item,
+        priority: "media",
+        impact: "Da valutare",
+      };
+    }
+
+    const record: UnknownRecord = isRecord(item) ? item : {};
+    return {
+      action: toString(record.action ?? record.description ?? record.title, "Azione consigliata"),
+      priority: normalizeActionPriority(record.priority),
+      impact: toString(record.impact ?? record.expectedImpact ?? record.outcome, "Da valutare"),
+    };
+  }).filter((item) => item.action.trim().length > 0);
+
+  const summarySource: UnknownRecord = isRecord(rawAi.summary) ? rawAi.summary : {};
+  const trendSource: UnknownRecord = isRecord(rawAi.trendAnalysis) ? rawAi.trendAnalysis : {};
+  const cashFlowSource: UnknownRecord = isRecord(rawAi.cashFlowHealth) ? rawAi.cashFlowHealth : {};
+  const anomalies = toArray(rawAi.anomalies).map((item) => {
+    const record: UnknownRecord = isRecord(item) ? item : {};
+    return {
+      description: toString(record.description ?? record.reason ?? record.note, "Anomalia rilevata"),
+      amount: toNumber(record.amount ?? record.value, 0),
+      supplier: toString(record.supplier ?? record.name ?? record.vendor, "Voce non identificata"),
+      date: toString(record.date, "") || undefined,
+      reason: toString(record.reason ?? record.description, "Scostamento rispetto al comportamento atteso"),
+      recommendation: toString(record.recommendation ?? record.action, "Verifica la transazione e conferma la classificazione"),
+    };
+  }).filter((item) => item.supplier || item.reason);
+
+  const fallbackTrend = Array.isArray(analysis.monthlyTrend)
+    ? analysis.monthlyTrend
+    : toArray(trendSource.monthlyTrend).map((item) => {
+        const record: UnknownRecord = isRecord(item) ? item : {};
+        return {
+          month: toString(record.month),
+          spending: toNumber(record.amount ?? record.spending, 0),
+          income: toNumber(record.income, 0),
+          changePercent: toNumber(record.changePercent ?? record.change, 0),
+        };
+      });
+
+  return {
+    ...analysis,
+    totalSpent: toNumber(analysis.totalSpent, 0),
+    totalIncome: toNumber(analysis.totalIncome, 0),
+    netCashFlow: toNumber(analysis.netCashFlow, 0),
+    transactionCount: toNumber(analysis.transactionCount, 0),
+    periodMonths: toNumber(analysis.periodMonths, 1),
+    avgMonthlySpending: toNumber(analysis.avgMonthlySpending, 0),
+    categoryBreakdown: Array.isArray(analysis.categoryBreakdown)
+      ? analysis.categoryBreakdown.map((item) => ({
+          name: toString(item?.name, "Non categorizzato"),
+          totalAmount: toNumber(item?.totalAmount, 0),
+          transactionCount: toNumber(item?.transactionCount, 0),
+          percentage: toNumber(item?.percentage, 0),
+        }))
+      : [],
+    topSuppliers: Array.isArray(analysis.topSuppliers)
+      ? analysis.topSuppliers.map((item) => ({
+          name: toString(item?.name, "Fornitore non specificato"),
+          amount: toNumber(item?.amount, 0),
+          transactionCount: toNumber(item?.transactionCount, 0),
+          category: toString(item?.category, "Non categorizzato"),
+          monthlyAverage: toNumber(item?.monthlyAverage, 0),
+          avgTransactionAmount: toNumber(item?.avgTransactionAmount, 0),
+        }))
+      : [],
+    monthlyTrend: fallbackTrend,
+    aiAnalysis: {
+      criticalAreas,
+      savingSuggestions,
+      supplierAnalysis,
+      actionItems,
+      summary: {
+        potentialSavings: toNumber(
+          summarySource.potentialSavings ?? rawAi.potentialSavings,
+          savingSuggestions.reduce((total, item) => total + item.estimatedSaving, 0),
+        ),
+        criticalAlerts: toNumber(summarySource.criticalAlerts ?? rawAi.criticalAlerts, criticalAreas.length + anomalies.length),
+        mainRisk: toString(summarySource.mainRisk ?? summarySource.risk ?? rawAi.mainRisk, "Monitorare le aree a maggiore assorbimento di cassa"),
+        recommendation: toString(
+          summarySource.recommendation ?? rawAi.recommendation,
+          savingSuggestions[0]?.description || actionItems[0]?.action || "Analizza i costi principali e intervieni sulle anomalie più rilevanti",
+        ),
+      },
+      trendAnalysis: {
+        monthlyTrend: toArray(trendSource.monthlyTrend).map((item) => {
+          const record: UnknownRecord = isRecord(item) ? item : {};
+          return {
+            month: toString(record.month),
+            amount: toNumber(record.amount ?? record.spending ?? record.value, 0),
+            changePercent: toNumber(record.changePercent ?? record.change ?? record.variation, 0),
+          };
+        }).filter((item) => item.month),
+        overallTrend: normalizeOverallTrend(trendSource.overallTrend ?? trendSource.direction),
+        seasonalPattern: toString(trendSource.seasonalPattern ?? trendSource.pattern, "") || null,
+        forecast: toNumber(trendSource.forecast ?? trendSource.nextMonthForecast, 0),
+        trendNote: toString(trendSource.trendNote ?? trendSource.note, "") || undefined,
+      },
+      cashFlowHealth: {
+        score: toNumber(cashFlowSource.score, 0),
+        ratio: toNumber(cashFlowSource.ratio ?? cashFlowSource.cashFlowRatio, 0),
+        diagnosis: toString(cashFlowSource.diagnosis ?? cashFlowSource.summary, "Salute finanziaria da monitorare"),
+        riskLevel: normalizeRiskLevel(cashFlowSource.riskLevel),
+        recommendations: toStringArray(cashFlowSource.recommendations ?? cashFlowSource.actions),
+      },
+      anomalies,
+    },
+  };
+}
+
+function getErrorContent(message: string) {
+  const normalized = message.toLowerCase();
+
+  if (normalized.includes("limite mensile") || normalized.includes("hai raggiunto il limite")) {
+    return {
+      title: "Limite mensile raggiunto",
+      description: "Hai esaurito le analisi AI disponibili per questo mese. Puoi comunque consultare l'archivio delle analisi salvate.",
+      showBankCta: false,
+    };
+  }
+
+  if (normalized.includes("nessuna transazione")) {
+    return {
+      title: "Nessuna transazione disponibile",
+      description: "Per generare il report devi prima sincronizzare i tuoi conti bancari e importare almeno una transazione.",
+      showBankCta: true,
+    };
+  }
+
+  if (
+    normalized.includes("ai api error") ||
+    normalized.includes("empty ai response") ||
+    normalized.includes("json") ||
+    normalized.includes("parse")
+  ) {
+    return {
+      title: "Errore nell'analisi AI",
+      description: "L'AI ha restituito un risultato non valido. Riprova tra poco: il problema non dipende dai conti bancari.",
+      showBankCta: false,
+    };
+  }
+
+  if (normalized.includes("non autenticato") || normalized.includes("sessione non valida")) {
+    return {
+      title: "Sessione scaduta",
+      description: "La sessione non è più valida. Aggiorna la pagina ed effettua di nuovo il login.",
+      showBankCta: false,
+    };
+  }
+
+  return {
+    title: "Analisi non disponibile",
+    description: "Si è verificato un errore durante la generazione del report. Puoi riprovare subito o consultare le analisi salvate.",
+    showBankCta: false,
+  };
+}
 
 export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalProps) {
   const { analyze, isLoading, data, error } = useSpendingAnalysis();
@@ -84,8 +358,9 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
   const analysesRemaining = usage?.transactionAnalysesRemaining ?? 0;
   const isAnalysesBlocked = usage?.isTransactionAnalysesBlocked ?? false;
 
-  const activeData: SpendingAnalysis | null = selectedSavedAnalysis?.payload ?? data;
   const activeError = selectedSavedAnalysis ? null : error;
+  const activeData = normalizeSpendingAnalysis(selectedSavedAnalysis?.payload ?? data);
+  const errorContent = activeError ? getErrorContent(activeError) : null;
 
   const handleStart = async () => {
     setShowSavedAnalyses(false);
@@ -300,22 +575,24 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                 </p>
               </div>
             </div>
-          ) : activeError ? (
+          ) : activeError && errorContent ? (
             <div className="flex flex-col items-center justify-center py-16 space-y-6">
               <div className="w-20 h-20 rounded-full bg-warning/10 flex items-center justify-center">
                 <AlertTriangle className="h-10 w-10 text-warning" />
               </div>
-              <div className="text-center space-y-2">
-                <h3 className="text-lg font-semibold">Nessuna transazione disponibile</h3>
-                <p className="text-muted-foreground max-w-md">
-                  Per generare il report, devi prima sincronizzare i tuoi conti bancari.
-                  Vai alla pagina <strong>Conti Bancari</strong> e clicca <strong>Sincronizza</strong>.
-                </p>
+              <div className="text-center space-y-2 max-w-xl">
+                <h3 className="text-lg font-semibold">{errorContent.title}</h3>
+                <p className="text-muted-foreground">{errorContent.description}</p>
+                <div className="rounded-lg border border-border bg-muted/40 px-4 py-3 text-left text-sm text-foreground">
+                  <span className="font-medium">Dettaglio:</span> {activeError}
+                </div>
               </div>
               <div className="flex gap-3">
-                <Button variant="outline" onClick={() => { handleDialogChange(false); window.location.href = "/conti-bancari"; }}>
-                  Vai a Conti Bancari
-                </Button>
+                {errorContent.showBankCta && (
+                  <Button variant="outline" onClick={() => { handleDialogChange(false); window.location.href = "/conti-bancari"; }}>
+                    Vai a Conti Bancari
+                  </Button>
+                )}
                 <Button variant="outline" onClick={handleStart} disabled={isAnalysesBlocked}>
                   Riprova
                 </Button>
@@ -370,13 +647,13 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                     Risparmio Potenziale
                   </div>
                   <div className="text-2xl font-bold text-primary">
-                    {formatCurrency(activeData.aiAnalysis?.summary?.potentialSavings || 0)}
+                    {formatCurrency(activeData.aiAnalysis.summary.potentialSavings || 0)}
                   </div>
                   <div className="text-xs text-muted-foreground">/mese</div>
                 </div>
               </div>
 
-              {activeData.aiAnalysis?.cashFlowHealth && (
+              {activeData.aiAnalysis.cashFlowHealth && (
                 <div className="bg-card border border-border rounded-lg p-6">
                   <div className="flex items-center justify-between mb-4">
                     <h3 className="font-semibold flex items-center gap-2">
@@ -402,7 +679,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                       <p className="text-sm text-muted-foreground mb-3">
                         {activeData.aiAnalysis.cashFlowHealth.diagnosis}
                       </p>
-                      {activeData.aiAnalysis.cashFlowHealth.recommendations && (
+                      {activeData.aiAnalysis.cashFlowHealth.recommendations && activeData.aiAnalysis.cashFlowHealth.recommendations.length > 0 && (
                         <div className="space-y-1">
                           {activeData.aiAnalysis.cashFlowHealth.recommendations.map((recommendation, i) => (
                             <div key={i} className="flex items-start gap-2 text-sm">
@@ -424,7 +701,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                       <Activity className="h-5 w-5" />
                       Trend Mensile
                     </h3>
-                    {activeData.aiAnalysis?.trendAnalysis && (
+                    {activeData.aiAnalysis.trendAnalysis && (
                       <Badge variant="outline" className="capitalize">
                         {activeData.aiAnalysis.trendAnalysis.overallTrend === "increasing" ? "↑ In aumento" :
                          activeData.aiAnalysis.trendAnalysis.overallTrend === "decreasing" ? "↓ In calo" : "→ Stabile"}
@@ -451,7 +728,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                       </LineChart>
                     </ResponsiveContainer>
                   </div>
-                  {activeData.aiAnalysis?.trendAnalysis?.trendNote && (
+                  {activeData.aiAnalysis.trendAnalysis?.trendNote && (
                     <p className="text-sm text-muted-foreground mt-2">
                       {activeData.aiAnalysis.trendAnalysis.trendNote}
                     </p>
@@ -461,7 +738,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
 
               <Separator />
 
-              {activeData.aiAnalysis?.anomalies && activeData.aiAnalysis.anomalies.length > 0 && (
+              {activeData.aiAnalysis.anomalies && activeData.aiAnalysis.anomalies.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="font-semibold flex items-center gap-2 text-warning">
                     <AlertCircle className="h-5 w-5" />
@@ -490,7 +767,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                 </div>
               )}
 
-              {activeData.aiAnalysis?.criticalAreas && activeData.aiAnalysis.criticalAreas.length > 0 && (
+              {activeData.aiAnalysis.criticalAreas && activeData.aiAnalysis.criticalAreas.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="font-semibold flex items-center gap-2 text-destructive">
                     <AlertTriangle className="h-5 w-5" />
@@ -520,7 +797,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                 </div>
               )}
 
-              {activeData.aiAnalysis?.savingSuggestions && activeData.aiAnalysis.savingSuggestions.length > 0 && (
+              {activeData.aiAnalysis.savingSuggestions && activeData.aiAnalysis.savingSuggestions.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="font-semibold flex items-center gap-2 text-primary">
                     <Lightbulb className="h-5 w-5" />
@@ -678,7 +955,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                 </div>
               </div>
 
-              {activeData.aiAnalysis?.supplierAnalysis && activeData.aiAnalysis.supplierAnalysis.length > 0 && (
+              {activeData.aiAnalysis.supplierAnalysis && activeData.aiAnalysis.supplierAnalysis.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="font-semibold flex items-center gap-2">
                     <Users className="h-5 w-5" />
@@ -716,7 +993,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                 </div>
               )}
 
-              {activeData.aiAnalysis?.actionItems && activeData.aiAnalysis.actionItems.length > 0 && (
+              {activeData.aiAnalysis.actionItems && activeData.aiAnalysis.actionItems.length > 0 && (
                 <div className="space-y-3">
                   <h3 className="font-semibold flex items-center gap-2 text-success">
                     <CheckCircle2 className="h-5 w-5" />
@@ -750,7 +1027,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                 </div>
               )}
 
-              {activeData.aiAnalysis?.summary?.recommendation && (
+              {activeData.aiAnalysis.summary.recommendation && (
                 <div className="bg-secondary/50 rounded-lg p-4">
                   <div className="flex items-start gap-3">
                     <Lightbulb className="h-5 w-5 text-primary shrink-0 mt-0.5" />

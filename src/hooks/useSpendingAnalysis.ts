@@ -120,6 +120,55 @@ export interface UseSpendingAnalysisResult {
   data: SpendingAnalysis | null;
 }
 
+async function extractFunctionErrorMessage(error: unknown): Promise<string | null> {
+  const functionError = error as Error & { context?: Response };
+
+  if (functionError?.context) {
+    try {
+      const response = functionError.context.clone();
+      const body = await response.json();
+      if (body && typeof body.error === "string" && body.error.trim()) {
+        return body.error;
+      }
+    } catch {
+      // ignore json parse errors
+    }
+
+    try {
+      const response = functionError.context.clone();
+      const text = await response.text();
+      if (!text) return functionError.message || null;
+
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed && typeof parsed.error === "string" && parsed.error.trim()) {
+          return parsed.error;
+        }
+      } catch {
+        return text;
+      }
+    } catch {
+      // ignore text parse errors
+    }
+  }
+
+  return functionError?.message || null;
+}
+
+function notifyAnalysisError(message: string) {
+  if (message.includes("Rate limit")) {
+    toast.error("Limite di richieste raggiunto. Riprova tra qualche secondo.");
+    return;
+  }
+
+  if (message.includes("limite mensile") || message.includes("analisi")) {
+    toast.error("Hai raggiunto il limite mensile di analisi AI del tuo piano.");
+    return;
+  }
+
+  toast.error(message);
+}
+
 export function useSpendingAnalysis(): UseSpendingAnalysisResult {
   const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
@@ -133,16 +182,13 @@ export function useSpendingAnalysis(): UseSpendingAnalysisResult {
     try {
       const { data: result, error: fnError } = await supabase.functions.invoke("analyze-spending");
 
-      if (fnError) throw new Error(fnError.message);
+      if (fnError) {
+        const fnMessage = await extractFunctionErrorMessage(fnError);
+        throw new Error(fnMessage || "Errore durante l'analisi");
+      }
 
-      if (result.error) {
-        if (result.error.includes("Rate limit")) {
-          toast.error("Limite di richieste raggiunto. Riprova tra qualche secondo.");
-        } else if (result.error.includes("limite mensile") || result.error.includes("analisi")) {
-          toast.error("Hai raggiunto il limite mensile di analisi AI del tuo piano.");
-        } else {
-          toast.error(result.error);
-        }
+      if (result?.error && typeof result.error === "string") {
+        notifyAnalysisError(result.error);
         throw new Error(result.error);
       }
 

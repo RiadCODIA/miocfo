@@ -3,7 +3,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
 
 const DEFAULT_LIMITS = {
@@ -48,8 +48,194 @@ interface MonthlyData {
   income: number;
 }
 
+type JsonRecord = Record<string, unknown>;
+
+function isRecord(value: unknown): value is JsonRecord {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function asArray<T = unknown>(value: unknown): T[] {
+  if (Array.isArray(value)) return value as T[];
+  if (isRecord(value)) return Object.values(value) as T[];
+  return [];
+}
+
+function asString(value: unknown, fallback = ""): string {
+  if (typeof value === "string") return value.trim() || fallback;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return fallback;
+}
+
+function asNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const normalized = value.replace(/[^0-9,.-]/g, "").replace(/\.(?=.*\.)/g, "").replace(",", ".");
+    const parsed = Number(normalized);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return fallback;
+}
+
+function asStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => asString(item)).filter(Boolean);
+}
+
+function normalizePriority(value: unknown): "urgente" | "alta" | "media" {
+  const normalized = asString(value, "media").toLowerCase();
+  if (["urgent", "urgente", "critical", "critico"].includes(normalized)) return "urgente";
+  if (["high", "alta", "alto"].includes(normalized)) return "alta";
+  return "media";
+}
+
+function normalizeSupplierStatus(value: unknown, amount = 0): "high" | "ok" | "low" {
+  const normalized = asString(value).toLowerCase();
+  if (["high", "alto", "critical", "critico"].includes(normalized)) return "high";
+  if (["low", "basso", "good", "buono"].includes(normalized)) return "low";
+  if (["ok", "medium", "medio", "stable", "stabile"].includes(normalized)) return "ok";
+  if (amount > 5000) return "high";
+  if (amount > 0) return "ok";
+  return "low";
+}
+
+function normalizeOverallTrend(value: unknown): "increasing" | "stable" | "decreasing" {
+  const normalized = asString(value, "stable").toLowerCase();
+  if (["increasing", "increase", "up", "crescente", "in aumento"].includes(normalized)) return "increasing";
+  if (["decreasing", "decrease", "down", "decrescente", "in calo"].includes(normalized)) return "decreasing";
+  return "stable";
+}
+
+function normalizeRiskLevel(value: unknown): "low" | "medium" | "high" | "critical" {
+  const normalized = asString(value, "medium").toLowerCase();
+  if (["low", "basso"].includes(normalized)) return "low";
+  if (["high", "alto"].includes(normalized)) return "high";
+  if (["critical", "critico"].includes(normalized)) return "critical";
+  return "medium";
+}
+
+function normalizeAiAnalysis(raw: unknown) {
+  const source = isRecord(raw) ? raw : {};
+
+  const criticalAreas = asArray(source.criticalAreas).map((item) => {
+    const record = isRecord(item) ? item : {};
+    return {
+      category: asString(record.category ?? record.name ?? record.area, "Area non specificata"),
+      amount: asNumber(record.amount ?? record.totalAmount ?? record.value, 0),
+      percentage: asNumber(record.percentage ?? record.share ?? record.incidence, 0),
+      warning: asString(record.warning ?? record.description ?? record.note, "Richiede attenzione"),
+      benchmark: asString(record.benchmark ?? record.reference, "") || undefined,
+    };
+  }).filter((item) => item.category || item.warning);
+
+  const savingSuggestions = asArray(source.savingSuggestions).map((item, index) => {
+    const record = isRecord(item) ? item : {};
+    return {
+      title: asString(record.title ?? record.name, `Suggerimento ${index + 1}`),
+      description: asString(record.description ?? record.note ?? record.rationale, "Nessun dettaglio disponibile"),
+      estimatedSaving: asNumber(record.estimatedSaving ?? record.saving ?? record.amount, 0),
+      priority: ["alta", "media", "bassa"].includes(asString(record.priority).toLowerCase())
+        ? asString(record.priority).toLowerCase()
+        : undefined,
+      timeline: asString(record.timeline ?? record.when, "") || undefined,
+      steps: asStringArray(record.steps ?? record.actions),
+    };
+  }).filter((item) => item.title || item.description);
+
+  const supplierAnalysis = asArray(source.supplierAnalysis).map((item) => {
+    const record = isRecord(item) ? item : {};
+    const amount = asNumber(record.amount ?? record.totalAmount ?? record.spending, 0);
+    return {
+      name: asString(record.name ?? record.supplier ?? record.vendor, "Fornitore non specificato"),
+      amount,
+      category: asString(record.category ?? record.segment, "Non categorizzato"),
+      status: normalizeSupplierStatus(record.status ?? record.riskLevel, amount),
+      note: asString(record.note ?? record.description ?? record.reason, "") || undefined,
+      recommendation: asString(record.recommendation ?? record.action ?? record.suggestedAction, "") || undefined,
+    };
+  }).filter((item) => item.name);
+
+  const actionItems = asArray(source.actionItems).map((item) => {
+    if (typeof item === "string") {
+      return {
+        action: item,
+        priority: "media" as const,
+        impact: "Da valutare",
+      };
+    }
+
+    const record = isRecord(item) ? item : {};
+    return {
+      action: asString(record.action ?? record.description ?? record.title, "Azione consigliata"),
+      priority: normalizePriority(record.priority),
+      impact: asString(record.impact ?? record.expectedImpact ?? record.outcome, "Da valutare"),
+    };
+  }).filter((item) => item.action);
+
+  const summarySource = isRecord(source.summary) ? source.summary : {};
+  const potentialSavings = asNumber(
+    summarySource.potentialSavings ?? source.potentialSavings,
+    savingSuggestions.reduce((total, item) => total + item.estimatedSaving, 0),
+  );
+
+  const trendSource = isRecord(source.trendAnalysis) ? source.trendAnalysis : {};
+  const trendMonthly = asArray(trendSource.monthlyTrend).map((item) => {
+    const record = isRecord(item) ? item : {};
+    return {
+      month: asString(record.month, ""),
+      amount: asNumber(record.amount ?? record.spending ?? record.value, 0),
+      changePercent: asNumber(record.changePercent ?? record.change ?? record.variation, 0),
+    };
+  }).filter((item) => item.month);
+
+  const cashFlowSource = isRecord(source.cashFlowHealth) ? source.cashFlowHealth : {};
+  const anomalies = asArray(source.anomalies).map((item) => {
+    const record = isRecord(item) ? item : {};
+    return {
+      description: asString(record.description ?? record.reason ?? record.note, "Anomalia rilevata"),
+      amount: asNumber(record.amount ?? record.value, 0),
+      supplier: asString(record.supplier ?? record.name ?? record.vendor, "Voce non identificata"),
+      date: asString(record.date, "") || undefined,
+      reason: asString(record.reason ?? record.description, "Scostamento rispetto al comportamento atteso"),
+      recommendation: asString(record.recommendation ?? record.action, "Verifica la transazione e conferma la classificazione"),
+    };
+  }).filter((item) => item.supplier || item.reason);
+
+  return {
+    criticalAreas,
+    savingSuggestions,
+    supplierAnalysis,
+    actionItems,
+    summary: {
+      potentialSavings,
+      criticalAlerts: asNumber(summarySource.criticalAlerts ?? source.criticalAlerts, criticalAreas.length + anomalies.length),
+      mainRisk: asString(summarySource.mainRisk ?? summarySource.risk ?? source.mainRisk, "Monitorare le aree a maggiore assorbimento di cassa"),
+      recommendation: asString(
+        summarySource.recommendation ?? source.recommendation,
+        savingSuggestions[0]?.description || actionItems[0]?.action || "Analizza i costi principali e intervieni sulle anomalie più rilevanti",
+      ),
+    },
+    trendAnalysis: {
+      monthlyTrend: trendMonthly,
+      overallTrend: normalizeOverallTrend(trendSource.overallTrend ?? trendSource.direction),
+      seasonalPattern: asString(trendSource.seasonalPattern ?? trendSource.pattern, "") || null,
+      forecast: asNumber(trendSource.forecast ?? trendSource.nextMonthForecast, 0),
+      trendNote: asString(trendSource.trendNote ?? trendSource.note, "") || undefined,
+    },
+    cashFlowHealth: {
+      score: asNumber(cashFlowSource.score, 0),
+      ratio: asNumber(cashFlowSource.ratio ?? cashFlowSource.cashFlowRatio, 0),
+      diagnosis: asString(cashFlowSource.diagnosis ?? cashFlowSource.summary, "Salute finanziaria da monitorare"),
+      riskLevel: normalizeRiskLevel(cashFlowSource.riskLevel),
+      recommendations: asStringArray(cashFlowSource.recommendations ?? cashFlowSource.actions),
+    },
+    anomalies,
+  };
+}
+
 serve(async (req) => {
-  if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
+  if (req.method === "OPTIONS") {
+    return new Response(null, { headers: corsHeaders });
+  }
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL");
@@ -91,9 +277,9 @@ serve(async (req) => {
       .eq("status", "active")
       .maybeSingle();
 
-    const planName = String((subscription?.subscription_plans as any)?.name || "small").toLowerCase();
+    const planName = String((subscription?.subscription_plans as { name?: string } | null)?.name || "small").toLowerCase();
     const defaultLimit = DEFAULT_LIMITS[planName as keyof typeof DEFAULT_LIMITS]?.analyses ?? DEFAULT_LIMITS.small.analyses;
-    const analysesLimit = Number((subscription?.subscription_plans as any)?.ai_transaction_analyses_limit_monthly ?? defaultLimit);
+    const analysesLimit = Number((subscription?.subscription_plans as { ai_transaction_analyses_limit_monthly?: number } | null)?.ai_transaction_analyses_limit_monthly ?? defaultLimit);
 
     const { data: existingUsage } = await supabase
       .from("ai_usage_monthly")
@@ -251,10 +437,25 @@ serve(async (req) => {
     };
 
     const systemPrompt = `Sei un CFO virtuale senior con 20 anni di esperienza in PMI italiane.
-Analizza i dati finanziari forniti e genera un report DETTAGLIATO e SPECIFICO in formato JSON.
+Analizza i dati finanziari forniti e restituisci SOLO un oggetto JSON valido.
 
-Genera un oggetto JSON con le sezioni: criticalAreas, savingSuggestions, supplierAnalysis, actionItems, summary, trendAnalysis, cashFlowHealth, anomalies.
-Rispondi SOLO con JSON valido, senza markdown.`;
+Schema richiesto:
+{
+  "criticalAreas": [{ "category": string, "amount": number, "percentage": number, "warning": string, "benchmark": string }],
+  "savingSuggestions": [{ "title": string, "description": string, "estimatedSaving": number, "priority": "alta" | "media" | "bassa", "timeline": string, "steps": string[] }],
+  "supplierAnalysis": [{ "name": string, "amount": number, "category": string, "status": "high" | "ok" | "low", "note": string, "recommendation": string }],
+  "actionItems": [{ "action": string, "priority": "urgente" | "alta" | "media", "impact": string }],
+  "summary": { "potentialSavings": number, "criticalAlerts": number, "mainRisk": string, "recommendation": string },
+  "trendAnalysis": { "monthlyTrend": [{ "month": string, "amount": number, "changePercent": number }], "overallTrend": "increasing" | "stable" | "decreasing", "seasonalPattern": string | null, "forecast": number, "trendNote": string },
+  "cashFlowHealth": { "score": number, "ratio": number, "diagnosis": string, "riskLevel": "low" | "medium" | "high" | "critical", "recommendations": string[] },
+  "anomalies": [{ "description": string, "amount": number, "supplier": string, "date": string, "reason": string, "recommendation": string }]
+}
+
+Regole:
+- Tutte le sezioni devono esistere.
+- Usa array vuoti se una sezione non ha dati.
+- Non usare markdown.
+- Non restituire testo fuori dal JSON.`;
 
     const userPrompt = `Analizza questi dati finanziari aziendali in dettaglio:
 
@@ -289,11 +490,12 @@ ${dataSummary.potentialAnomalies.length > 0 ? dataSummary.potentialAnomalies.map
       },
       body: JSON.stringify({
         model: "gpt-4o-mini",
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt },
         ],
-        temperature: 0.3,
+        temperature: 0.2,
       }),
     });
 
@@ -303,7 +505,7 @@ ${dataSummary.potentialAnomalies.length > 0 ? dataSummary.potentialAnomalies.map
     if (!aiContent) throw new Error("Empty AI response");
 
     const cleanContent = aiContent.replace(/```json\n?/g, "").replace(/```\n?/g, "").trim();
-    const analysisResult = JSON.parse(cleanContent);
+    const normalizedAiAnalysis = normalizeAiAnalysis(JSON.parse(cleanContent));
 
     const result = {
       totalSpent,
@@ -324,11 +526,11 @@ ${dataSummary.potentialAnomalies.length > 0 ? dataSummary.potentialAnomalies.map
       })),
       monthlyTrend,
       rawAnomalies: potentialAnomalies,
-      aiAnalysis: analysisResult,
+      aiAnalysis: normalizedAiAnalysis,
     };
 
     const title = `Analisi spese ${new Date().toLocaleDateString("it-IT")} ${new Date().toLocaleTimeString("it-IT", { hour: "2-digit", minute: "2-digit" })}`;
-    const { data: savedDoc } = await (supabase as any)
+    const { data: savedDoc } = await (supabase as unknown as { from: (table: string) => { insert: (value: unknown) => { select: (columns: string) => { single: () => Promise<{ data: { id: string } | null }> } } } })
       .from("ai_analysis_documents")
       .insert({
         user_id: userId,
