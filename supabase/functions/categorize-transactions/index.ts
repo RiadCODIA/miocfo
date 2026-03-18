@@ -197,7 +197,7 @@ serve(async (req) => {
         const batchPromises = batches.map(async (batch, idx) => {
           console.log(`[Categorize] Processing parallel batch ${idx + 1}/${batches.length} with ${batch.length} transactions`);
           try {
-            return await processBatch(batch, categories, rules || [], LOVABLE_API_KEY, supabase);
+            return await processBatch(batch, categories, rules || [], OPENAI_API_KEY, supabase);
           } catch (batchError) {
             console.error(`[Categorize] Parallel batch ${idx + 1} error:`, batchError);
             return [];
