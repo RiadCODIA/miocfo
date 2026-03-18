@@ -145,7 +145,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
     switch (level) {
       case "low": return "text-success";
       case "medium": return "text-warning";
-      case "high": return "text-orange-500";
+      case "high": return "text-warning";
       case "critical": return "text-destructive";
     }
   };
@@ -153,7 +153,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
   const getScoreColor = (score: number) => {
     if (score >= 80) return "text-success";
     if (score >= 60) return "text-warning";
-    if (score >= 40) return "text-orange-500";
+    if (score >= 40) return "text-warning";
     return "text-destructive";
   };
 
@@ -162,7 +162,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
       case "urgente":
         return <Badge variant="destructive" className="text-xs">Urgente</Badge>;
       case "alta":
-        return <Badge className="bg-orange-500/10 text-orange-500 border-orange-500/20 text-xs">Alta</Badge>;
+        return <Badge className="bg-warning/10 text-warning border-warning/20 text-xs">Alta</Badge>;
       case "media":
         return <Badge variant="secondary" className="text-xs">Media</Badge>;
       case "bassa":
