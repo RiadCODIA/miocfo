@@ -25,6 +25,7 @@ export default function Impostazioni() {
   const updatePassword = useUpdatePassword();
   const { profile, user } = useAuth();
   const { subscription, isLoading: subLoading } = useUserSubscription();
+  const { usage: aiUsage } = useAIUsage();
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
