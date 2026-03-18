@@ -12,6 +12,7 @@ import { useNotificationPreferences, useUpdateNotificationPreferences } from "@/
 import { useUpdateProfile, useUpdatePassword } from "@/hooks/useProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
+import { useAIUsage } from "@/hooks/useAIUsage";
 import { PaymentMethodModal } from "@/components/payment/PaymentMethodModal";
 import { toast } from "sonner";
 import { format } from "date-fns";

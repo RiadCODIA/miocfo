@@ -70,9 +70,8 @@ export default function Piani() {
   const [formUnlimitedUsers, setFormUnlimitedUsers] = useState(false);
   const [formUnlimitedAccounts, setFormUnlimitedAccounts] = useState(false);
   const [formUnlimitedTransactions, setFormUnlimitedTransactions] = useState(false);
-  const [formAiMonthlyLimit, setFormAiMonthlyLimit] = useState(5);
-  const [formAiTopupMin, setFormAiTopupMin] = useState(5);
-  const [formAiUpgradeSuggestion, setFormAiUpgradeSuggestion] = useState<number | null>(2);
+  const [formAiAssistantMessagesLimit, setFormAiAssistantMessagesLimit] = useState(50);
+  const [formAiTransactionAnalysesLimit, setFormAiTransactionAnalysesLimit] = useState(3);
 
   const handleEditPlan = (plan: SubscriptionPlan) => {
     if (!plan) return;
