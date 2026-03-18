@@ -1,11 +1,14 @@
 import { useState } from "react";
 import { MonthlyData } from "@/hooks/useContoEconomico";
 import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 interface IVASectionProps {
   year: number;
   ivaRicavi: MonthlyData;
   ivaCosti: MonthlyData;
+  onYearChange: (year: number) => void;
+  availableYears: number[];
 }
 
 type IVAPeriod = "annuale" | "trimestrale" | "mensile";
@@ -28,14 +31,12 @@ function filterByMonths(data: MonthlyData, months: number[]): number {
   }, 0);
 }
 
-export function IVASection({ year, ivaRicavi, ivaCosti }: IVASectionProps) {
+export function IVASection({ year, ivaRicavi, ivaCosti, onYearChange, availableYears }: IVASectionProps) {
   const [period, setPeriod] = useState<IVAPeriod>("annuale");
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [selectedQuarter, setSelectedQuarter] = useState<number>(Math.floor(new Date().getMonth() / 3));
 
   const computeValues = () => {
-    // Italian accounting: IVA a debito = IVA sulle vendite (fatture emesse/ricavi)
-    //                     IVA a credito = IVA sugli acquisti (fatture ricevute/costi)
     if (period === "annuale") {
       const ivaDebito = Object.values(ivaRicavi).reduce((s, v) => s + v, 0);
       const ivaCredito = Object.values(ivaCosti).reduce((s, v) => s + v, 0);
@@ -63,23 +64,36 @@ export function IVASection({ year, ivaRicavi, ivaCosti }: IVASectionProps) {
           <p className="text-sm text-muted-foreground">Schema sintetico IVA — {label}</p>
         </div>
 
-        {/* Period Selector */}
-        <div className="flex items-center gap-1 rounded-lg border border-border p-1 bg-muted/40">
-          {(["mensile", "trimestrale", "annuale"] as IVAPeriod[]).map((p) => (
-            <Button
-              key={p}
-              variant={period === p ? "default" : "ghost"}
-              size="sm"
-              className="h-7 px-3 text-xs capitalize"
-              onClick={() => setPeriod(p)}
-            >
-              {p.charAt(0).toUpperCase() + p.slice(1)}
-            </Button>
-          ))}
+        <div className="flex items-center gap-2 flex-wrap justify-end">
+          <Select value={String(year)} onValueChange={(value) => onYearChange(Number(value))}>
+            <SelectTrigger className="w-24 h-9">
+              <SelectValue placeholder="Anno" />
+            </SelectTrigger>
+            <SelectContent>
+              {availableYears.map((optionYear) => (
+                <SelectItem key={optionYear} value={String(optionYear)}>
+                  {optionYear}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+
+          <div className="flex items-center gap-1 rounded-lg border border-border p-1 bg-muted/40">
+            {(["mensile", "trimestrale", "annuale"] as IVAPeriod[]).map((p) => (
+              <Button
+                key={p}
+                variant={period === p ? "default" : "ghost"}
+                size="sm"
+                className="h-7 px-3 text-xs capitalize"
+                onClick={() => setPeriod(p)}
+              >
+                {p.charAt(0).toUpperCase() + p.slice(1)}
+              </Button>
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* Sub-selector for mensile/trimestrale */}
       {period === "mensile" && (
         <div className="flex flex-wrap gap-1.5">
           {MONTHS.map((m, i) => (
