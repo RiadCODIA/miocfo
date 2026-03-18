@@ -71,6 +71,7 @@ export function ContoEconomicoTab() {
   const [aiLoading, setAiLoading] = useState(false);
   const [autoLoading, setAutoLoading] = useState(false);
   const queryClient = useQueryClient();
+  const aiReportRef = useRef<HTMLDivElement>(null);
 
   const { data: employeesData } = useQuery({
     queryKey: ["employees-active"],
