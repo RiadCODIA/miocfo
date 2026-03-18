@@ -463,17 +463,17 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
 
               {activeData.aiAnalysis?.anomalies && activeData.aiAnalysis.anomalies.length > 0 && (
                 <div className="space-y-3">
-                  <h3 className="font-semibold flex items-center gap-2 text-orange-500">
+                  <h3 className="font-semibold flex items-center gap-2 text-warning">
                     <AlertCircle className="h-5 w-5" />
                     Anomalie Rilevate
                   </h3>
-                  <div className="bg-orange-500/5 border border-orange-500/20 rounded-lg divide-y divide-orange-500/10">
+                  <div className="bg-warning/5 border border-warning/20 rounded-lg divide-y divide-warning/10">
                     {activeData.aiAnalysis.anomalies.map((anomaly, i) => (
                       <div key={i} className="p-4">
                         <div className="flex items-start justify-between gap-4">
                           <div className="flex-1">
                             <div className="font-medium flex items-center gap-2">
-                              <AlertTriangle className="h-4 w-4 text-orange-500" />
+                              <AlertTriangle className="h-4 w-4 text-warning" />
                               {anomaly.supplier}
                               <span className="text-destructive font-bold">{formatCurrency(anomaly.amount)}</span>
                             </div>
