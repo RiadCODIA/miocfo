@@ -162,7 +162,8 @@ export function ContoEconomicoTab() {
       if (!result) { toast.error("Errore AI", { description: "Nessuna risposta dall'analisi AI" }); return; }
       if (result?.error) { toast.error("Errore AI", { description: result.error }); return; }
       setAiReport(result);
-    } catch (e: unknown) {
+      toast.success("Analisi AI completata!");
+      setTimeout(() => aiReportRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
       const msg = e instanceof Error ? e.message : "Errore durante l'analisi AI";
       console.error("AI analysis error:", e);
       toast.error("Errore", { description: msg });
