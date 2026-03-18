@@ -190,13 +190,13 @@ export function ContoEconomicoTab() {
   }) => {
     const total = sumMonthly(monthlyData);
     return (
-      <tr className={cn("border-b border-border/50", options?.highlight, options?.warn && "bg-amber-500/10")}>
+      <tr className={cn("border-b border-border/50", options?.highlight, options?.warn && "bg-muted/40")}>
         <td className={cn(
           "py-1.5 px-3 text-xs whitespace-nowrap sticky left-0 z-10",
           options?.highlight ? options.highlight : "bg-card",
           options?.bold && "font-bold text-foreground",
           options?.indent && "pl-6 text-muted-foreground",
-          options?.warn && "text-amber-700 dark:text-amber-400 font-medium"
+          options?.warn && "text-foreground font-medium"
         )}>
           {options?.warn && <AlertCircle className="inline h-3 w-3 mr-1 mb-0.5" />}
           {label}
