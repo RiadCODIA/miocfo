@@ -96,6 +96,7 @@ export function OverdueTable({ title, entries, type, emptyMessage, isLoading }: 
             </div>
           ))}
         </div>
+        </ScrollArea>
       )}
     </div>
   );
