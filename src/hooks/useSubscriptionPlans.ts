@@ -20,6 +20,8 @@ export interface SubscriptionPlan {
   aiMonthlyLimitEur: number;
   aiTopupMinEur: number;
   aiUpgradeSuggestionAfter: number | null;
+  aiAssistantMessagesLimitMonthly: number;
+  aiTransactionAnalysesLimitMonthly: number;
 }
 
 export function useSubscriptionPlans() {
@@ -32,8 +34,8 @@ export function useSubscriptionPlans() {
         .order("sort_order", { ascending: true });
 
       if (error) throw error;
-      
-      return (data || []).map(plan => ({
+
+      return (data || []).map((plan) => ({
         id: plan.id,
         name: plan.name,
         description: plan.description,
@@ -48,8 +50,10 @@ export function useSubscriptionPlans() {
         createdAt: plan.created_at,
         updatedAt: plan.updated_at,
         aiMonthlyLimitEur: (plan as any).ai_monthly_limit_eur ?? 0,
-        aiTopupMinEur: (plan as any).ai_topup_min_eur ?? 5,
+        aiTopupMinEur: (plan as any).ai_topup_min_eur ?? 0,
         aiUpgradeSuggestionAfter: (plan as any).ai_upgrade_suggestion_after ?? null,
+        aiAssistantMessagesLimitMonthly: (plan as any).ai_assistant_messages_limit_monthly ?? 0,
+        aiTransactionAnalysesLimitMonthly: (plan as any).ai_transaction_analyses_limit_monthly ?? 0,
       })) as SubscriptionPlan[];
     },
   });
@@ -59,10 +63,10 @@ export function useCreatePlan() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (plan: { 
-      name: string; 
+    mutationFn: async (plan: {
+      name: string;
       description?: string;
-      price_monthly: number; 
+      price_monthly: number;
       price_yearly?: number;
       features?: Json;
       max_users?: number;
@@ -70,6 +74,11 @@ export function useCreatePlan() {
       max_invoices_monthly?: number;
       is_active?: boolean;
       sort_order?: number;
+      ai_assistant_messages_limit_monthly?: number;
+      ai_transaction_analyses_limit_monthly?: number;
+      ai_monthly_limit_eur?: number;
+      ai_topup_min_eur?: number;
+      ai_upgrade_suggestion_after?: number | null;
     }) => {
       const { data, error } = await supabase
         .from("subscription_plans")
@@ -94,21 +103,27 @@ export function useUpdatePlan() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, ...updates }: { id: string } & Partial<{
-      name: string;
-      description: string;
-      price_monthly: number;
-      price_yearly: number;
-      features: Json;
-      max_users: number;
-      max_bank_accounts: number;
-      max_invoices_monthly: number;
-      is_active: boolean;
-      sort_order: number;
-      ai_monthly_limit_eur: number;
-      ai_topup_min_eur: number;
-      ai_upgrade_suggestion_after: number | null;
-    }>) => {
+    mutationFn: async ({
+      id,
+      ...updates
+    }: { id: string } &
+      Partial<{
+        name: string;
+        description: string;
+        price_monthly: number;
+        price_yearly: number;
+        features: Json;
+        max_users: number;
+        max_bank_accounts: number;
+        max_invoices_monthly: number;
+        is_active: boolean;
+        sort_order: number;
+        ai_monthly_limit_eur: number;
+        ai_topup_min_eur: number;
+        ai_upgrade_suggestion_after: number | null;
+        ai_assistant_messages_limit_monthly: number;
+        ai_transaction_analyses_limit_monthly: number;
+      }>) => {
       const { data, error } = await supabase
         .from("subscription_plans")
         .update(updates)
@@ -134,11 +149,7 @@ export function useDeletePlan() {
 
   return useMutation({
     mutationFn: async (id: string) => {
-      const { error } = await supabase
-        .from("subscription_plans")
-        .delete()
-        .eq("id", id);
-
+      const { error } = await supabase.from("subscription_plans").delete().eq("id", id);
       if (error) throw error;
     },
     onSuccess: () => {

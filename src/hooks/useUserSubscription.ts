@@ -11,13 +11,14 @@ export interface UserSubscription {
   aiCreditsRemaining: number;
   expiresAt: string | null;
   aiMonthlyLimitEur: number;
+  aiAssistantMessagesLimitMonthly: number;
+  aiTransactionAnalysesLimitMonthly: number;
 }
 
-// Plan-specific feature access per client specification
 const PLAN_FEATURES: Record<string, string[]> = {
   small: [
     "dashboard",
-    "collegamenti_banche", // solo conti bancari
+    "collegamenti_banche",
     "collegamenti",
     "flussi_cassa",
     "transazioni",
@@ -26,14 +27,14 @@ const PLAN_FEATURES: Record<string, string[]> = {
   pro: [
     "dashboard",
     "collegamenti_banche",
-    "collegamenti", // banche + cassetto fiscale
+    "collegamenti",
     "flussi_cassa",
     "transazioni",
     "conti_bancari",
     "conto_economico",
     "fatture",
     "scadenzario",
-    "kpi_report", // Dati & Statistiche
+    "kpi_report",
   ],
   full: [
     "dashboard",
@@ -52,7 +53,6 @@ const PLAN_FEATURES: Record<string, string[]> = {
   ],
 };
 
-// Feature ID to route path mapping
 export const FEATURE_ROUTE_MAP: Record<string, string> = {
   dashboard: "/dashboard",
   collegamenti: "/collegamenti",
@@ -69,13 +69,7 @@ export const FEATURE_ROUTE_MAP: Record<string, string> = {
   ai_assistant: "/ai-assistant",
 };
 
-// Routes that are always accessible
-const ALWAYS_ALLOWED_ROUTES = [
-  "/dashboard",
-  "/impostazioni",
-  "/configurazione",
-  "/comunicazioni",
-];
+const ALWAYS_ALLOWED_ROUTES = ["/dashboard", "/impostazioni", "/configurazione", "/comunicazioni"];
 
 export function useUserSubscription() {
   const { user, userRole } = useAuth();
@@ -97,7 +91,9 @@ export function useUserSubscription() {
           subscription_plans (
             name,
             features,
-            ai_monthly_limit_eur
+            ai_monthly_limit_eur,
+            ai_assistant_messages_limit_monthly,
+            ai_transaction_analyses_limit_monthly
           )
         `)
         .eq("user_id", user.id)
@@ -108,10 +104,7 @@ export function useUserSubscription() {
 
       const plan = data.subscription_plans as any;
       const planName = (plan?.name || "").toLowerCase();
-      
-      // Use hardcoded plan features per spec instead of DB features
-      const features = PLAN_FEATURES[planName] || 
-        (Array.isArray(plan?.features) ? plan.features as string[] : []);
+      const features = PLAN_FEATURES[planName] || (Array.isArray(plan?.features) ? (plan.features as string[]) : []);
 
       return {
         id: data.id,
@@ -122,6 +115,8 @@ export function useUserSubscription() {
         aiCreditsRemaining: data.ai_credits_remaining ?? 0,
         expiresAt: data.expires_at,
         aiMonthlyLimitEur: plan?.ai_monthly_limit_eur ?? 0,
+        aiAssistantMessagesLimitMonthly: plan?.ai_assistant_messages_limit_monthly ?? 0,
+        aiTransactionAnalysesLimitMonthly: plan?.ai_transaction_analyses_limit_monthly ?? 0,
       };
     },
     enabled: !!user && userRole !== "super_admin",
@@ -141,10 +136,9 @@ export function useUserSubscription() {
     if (!query.data) return false;
 
     for (const [featureId, route] of Object.entries(FEATURE_ROUTE_MAP)) {
-      if (route === path && query.data.features.includes(featureId)) {
-        return true;
-      }
+      if (route === path && query.data.features.includes(featureId)) return true;
     }
+
     return false;
   };
 

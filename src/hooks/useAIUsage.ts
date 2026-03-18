@@ -5,77 +5,94 @@ import { useUserSubscription } from "./useUserSubscription";
 import { format } from "date-fns";
 
 export interface AIUsage {
-  costAccumulated: number;
-  creditRecharged: number;
-  numRecharges: number;
-  isBlocked: boolean;
-  budgetAvailable: number;
-  planLimit: number;
+  assistantMessagesUsed: number;
+  assistantMessagesLimit: number;
+  assistantMessagesRemaining: number;
+  transactionAnalysesUsed: number;
+  transactionAnalysesLimit: number;
+  transactionAnalysesRemaining: number;
+  isAssistantBlocked: boolean;
+  isTransactionAnalysesBlocked: boolean;
 }
 
-// Plan-specific AI limits per spec
-const AI_LIMITS: Record<string, { limit: number; upgradeSuggestAfter: number | null; upgradeTo: string | null }> = {
-  small: { limit: 5, upgradeSuggestAfter: 2, upgradeTo: "Pro" },
-  pro: { limit: 8, upgradeSuggestAfter: 3, upgradeTo: "Full" },
-  full: { limit: 20, upgradeSuggestAfter: null, upgradeTo: null },
+const PLAN_LIMITS: Record<string, { messages: number; analyses: number; upgradeTo: string | null }> = {
+  small: { messages: 50, analyses: 3, upgradeTo: "Pro" },
+  pro: { messages: 60, analyses: 3, upgradeTo: "Full" },
+  full: { messages: 100, analyses: 5, upgradeTo: null },
 };
 
 export function useAIUsage() {
   const { user } = useAuth();
   const { subscription } = useUserSubscription();
   const monthYear = format(new Date(), "yyyy-MM");
-  const planName = (subscription?.planName || "").toLowerCase();
-  const planConfig = AI_LIMITS[planName] || AI_LIMITS.small;
+  const planName = (subscription?.planName || "small").toLowerCase();
+  const fallback = PLAN_LIMITS[planName] || PLAN_LIMITS.small;
+
+  const assistantLimit = subscription?.aiAssistantMessagesLimitMonthly ?? fallback.messages;
+  const analysesLimit = subscription?.aiTransactionAnalysesLimitMonthly ?? fallback.analyses;
 
   const query = useQuery({
-    queryKey: ["ai-usage", user?.id, monthYear],
+    queryKey: ["ai-usage", user?.id, monthYear, assistantLimit, analysesLimit],
     queryFn: async (): Promise<AIUsage> => {
-      if (!user) return { costAccumulated: 0, creditRecharged: 0, numRecharges: 0, isBlocked: false, budgetAvailable: planConfig.limit, planLimit: planConfig.limit };
+      if (!user) {
+        return {
+          assistantMessagesUsed: 0,
+          assistantMessagesLimit: assistantLimit,
+          assistantMessagesRemaining: assistantLimit,
+          transactionAnalysesUsed: 0,
+          transactionAnalysesLimit: analysesLimit,
+          transactionAnalysesRemaining: analysesLimit,
+          isAssistantBlocked: false,
+          isTransactionAnalysesBlocked: false,
+        };
+      }
 
       const { data, error } = await supabase
         .from("ai_usage_monthly")
-        .select("*")
+        .select("assistant_messages_used, transaction_analyses_used")
         .eq("user_id", user.id)
         .eq("month_year", monthYear)
         .maybeSingle();
 
       if (error || !data) {
         return {
-          costAccumulated: 0,
-          creditRecharged: 0,
-          numRecharges: 0,
-          isBlocked: false,
-          budgetAvailable: planConfig.limit,
-          planLimit: planConfig.limit,
+          assistantMessagesUsed: 0,
+          assistantMessagesLimit: assistantLimit,
+          assistantMessagesRemaining: assistantLimit,
+          transactionAnalysesUsed: 0,
+          transactionAnalysesLimit: analysesLimit,
+          transactionAnalysesRemaining: analysesLimit,
+          isAssistantBlocked: false,
+          isTransactionAnalysesBlocked: false,
         };
       }
 
-      const costAccumulated = Number(data.cost_accumulated || 0);
-      const creditRecharged = Number(data.credit_recharged || 0);
-      const budgetAvailable = planConfig.limit + creditRecharged;
+      const assistantMessagesUsed = Number(data.assistant_messages_used || 0);
+      const transactionAnalysesUsed = Number(data.transaction_analyses_used || 0);
+      const assistantMessagesRemaining = Math.max(assistantLimit - assistantMessagesUsed, 0);
+      const transactionAnalysesRemaining = Math.max(analysesLimit - transactionAnalysesUsed, 0);
 
       return {
-        costAccumulated,
-        creditRecharged,
-        numRecharges: data.num_recharges || 0,
-        isBlocked: costAccumulated >= budgetAvailable,
-        budgetAvailable,
-        planLimit: planConfig.limit,
+        assistantMessagesUsed,
+        assistantMessagesLimit: assistantLimit,
+        assistantMessagesRemaining,
+        transactionAnalysesUsed,
+        transactionAnalysesLimit: analysesLimit,
+        transactionAnalysesRemaining,
+        isAssistantBlocked: assistantMessagesUsed >= assistantLimit,
+        isTransactionAnalysesBlocked: transactionAnalysesUsed >= analysesLimit,
       };
     },
     enabled: !!user,
   });
 
-  const shouldSuggestUpgrade = query.data
-    ? planConfig.upgradeSuggestAfter !== null && query.data.numRecharges >= planConfig.upgradeSuggestAfter
-    : false;
-
   return {
     usage: query.data,
     isLoading: query.isLoading,
-    isBlocked: query.data?.isBlocked ?? false,
-    shouldSuggestUpgrade,
-    upgradePlan: planConfig.upgradeTo,
-    rechargeOptions: [5, 10, 15],
+    isBlocked: (query.data?.isAssistantBlocked ?? false) || (query.data?.isTransactionAnalysesBlocked ?? false),
+    isAssistantBlocked: query.data?.isAssistantBlocked ?? false,
+    isTransactionAnalysesBlocked: query.data?.isTransactionAnalysesBlocked ?? false,
+    shouldSuggestUpgrade: Boolean((query.data?.isAssistantBlocked || query.data?.isTransactionAnalysesBlocked) && fallback.upgradeTo),
+    upgradePlan: fallback.upgradeTo,
   };
 }

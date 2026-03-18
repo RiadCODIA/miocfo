@@ -1,15 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { Bot, Send, User, Loader2, Lock } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { toast } from "sonner";
-import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
 import { useAIUsage } from "@/hooks/useAIUsage";
-import { AIRechargeModal } from "@/components/payment/AIRechargeModal";
 import { useNavigate } from "react-router-dom";
 
 interface ChatMessage {
@@ -28,12 +27,12 @@ const welcomeMessage: ChatMessage = {
 };
 
 export default function AIAssistant() {
+  const queryClient = useQueryClient();
   const [messages, setMessages] = useState<ChatMessage[]>([welcomeMessage]);
   const [input, setInput] = useState("");
   const [isStreaming, setIsStreaming] = useState(false);
-  const [rechargeOpen, setRechargeOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const { isBlocked, usage } = useAIUsage();
+  const { isAssistantBlocked, usage } = useAIUsage();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -44,18 +43,17 @@ export default function AIAssistant() {
     const text = input.trim();
     if (!text || isStreaming) return;
 
-    if (isBlocked) {
-      toast.error("Limite AI raggiunto", {
-        description: "Ricarica il credito AI per continuare a usare l'assistente.",
+    if (isAssistantBlocked) {
+      toast.error("Limite mensile raggiunto", {
+        description: "Hai esaurito i messaggi AI inclusi nel tuo piano.",
       });
-      setRechargeOpen(true);
       return;
     }
 
     const userMsg: ChatMessage = { id: crypto.randomUUID(), role: "user", content: text };
-    const historyForAI = [...messages.filter(m => m.id !== "welcome"), userMsg].map(m => ({ role: m.role, content: m.content }));
+    const historyForAI = [...messages.filter((m) => m.id !== "welcome"), userMsg].map((m) => ({ role: m.role, content: m.content }));
 
-    setMessages(prev => [...prev, userMsg]);
+    setMessages((prev) => [...prev, userMsg]);
     setInput("");
     setIsStreaming(true);
 
@@ -64,17 +62,19 @@ export default function AIAssistant() {
     const updateAssistant = (chunk: string) => {
       assistantContent += chunk;
       const content = assistantContent;
-      setMessages(prev => {
+      setMessages((prev) => {
         const last = prev[prev.length - 1];
         if (last?.role === "assistant" && last.id !== "welcome") {
-          return prev.map((m, i) => i === prev.length - 1 ? { ...m, content } : m);
+          return prev.map((m, i) => (i === prev.length - 1 ? { ...m, content } : m));
         }
         return [...prev, { id: crypto.randomUUID(), role: "assistant", content }];
       });
     };
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
       const accessToken = session?.access_token;
       if (!accessToken) {
         toast.error("Non autenticato", { description: "Effettua il login per usare l'assistente AI." });
@@ -96,13 +96,13 @@ export default function AIAssistant() {
         const err = await resp.json().catch(() => ({ error: "Errore sconosciuto" }));
         if (resp.status === 429) {
           toast.error("Rate limit", { description: "Troppe richieste. Riprova tra poco." });
-        } else if (resp.status === 402) {
-          toast.error("Crediti esauriti", { description: "Ricarica il credito AI per continuare." });
-          setRechargeOpen(true);
+        } else if (resp.status === 403) {
+          toast.error("Limite mensile raggiunto", { description: err.error || "Hai esaurito i messaggi AI del tuo piano." });
         } else {
           toast.error("Errore", { description: err.error || "Errore nella risposta AI." });
         }
         setIsStreaming(false);
+        queryClient.invalidateQueries({ queryKey: ["ai-usage"] });
         return;
       }
 
@@ -136,7 +136,7 @@ export default function AIAssistant() {
       }
 
       if (buffer.trim()) {
-        for (let raw of buffer.split("\n")) {
+        for (const raw of buffer.split("\n")) {
           if (!raw || !raw.startsWith("data: ")) continue;
           const jsonStr = raw.slice(6).trim();
           if (jsonStr === "[DONE]") continue;
@@ -144,7 +144,9 @@ export default function AIAssistant() {
             const parsed = JSON.parse(jsonStr);
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) updateAssistant(content);
-          } catch {}
+          } catch {
+            // noop
+          }
         }
       }
     } catch (e) {
@@ -152,38 +154,39 @@ export default function AIAssistant() {
       toast.error("Errore di connessione", { description: "Impossibile contattare l'assistente AI." });
     } finally {
       setIsStreaming(false);
+      queryClient.invalidateQueries({ queryKey: ["ai-usage"] });
     }
-  }, [input, isStreaming, messages, isBlocked]);
+  }, [input, isStreaming, messages, isAssistantBlocked, queryClient]);
+
+  const used = usage?.assistantMessagesUsed ?? 0;
+  const limit = usage?.assistantMessagesLimit ?? 0;
+  const remaining = usage?.assistantMessagesRemaining ?? 0;
 
   return (
     <div className="space-y-6 h-[calc(100vh-8rem)] flex flex-col">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">AI Assistant</h1>
-        <p className="text-muted-foreground mt-1">
-          Il tuo CFO virtuale — risposte basate esclusivamente sui tuoi dati reali
-        </p>
+      <div className="flex flex-col gap-2 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">AI Assistant</h1>
+          <p className="text-muted-foreground mt-1">Il tuo CFO virtuale — risposte basate esclusivamente sui tuoi dati reali</p>
+        </div>
+        <div className="rounded-xl border border-border bg-card px-4 py-3 text-sm">
+          <p className="font-medium text-foreground">Messaggi AI del mese</p>
+          <p className="text-muted-foreground">
+            <span className="font-semibold text-foreground">{used} / {limit}</span> usati · {remaining} rimanenti
+          </p>
+        </div>
       </div>
 
-      {/* AI Blocked Banner (inline) */}
-      {isBlocked && (
+      {isAssistantBlocked && (
         <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <Lock className="h-5 w-5 text-destructive shrink-0" />
             <div>
-              <p className="text-sm font-medium text-foreground">Hai raggiunto il limite AI del tuo piano.</p>
-              <p className="text-xs text-muted-foreground">
-                Consumo: €{usage?.costAccumulated.toFixed(2)} / €{usage?.budgetAvailable.toFixed(2)}
-              </p>
+              <p className="text-sm font-medium text-foreground">Hai raggiunto il limite mensile dei messaggi AI.</p>
+              <p className="text-xs text-muted-foreground">Piano attuale: {used} / {limit} messaggi usati questo mese.</p>
             </div>
           </div>
-          <div className="flex gap-2 shrink-0">
-            <Button size="sm" variant="outline" onClick={() => setRechargeOpen(true)}>
-              Ricarica
-            </Button>
-            <Button size="sm" onClick={() => navigate("/piani-pricing")}>
-              Upgrade
-            </Button>
-          </div>
+          <Button size="sm" onClick={() => navigate("/pricing")}>Upgrade piano</Button>
         </div>
       )}
 
@@ -191,22 +194,13 @@ export default function AIAssistant() {
         <ScrollArea className="flex-1 p-4">
           <div className="space-y-4">
             {messages.map((msg) => (
-              <div
-                key={msg.id}
-                className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}
-              >
+              <div key={msg.id} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                 {msg.role === "assistant" && (
                   <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                     <Bot className="h-4 w-4 text-primary" />
                   </div>
                 )}
-                <div
-                  className={`rounded-xl px-4 py-3 max-w-[80%] text-sm leading-relaxed ${
-                    msg.role === "user"
-                      ? "bg-primary text-primary-foreground"
-                      : "bg-muted text-foreground"
-                  }`}
-                >
+                <div className={`rounded-xl px-4 py-3 max-w-[80%] text-sm leading-relaxed ${msg.role === "user" ? "bg-primary text-primary-foreground" : "bg-muted text-foreground"}`}>
                   {msg.role === "assistant" ? (
                     <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_table]:w-full [&_table]:border-collapse [&_table]:my-3 [&_th]:bg-muted-foreground/10 [&_th]:px-3 [&_th]:py-1.5 [&_th]:text-left [&_th]:text-xs [&_th]:font-semibold [&_th]:border [&_th]:border-border [&_td]:px-3 [&_td]:py-1.5 [&_td]:text-xs [&_td]:border [&_td]:border-border [&_strong]:text-primary [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-3 [&_h3]:mb-1 [&_h4]:text-xs [&_h4]:font-semibold [&_h4]:mt-2 [&_h4]:mb-1 [&_ul]:my-1.5 [&_ul]:pl-4 [&_ol]:my-1.5 [&_ol]:pl-4 [&_li]:my-0.5 [&_p]:my-1.5 [&_hr]:my-3 [&_hr]:border-border">
                       <ReactMarkdown>{msg.content}</ReactMarkdown>
@@ -238,37 +232,25 @@ export default function AIAssistant() {
         </ScrollArea>
 
         <div className="p-4 border-t">
-          <form
-            onSubmit={(e) => { e.preventDefault(); handleSend(); }}
-            className="flex gap-2"
-          >
+          <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex gap-2">
             <Input
-              placeholder={isBlocked ? "AI bloccata — ricarica il credito per continuare..." : "Chiedimi dei tuoi dati finanziari..."}
+              placeholder={isAssistantBlocked ? "Hai raggiunto il limite mensile del tuo piano..." : "Chiedimi dei tuoi dati finanziari..."}
               value={input}
               onChange={(e) => setInput(e.target.value)}
               className="flex-1"
-              disabled={isStreaming || isBlocked}
+              disabled={isStreaming || isAssistantBlocked}
             />
-            <Button type="submit" size="icon" disabled={!input.trim() || isStreaming || isBlocked}>
+            <Button type="submit" size="icon" disabled={!input.trim() || isStreaming || isAssistantBlocked}>
               {isStreaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
             </Button>
           </form>
-          {isBlocked && (
+          {isAssistantBlocked && (
             <p className="text-xs text-destructive mt-2 text-center">
-              Limite AI raggiunto.{" "}
-              <button onClick={() => setRechargeOpen(true)} className="underline font-medium">
-                Ricarica credito
-              </button>
-              {" "}o{" "}
-              <button onClick={() => navigate("/piani-pricing")} className="underline font-medium">
-                passa a un piano superiore
-              </button>
+              Limite mensile raggiunto. <button onClick={() => navigate("/pricing")} className="underline font-medium">Passa a un piano superiore</button>
             </p>
           )}
         </div>
       </Card>
-
-      <AIRechargeModal open={rechargeOpen} onOpenChange={setRechargeOpen} />
     </div>
   );
 }
