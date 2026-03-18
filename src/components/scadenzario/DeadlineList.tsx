@@ -228,6 +228,7 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
         })}
       </div>
       </ScrollArea>
+      </div>
 
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
