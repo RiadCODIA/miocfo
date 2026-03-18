@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -94,6 +95,7 @@ export interface SpendingAnalysis {
   topSuppliers: TopSupplier[];
   monthlyTrend: MonthlyTrend[];
   rawAnomalies?: { name: string; amount: number; date: string; deviation: number }[];
+  savedDocumentId?: string;
   aiAnalysis: {
     criticalAreas: CriticalArea[];
     savingSuggestions: SavingSuggestion[];
@@ -119,6 +121,7 @@ export interface UseSpendingAnalysisResult {
 }
 
 export function useSpendingAnalysis(): UseSpendingAnalysisResult {
+  const queryClient = useQueryClient();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<SpendingAnalysis | null>(null);
@@ -128,19 +131,15 @@ export function useSpendingAnalysis(): UseSpendingAnalysisResult {
     setError(null);
 
     try {
-      const { data: result, error: fnError } = await supabase.functions.invoke(
-        "analyze-spending"
-      );
+      const { data: result, error: fnError } = await supabase.functions.invoke("analyze-spending");
 
-      if (fnError) {
-        throw new Error(fnError.message);
-      }
+      if (fnError) throw new Error(fnError.message);
 
       if (result.error) {
         if (result.error.includes("Rate limit")) {
           toast.error("Limite di richieste raggiunto. Riprova tra qualche secondo.");
-        } else if (result.error.includes("Crediti") || result.error.includes("Payment")) {
-          toast.error("Crediti AI esauriti. Aggiungi crediti nelle impostazioni.");
+        } else if (result.error.includes("limite mensile") || result.error.includes("analisi")) {
+          toast.error("Hai raggiunto il limite mensile di analisi AI del tuo piano.");
         } else {
           toast.error(result.error);
         }
@@ -148,6 +147,8 @@ export function useSpendingAnalysis(): UseSpendingAnalysisResult {
       }
 
       setData(result as SpendingAnalysis);
+      queryClient.invalidateQueries({ queryKey: ["ai-usage"] });
+      queryClient.invalidateQueries({ queryKey: ["ai-analysis-documents"] });
       return result as SpendingAnalysis;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Errore durante l'analisi";
