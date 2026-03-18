@@ -125,9 +125,9 @@ export function TopBar() {
           </PopoverContent>
         </Popover>
 
-        <Badge variant="outline" className="bg-primary/5 text-primary border-primary/20 font-medium">
-          Trial
-        </Badge>
+        
+
+        
       </div>
     </div>);
 
