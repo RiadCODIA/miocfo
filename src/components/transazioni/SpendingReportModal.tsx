@@ -760,7 +760,7 @@ export function SpendingReportModal({ open, onOpenChange }: SpendingReportModalP
                         {activeData.aiAnalysis.summary.recommendation}
                       </p>
                       {activeData.aiAnalysis.summary.mainRisk && (
-                        <p className="text-sm text-orange-500 mt-2">
+                        <p className="text-sm text-warning mt-2">
                           ⚠️ Rischio principale: {activeData.aiAnalysis.summary.mainRisk}
                         </p>
                       )}
