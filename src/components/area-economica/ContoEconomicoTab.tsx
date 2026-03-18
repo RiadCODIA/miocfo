@@ -298,8 +298,8 @@ export function ContoEconomicoTab() {
 
         {/* Alert for uncategorized */}
         {hasUncategorized && (
-          <div className="flex items-start gap-2 p-3 rounded-lg bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-800 dark:text-amber-300 text-sm">
-            <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+          <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-foreground">
+            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <span>
               Alcune fatture ricevute non hanno una categoria abbinata e appaiono come <strong>Non categorizzato</strong>.
               Vai su <strong>Fatture</strong> per assegnare la categoria corretta a ciascuna voce.
