@@ -274,9 +274,9 @@ function applyVATFallback(invoice: ExtractedInvoice): ExtractedInvoice {
 }
 
 async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, userCompanyName?: string, categoryNames?: string[]): Promise<ExtractedInvoice> {
-  const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
-  if (!lovableApiKey) {
-    console.warn('LOVABLE_API_KEY non configurata');
+  const openaiApiKey = Deno.env.get('OPENAI_API_KEY');
+  if (!openaiApiKey) {
+    console.warn('OPENAI_API_KEY non configurata');
     return {
       invoice_number: `PDF-${Date.now()}`, invoice_date: new Date().toISOString().split('T')[0],
       sender_name: 'Fornitore Sconosciuto', recipient_name: '', invoice_direction: 'ricevuta',
@@ -297,11 +297,11 @@ async function extractInvoiceWithAI(fileData: Uint8Array, fileName: string, user
     const companyContext = userCompanyName ? `\nL'azienda dell'utente si chiama: "${userCompanyName}". Se appare come MITTENTE → "emessa". Se DESTINATARIO → "ricevuta".` : '';
     const revenueCatList = REVENUE_CATEGORIES.join(', ');
     const expenseCatList = EXPENSE_CATEGORIES.join(', ');
-    const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+    const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${lovableApiKey}`, 'Content-Type': 'application/json' },
+      headers: { 'Authorization': `Bearer ${openaiApiKey}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'gpt-4o-mini',
         messages: [{
           role: 'user',
           content: [{

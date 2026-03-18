@@ -44,9 +44,9 @@ serve(async (req) => {
   try {
     const { transaction_ids, batch_mode = false, user_id: passedUserId } = await req.json();
     
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      throw new Error("LOVABLE_API_KEY is not configured");
+    const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+    if (!OPENAI_API_KEY) {
+      throw new Error("OPENAI_API_KEY is not configured");
     }
 
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -155,7 +155,7 @@ serve(async (req) => {
         );
       }
 
-      const results = await processBatch(transactions, categories, rules || [], LOVABLE_API_KEY, supabase);
+      const results = await processBatch(transactions, categories, rules || [], OPENAI_API_KEY, supabase);
       return new Response(
         JSON.stringify({ success: true, message: `Categorized ${results.length} transactions`, results }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -197,7 +197,7 @@ serve(async (req) => {
         const batchPromises = batches.map(async (batch, idx) => {
           console.log(`[Categorize] Processing parallel batch ${idx + 1}/${batches.length} with ${batch.length} transactions`);
           try {
-            return await processBatch(batch, categories, rules || [], LOVABLE_API_KEY, supabase);
+            return await processBatch(batch, categories, rules || [], OPENAI_API_KEY, supabase);
           } catch (batchError) {
             console.error(`[Categorize] Parallel batch ${idx + 1} error:`, batchError);
             return [];
@@ -295,7 +295,7 @@ async function processBatch(
     }
   }
 
-  // For transactions that need AI, call Lovable AI
+  // For transactions that need AI, call OpenAI
   if (needsAI.length > 0) {
     const categoryList = categories
       .map((c: CostCategory) => `- ${c.name} (ID: ${c.id}, Tipo: ${c.cost_type}, Flusso: ${c.cashflow_type})`)
@@ -324,14 +324,14 @@ Usa lo strumento categorize_transactions per restituire i risultati.`;
 ${transactionsList}`;
 
     try {
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "gpt-4o-mini",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
