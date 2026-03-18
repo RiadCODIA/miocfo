@@ -184,7 +184,7 @@ function normalizeSpendingAnalysis(analysis: SpendingAnalysis | null): SpendingA
     };
   }).filter((item) => item.name);
 
-  const actionItems: ActionItem[] = toArray(rawAi.actionItems).map((item) => {
+  const actionItems: ActionItem[] = toArray(rawAi.actionItems).map((item): ActionItem => {
     if (typeof item === "string") {
       return {
         action: item,
