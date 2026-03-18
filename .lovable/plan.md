@@ -1,38 +1,37 @@
 
 
-## Plan: Convert Nav Links to Scroll-to-Section Navigation
+## Switch all AI edge functions from Lovable AI Gateway to OpenAI API
 
-The current nav menu (`Chi Siamo`, `Piani`, `FAQ`, `Contatti`) links to separate pages via React Router. Instead, each nav item will scroll smoothly to the corresponding section on the landing page.
+The project currently uses `LOVABLE_API_KEY` + `ai.gateway.lovable.dev` across 7 edge functions. The user wants to use `OPENAI_API_KEY` (already configured as a secret) with the OpenAI API directly.
 
 ### Changes
 
-**1. `src/pages/Landing.tsx`** — Add `id` attributes to sections:
-- Problems section → `id="chi-siamo"`
-- Process section → `id="piani"` (or a pricing-like section)
-- Features section → `id="faq"`
-- CTA section → `id="contatti"`
+**7 Edge Functions — replace API key, endpoint, and model:**
 
-More logically mapped:
-- `id="problemi"` on Problems section
-- `id="soluzione"` on Process section  
-- `id="funzionalita"` on Features section
-- `id="contatti"` on CTA section
+For each function, apply these 3 substitutions:
+1. `Deno.env.get("LOVABLE_API_KEY")` → `Deno.env.get("OPENAI_API_KEY")`
+2. `https://ai.gateway.lovable.dev/v1/chat/completions` → `https://api.openai.com/v1/chat/completions`
+3. Model names: `google/gemini-3-flash-preview` → `gpt-4o-mini`, `google/gemini-2.5-flash` → `gpt-4o-mini`
 
-The nav items will be renamed/remapped to match these sections.
+Files:
+- `supabase/functions/ai-assistant/index.ts`
+- `supabase/functions/analyze-kpi/index.ts`
+- `supabase/functions/analyze-conto-economico/index.ts`
+- `supabase/functions/analyze-spending/index.ts`
+- `supabase/functions/categorize-transactions/index.ts`
+- `supabase/functions/process-invoice/index.ts`
+- `supabase/functions/process-bank-statement/index.ts`
 
-**2. `src/components/landing/HeroSection.tsx`** — Change nav from `<Link to="...">` to `<a href="#section-id">` with smooth scroll:
-- Update `menuItems` array to use anchor `href`s (`#problemi`, `#soluzione`, `#funzionalita`, `#contatti`)
-- Replace `<Link>` with `<a>` tags that call `scrollIntoView({ behavior: 'smooth' })` on click
-- Close mobile menu on click
+**3 Frontend hooks — remove "Lovable" from error messages:**
 
-### Section ↔ Nav Mapping
+- `src/hooks/useSpendingAnalysis.ts` — "Crediti Lovable AI esauriti" → "Crediti AI esauriti"
+- `src/hooks/useCategorizeTransactions.ts` (2 occurrences) — same change
 
-| Nav Label | Section ID | Landing Section |
-|-----------|-----------|-----------------|
-| Chi Siamo | `#chi-siamo` | Problems section |
-| Piani | `#piani` | Process section |
-| FAQ | `#funzionalita` | Features section |
-| Contatti | `#contatti` | CTA/Footer section |
+**Other cleanup (from previous plan):**
 
-**Files to modify**: `src/components/landing/HeroSection.tsx`, `src/pages/Landing.tsx`
+- `vite.config.ts` — remove `lovable-tagger` import and `componentTagger()` plugin
+- `index.html` — replace any `lovable.app` OG URLs with relative paths
+- `README.md` — rewrite as mioCFO README, remove all Lovable branding
+- `supabase/functions/analyze-spending/index.ts` — error message "Crediti Lovable AI esauriti" → "Crediti AI esauriti"
+- Comment referencing "Lovable AI" in `categorize-transactions/index.ts` line 298
 
