@@ -118,8 +118,9 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
 
   return (
     <>
-      <ScrollArea className="max-h-[500px]">
-      <div className="space-y-3">
+      <div className="max-h-[500px] overflow-hidden">
+      <ScrollArea className="h-full">
+      <div className="space-y-3 pr-3">
         {deadlines.map((deadline, index) => {
           const dueDate = new Date(deadline.dueDate);
           const isCompleted = deadline.status === "completed";
