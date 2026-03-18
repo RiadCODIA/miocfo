@@ -178,7 +178,21 @@ export function ContoEconomicoTab() {
   }
   if (!data) return null;
 
-  const { ricaviPerCategoria, ricaviTotali, revenueCategories, costi, costiNonCategorizzati, costiTotali, orderedCostCategories, ivaRicavi, ivaCosti } = data;
+  const {
+    ricaviPerCategoria,
+    ricaviTotali,
+    revenueCategories,
+    costi,
+    costiNonCategorizzati,
+    costiTotali,
+    orderedCostCategories,
+    ivaRicavi,
+    ivaCosti,
+    ivaRicaviPagate,
+    ivaCostiPagate,
+    ivaRicaviDaPagare,
+    ivaCostiDaPagare,
+  } = data;
 
   // Derived rows
   const marginePrimaStipendi: MonthlyData = {};
@@ -390,6 +404,10 @@ export function ContoEconomicoTab() {
           year={year}
           ivaRicavi={ivaRicavi}
           ivaCosti={ivaCosti}
+          ivaRicaviPagate={ivaRicaviPagate}
+          ivaCostiPagate={ivaCostiPagate}
+          ivaRicaviDaPagare={ivaRicaviDaPagare}
+          ivaCostiDaPagare={ivaCostiDaPagare}
           onYearChange={setYear}
           availableYears={[currentYear - 2, currentYear - 1, currentYear, currentYear + 1]}
         />

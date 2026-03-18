@@ -32,7 +32,20 @@ export interface ContoEconomicoData {
   /** IVA */
   ivaRicavi: MonthlyData;
   ivaCosti: MonthlyData;
+  ivaRicaviPagate: MonthlyData;
+  ivaCostiPagate: MonthlyData;
+  ivaRicaviDaPagare: MonthlyData;
+  ivaCostiDaPagare: MonthlyData;
 }
+
+const PAID_PAYMENT_STATUSES = new Set(["paid", "matched"]);
+
+const getVatAmount = (vatAmount: number | null, totalAmount: number, amount: number) =>
+  Number(vatAmount || 0) || (Number(totalAmount || 0) - Number(amount || 0));
+
+const addMonthlyValue = (target: MonthlyData, month: number, value: number) => {
+  target[month] = (target[month] || 0) + value;
+};
 
 export function useContoEconomico(year: number) {
   return useQuery({
@@ -44,13 +57,13 @@ export function useContoEconomico(year: number) {
       const [emesseRes, ricevuteRes, expenseCatsRes, revenueCatsRes, transactionsRes, matchedTxRes] = await Promise.all([
         supabase
           .from("invoices")
-          .select("amount, total_amount, vat_amount, invoice_date, category_id")
+          .select("amount, total_amount, vat_amount, invoice_date, category_id, payment_status")
           .in("invoice_type", ["emessa", "active", "income"])
           .gte("invoice_date", startDate)
           .lte("invoice_date", endDate),
         supabase
           .from("invoices")
-          .select("amount, total_amount, vat_amount, invoice_date, category_id")
+          .select("amount, total_amount, vat_amount, invoice_date, category_id, payment_status")
           .in("invoice_type", ["ricevuta", "passive", "expense"])
           .gte("invoice_date", startDate)
           .lte("invoice_date", endDate),
@@ -106,13 +119,17 @@ export function useContoEconomico(year: number) {
       // Revenue breakdown by category
       const ricaviPerCategoria: Record<string, MonthlyData> = {};
       const ivaRicavi: MonthlyData = {};
+      const ivaRicaviPagate: MonthlyData = {};
+      const ivaRicaviDaPagare: MonthlyData = {};
       revenueCategories.forEach((c) => { ricaviPerCategoria[c.id] = {}; });
 
       emesseRes.data?.forEach((inv) => {
         if (!inv.invoice_date) return;
         const month = new Date(inv.invoice_date).getMonth();
-        const vatRicavi = Number(inv.vat_amount || 0) || (Number(inv.total_amount || 0) - Number(inv.amount || 0));
-        ivaRicavi[month] = (ivaRicavi[month] || 0) + vatRicavi;
+        const vatRicavi = getVatAmount(inv.vat_amount, inv.total_amount, inv.amount);
+        const isPaid = PAID_PAYMENT_STATUSES.has((inv.payment_status || "").toLowerCase());
+        addMonthlyValue(ivaRicavi, month, vatRicavi);
+        addMonthlyValue(isPaid ? ivaRicaviPagate : ivaRicaviDaPagare, month, vatRicavi);
 
         let targetId: string;
         if (inv.category_id && revenueCatById[inv.category_id]) {
@@ -141,13 +158,17 @@ export function useContoEconomico(year: number) {
       const costi: Record<string, MonthlyData> = {};
       const costiNonCategorizzati: MonthlyData = {};
       const ivaCosti: MonthlyData = {};
+      const ivaCostiPagate: MonthlyData = {};
+      const ivaCostiDaPagare: MonthlyData = {};
       orderedCostCategories.forEach((c) => { costi[c.id] = {}; });
 
       ricevuteRes.data?.forEach((inv) => {
         if (!inv.invoice_date) return;
         const month = new Date(inv.invoice_date).getMonth();
-        const vatCosti = Number(inv.vat_amount || 0) || (Number(inv.total_amount || 0) - Number(inv.amount || 0));
-        ivaCosti[month] = (ivaCosti[month] || 0) + vatCosti;
+        const vatCosti = getVatAmount(inv.vat_amount, inv.total_amount, inv.amount);
+        const isPaid = PAID_PAYMENT_STATUSES.has((inv.payment_status || "").toLowerCase());
+        addMonthlyValue(ivaCosti, month, vatCosti);
+        addMonthlyValue(isPaid ? ivaCostiPagate : ivaCostiDaPagare, month, vatCosti);
 
         if (!inv.category_id || !expenseCatById[inv.category_id]) {
           costiNonCategorizzati[month] = (costiNonCategorizzati[month] || 0) + Number(inv.amount);
@@ -215,6 +236,10 @@ export function useContoEconomico(year: number) {
         orderedCostCategories,
         ivaRicavi,
         ivaCosti,
+        ivaRicaviPagate,
+        ivaCostiPagate,
+        ivaRicaviDaPagare,
+        ivaCostiDaPagare,
       };
     },
   });
