@@ -512,7 +512,7 @@ export default function Landing() {
             >
               <a href="#contatti">
                 <Phone className="h-4 w-4" />
-                Richiedi una call
+                Contattaci
               </a>
             </Button>
           </motion.div>
