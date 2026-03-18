@@ -297,9 +297,9 @@ async function extractStatementWithAI(
 ): Promise<ExtractedStatement> {
   console.log(`[process-bank-statement] Extracting with AI: ${fileName} (${mimeType})`);
 
-  const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-  if (!LOVABLE_API_KEY) {
-    throw new Error("LOVABLE_API_KEY non configurato");
+  const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY");
+  if (!OPENAI_API_KEY) {
+    throw new Error("OPENAI_API_KEY non configurato");
   }
 
   // Convert in chunks to avoid "Maximum call stack size exceeded"
