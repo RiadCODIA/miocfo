@@ -4,6 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useCompleteDeadline, Deadline } from "@/hooks/useDeadlines";
 import { toast } from "sonner";
 import { useState } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface OverdueEntry {
   id: string;
@@ -68,7 +69,8 @@ export function OverdueTable({ title, entries, type, emptyMessage, isLoading }: 
       ) : entries.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4 text-center">{emptyMessage}</p>
       ) : (
-        <div className="space-y-1 max-h-[220px] overflow-y-auto">
+        <ScrollArea className="max-h-[220px]">
+        <div className="space-y-1">
           {entries.map((entry) => (
             <div
               key={entry.id}
@@ -94,6 +96,7 @@ export function OverdueTable({ title, entries, type, emptyMessage, isLoading }: 
             </div>
           ))}
         </div>
+        </ScrollArea>
       )}
     </div>
   );

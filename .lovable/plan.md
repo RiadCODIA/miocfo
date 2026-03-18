@@ -1,19 +1,38 @@
 
 
-## Plan: Add ScrollArea to Deadline List and Overdue Tables
+## Plan: Convert Nav Links to Scroll-to-Section Navigation
 
-### What
-Wrap the deadline list (`DeadlineList.tsx` line 120) and overdue entries (`OverdueTable.tsx` line 71) in a `ScrollArea` component with a fixed max height, replacing the raw `overflow-y-auto` approach with the styled Radix scroll bar.
+The current nav menu (`Chi Siamo`, `Piani`, `FAQ`, `Contatti`) links to separate pages via React Router. Instead, each nav item will scroll smoothly to the corresponding section on the landing page.
 
 ### Changes
 
-1. **`src/components/scadenzario/DeadlineList.tsx`**
-   - Import `ScrollArea` from `@/components/ui/scroll-area`
-   - Wrap the `<div className="space-y-3">` (line 120) in `<ScrollArea className="max-h-[500px]">` so the list scrolls with a styled scrollbar
+**1. `src/pages/Landing.tsx`** — Add `id` attributes to sections:
+- Problems section → `id="chi-siamo"`
+- Process section → `id="piani"` (or a pricing-like section)
+- Features section → `id="faq"`
+- CTA section → `id="contatti"`
 
-2. **`src/components/scadenzario/OverdueTable.tsx`**
-   - Import `ScrollArea`
-   - Replace the `<div className="space-y-1 max-h-[220px] overflow-y-auto">` (line 71) with `<ScrollArea className="max-h-[220px]">` wrapping an inner `<div className="space-y-1">`
+More logically mapped:
+- `id="problemi"` on Problems section
+- `id="soluzione"` on Process section  
+- `id="funzionalita"` on Features section
+- `id="contatti"` on CTA section
 
-Both will use the project's existing `ScrollArea` component which provides a clean, styled scrollbar.
+The nav items will be renamed/remapped to match these sections.
+
+**2. `src/components/landing/HeroSection.tsx`** — Change nav from `<Link to="...">` to `<a href="#section-id">` with smooth scroll:
+- Update `menuItems` array to use anchor `href`s (`#problemi`, `#soluzione`, `#funzionalita`, `#contatti`)
+- Replace `<Link>` with `<a>` tags that call `scrollIntoView({ behavior: 'smooth' })` on click
+- Close mobile menu on click
+
+### Section ↔ Nav Mapping
+
+| Nav Label | Section ID | Landing Section |
+|-----------|-----------|-----------------|
+| Chi Siamo | `#chi-siamo` | Problems section |
+| Piani | `#piani` | Process section |
+| FAQ | `#funzionalita` | Features section |
+| Contatti | `#contatti` | CTA/Footer section |
+
+**Files to modify**: `src/components/landing/HeroSection.tsx`, `src/pages/Landing.tsx`
 
