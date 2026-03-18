@@ -232,6 +232,10 @@ export default function AIAssistant() {
         </ScrollArea>
 
         <div className="p-4 border-t">
+          <div className="mb-2 flex items-center justify-between text-xs text-muted-foreground">
+            <span>Messaggi rimasti questo mese</span>
+            <span className="font-semibold text-foreground">{remaining} / {limit}</span>
+          </div>
           <form onSubmit={(e) => { e.preventDefault(); handleSend(); }} className="flex gap-2">
             <Input
               placeholder={isAssistantBlocked ? "Hai raggiunto il limite mensile del tuo piano..." : "Chiedimi dei tuoi dati finanziari..."}
