@@ -7,11 +7,16 @@ interface IVASectionProps {
   year: number;
   ivaRicavi: MonthlyData;
   ivaCosti: MonthlyData;
+  ivaRicaviPagate: MonthlyData;
+  ivaCostiPagate: MonthlyData;
+  ivaRicaviDaPagare: MonthlyData;
+  ivaCostiDaPagare: MonthlyData;
   onYearChange: (year: number) => void;
   availableYears: number[];
 }
 
 type IVAPeriod = "annuale" | "trimestrale" | "mensile";
+type IVAStatusFilter = "totale" | "pagate" | "da_pagare";
 
 const MONTHS = ["Gen","Feb","Mar","Apr","Mag","Giu","Lug","Ago","Set","Ott","Nov","Dic"];
 const QUARTERS: { label: string; months: number[] }[] = [
@@ -25,33 +30,49 @@ const fmt = (v: number) =>
   `${v.toLocaleString("it-IT", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} €`;
 
 function filterByMonths(data: MonthlyData, months: number[]): number {
-  return months.reduce((sum, m) => {
-    const key = String(m + 1).padStart(2, "0");
-    return sum + (data[key] || 0);
-  }, 0);
+  return months.reduce((sum, monthIndex) => sum + (data[monthIndex] || 0), 0);
 }
 
-export function IVASection({ year, ivaRicavi, ivaCosti, onYearChange, availableYears }: IVASectionProps) {
+export function IVASection({
+  year,
+  ivaRicavi,
+  ivaCosti,
+  ivaRicaviPagate,
+  ivaCostiPagate,
+  ivaRicaviDaPagare,
+  ivaCostiDaPagare,
+  onYearChange,
+  availableYears,
+}: IVASectionProps) {
   const [period, setPeriod] = useState<IVAPeriod>("annuale");
+  const [statusFilter, setStatusFilter] = useState<IVAStatusFilter>("totale");
   const [selectedMonth, setSelectedMonth] = useState<number>(new Date().getMonth());
   const [selectedQuarter, setSelectedQuarter] = useState<number>(Math.floor(new Date().getMonth() / 3));
 
+  const selectedData = {
+    totale: { ivaRicavi, ivaCosti, label: "Tutte le fatture" },
+    pagate: { ivaRicavi: ivaRicaviPagate, ivaCosti: ivaCostiPagate, label: "Solo fatture pagate/incassate" },
+    da_pagare: { ivaRicavi: ivaRicaviDaPagare, ivaCosti: ivaCostiDaPagare, label: "Solo fatture da pagare/incassare" },
+  }[statusFilter];
+
   const computeValues = () => {
     if (period === "annuale") {
-      const ivaDebito = Object.values(ivaRicavi).reduce((s, v) => s + v, 0);
-      const ivaCredito = Object.values(ivaCosti).reduce((s, v) => s + v, 0);
+      const ivaDebito = Object.values(selectedData.ivaRicavi).reduce((s, v) => s + v, 0);
+      const ivaCredito = Object.values(selectedData.ivaCosti).reduce((s, v) => s + v, 0);
       return { ivaCredito, ivaDebito, ivaNetta: ivaDebito - ivaCredito, label: `Anno ${year}` };
-    } else if (period === "mensile") {
-      const months = [selectedMonth];
-      const ivaDebito = filterByMonths(ivaRicavi, months);
-      const ivaCredito = filterByMonths(ivaCosti, months);
-      return { ivaCredito, ivaDebito, ivaNetta: ivaDebito - ivaCredito, label: `${MONTHS[selectedMonth]} ${year}` };
-    } else {
-      const q = QUARTERS[selectedQuarter];
-      const ivaDebito = filterByMonths(ivaRicavi, q.months);
-      const ivaCredito = filterByMonths(ivaCosti, q.months);
-      return { ivaCredito, ivaDebito, ivaNetta: ivaDebito - ivaCredito, label: `${q.label} ${year}` };
     }
+
+    if (period === "mensile") {
+      const months = [selectedMonth];
+      const ivaDebito = filterByMonths(selectedData.ivaRicavi, months);
+      const ivaCredito = filterByMonths(selectedData.ivaCosti, months);
+      return { ivaCredito, ivaDebito, ivaNetta: ivaDebito - ivaCredito, label: `${MONTHS[selectedMonth]} ${year}` };
+    }
+
+    const quarter = QUARTERS[selectedQuarter];
+    const ivaDebito = filterByMonths(selectedData.ivaRicavi, quarter.months);
+    const ivaCredito = filterByMonths(selectedData.ivaCosti, quarter.months);
+    return { ivaCredito, ivaDebito, ivaNetta: ivaDebito - ivaCredito, label: `${quarter.label} ${year}` };
   };
 
   const { ivaCredito, ivaDebito, ivaNetta, label } = computeValues();
@@ -75,6 +96,17 @@ export function IVASection({ year, ivaRicavi, ivaCosti, onYearChange, availableY
                   {optionYear}
                 </SelectItem>
               ))}
+            </SelectContent>
+          </Select>
+
+          <Select value={statusFilter} onValueChange={(value) => setStatusFilter(value as IVAStatusFilter)}>
+            <SelectTrigger className="w-[220px] h-9">
+              <SelectValue placeholder="Stato" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="totale">Tutte le fatture</SelectItem>
+              <SelectItem value="pagate">Pagate / Incassate</SelectItem>
+              <SelectItem value="da_pagare">Da pagare / Incassare</SelectItem>
             </SelectContent>
           </Select>
 
@@ -126,10 +158,11 @@ export function IVASection({ year, ivaRicavi, ivaCosti, onYearChange, availableY
       )}
 
       <div className="text-xs text-muted-foreground space-y-1">
-        <p>· IVA a debito: somma IVA di tutte le fatture <strong>emesse</strong> (vendite) nel periodo</p>
-        <p>· IVA a credito: somma IVA di tutte le fatture <strong>ricevute</strong> (acquisti) nel periodo</p>
-        <p>· Se il saldo è positivo → IVA netta da versare al fisco</p>
-        <p>· Se il saldo è negativo → credito IVA a favore dell'azienda</p>
+        <p>· Filtro stato attivo: <strong>{selectedData.label}</strong></p>
+        <p>· IVA a debito: somma IVA delle fatture <strong>emesse</strong> nel periodo selezionato</p>
+        <p>· IVA a credito: somma IVA delle fatture <strong>ricevute</strong> nel periodo selezionato</p>
+        <p>· “Pagate / Incassate” considera gli stati <strong>paid</strong> e <strong>matched</strong></p>
+        <p>· Se il saldo è positivo → IVA netta da versare al fisco; se negativo → credito IVA a favore dell'azienda</p>
       </div>
 
       <div className="overflow-auto">
