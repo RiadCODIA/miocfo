@@ -40,7 +40,7 @@ export function useCategorizeTransactions(): UseCategorizeTransactionsResult {
         if (data.error.includes("Rate limit")) {
           toast.error("Limite di richieste raggiunto. Riprova tra qualche secondo.");
         } else if (data.error.includes("Payment required")) {
-          toast.error("Crediti Lovable AI esauriti. Aggiungi crediti nelle impostazioni workspace.");
+          toast.error("Crediti AI esauriti. Aggiungi crediti nelle impostazioni.");
         } else {
           toast.error(data.error);
         }
