@@ -10,7 +10,7 @@ export interface KPIResult {
   value: string;
   rawValue: number;
   unit: string;
-  trend: number | null; // % change vs previous period
+  trend: number | null;
   trendLabel: string;
   note?: string;
 }
@@ -102,12 +102,10 @@ function getPrevRange(period: KPIPeriod, from: Date, to: Date) {
     }
     case "year": {
       const prevFrom = startOfYear(subYears(from, 1));
-      // Compare same day range in previous year
       const prevTo = subYears(to, 1);
       return { prevFrom, prevTo };
     }
     default: {
-      // Custom: mirror the exact duration before
       const diff = to.getTime() - from.getTime();
       const prevTo = new Date(from.getTime() - 1);
       const prevFrom = new Date(prevTo.getTime() - diff);
@@ -134,8 +132,8 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
   return useQuery({
     queryKey: ["kpi-data", fromStr, toStr, targets],
     queryFn: async () => {
-      // Fetch invoices and bank transactions in parallel
-      const [emesseRes, ricevuteRes, prevEmesseRes, prevRicevuteRes, txRes, prevTxRes, employeesRes] = await Promise.all([
+      // Fetch invoices, bank transaction totals (via RPC), and employees in parallel
+      const [emesseRes, ricevuteRes, prevEmesseRes, prevRicevuteRes, txTotalsRes, prevTxTotalsRes, employeesRes] = await Promise.all([
         supabase.from("invoices").select("amount, invoice_date, due_date")
           .in("invoice_type", ["emessa", "active", "income"])
           .gte("invoice_date", fromStr).lte("invoice_date", toStr),
@@ -148,19 +146,17 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
         supabase.from("invoices").select("amount, invoice_date, due_date")
           .in("invoice_type", ["ricevuta", "passive", "expense"])
           .gte("invoice_date", prevFromStr).lte("invoice_date", prevToStr),
-        supabase.from("bank_transactions").select("amount, date")
-          .gte("date", fromStr).lte("date", toStr),
-        supabase.from("bank_transactions").select("amount, date")
-          .gte("date", prevFromStr).lte("date", prevToStr),
+        supabase.rpc("get_cashflow_totals", { p_from: fromStr, p_to: toStr }),
+        supabase.rpc("get_cashflow_totals", { p_from: prevFromStr, p_to: prevToStr }),
         supabase.from("employees").select("monthly_cost").eq("is_active", true),
       ]);
 
-      // KPI 1: Ricavi (sum of taxable amounts from issued invoices)
+      // KPI 1: Ricavi
       const ricavi = (emesseRes.data || []).reduce((s, inv) => s + Number(inv.amount || 0), 0);
       const prevRicavi = (prevEmesseRes.data || []).reduce((s, inv) => s + Number(inv.amount || 0), 0);
       const ricaviTrend = prevRicavi > 0 ? ((ricavi - prevRicavi) / prevRicavi) * 100 : null;
 
-      // KPI 2: Primo Margine % = (Ricavi - Costi) / Ricavi * 100
+      // KPI 2: Primo Margine %
       const costi = (ricevuteRes.data || []).reduce((s, inv) => s + Number(inv.amount || 0), 0);
       const prevCosti = (prevRicevuteRes.data || []).reduce((s, inv) => s + Number(inv.amount || 0), 0);
       const marginePreStipendi = ricavi - costi;
@@ -168,9 +164,8 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
       const prevMargine = prevRicavi > 0 ? ((prevRicavi - prevCosti) / prevRicavi) * 100 : 0;
       const margineTrend = prevRicavi > 0 ? primoMargine - prevMargine : null;
 
-      // KPI 3: EBITDA % = (EBITDA / Ricavi) * 100
+      // KPI 3: EBITDA %
       const monthlySalary = (employeesRes.data || []).reduce((s, e) => s + Number(e.monthly_cost || 0), 0);
-      // Approximate salary for the period
       const periodMonths = Math.max(1, (to.getTime() - from.getTime()) / (30 * 24 * 60 * 60 * 1000));
       const salaryForPeriod = monthlySalary * periodMonths;
       const ebitda = marginePreStipendi - salaryForPeriod;
@@ -179,18 +174,20 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
       const prevEbitdaPct = prevRicavi > 0 ? (prevEbitda / prevRicavi) * 100 : 0;
       const ebitdaTrend = prevRicavi > 0 ? ebitdaPct - prevEbitdaPct : null;
 
-      // KPI 4: Cash Flow (bank inflows - outflows)
-      const bankInflows = (txRes.data || []).filter(tx => Number(tx.amount) > 0).reduce((s, tx) => s + Number(tx.amount), 0);
-      const bankOutflows = Math.abs((txRes.data || []).filter(tx => Number(tx.amount) < 0).reduce((s, tx) => s + Number(tx.amount), 0));
+      // KPI 4: Cash Flow (from RPC — no 1000-row limit)
+      const txRow = txTotalsRes.data?.[0] || { total_income: 0, total_expenses: 0 };
+      const bankInflows = Number(txRow.total_income);
+      const bankOutflows = Number(txRow.total_expenses);
       const cashFlow = bankInflows - bankOutflows;
-      const prevInflows = (prevTxRes.data || []).filter(tx => Number(tx.amount) > 0).reduce((s, tx) => s + Number(tx.amount), 0);
-      const prevOutflows = Math.abs((prevTxRes.data || []).filter(tx => Number(tx.amount) < 0).reduce((s, tx) => s + Number(tx.amount), 0));
+
+      const prevTxRow = prevTxTotalsRes.data?.[0] || { total_income: 0, total_expenses: 0 };
+      const prevInflows = Number(prevTxRow.total_income);
+      const prevOutflows = Number(prevTxRow.total_expenses);
       const prevCashFlow = prevInflows - prevOutflows;
       const cashFlowTrend = prevCashFlow !== 0 ? ((cashFlow - prevCashFlow) / Math.abs(prevCashFlow)) * 100 : null;
-      // Collection ratio: bank inflows / total issued invoices (total_amount for cash comparison)
       const collectionRatio = ricavi > 0 ? (bankInflows / ricavi) * 100 : 0;
 
-      // KPI 5: DSO (Days Sales Outstanding) - issued invoices
+      // KPI 5: DSO
       const dsoDays = (emesseRes.data || []).map(inv => {
         if (!inv.due_date || !inv.invoice_date) return 0;
         const due = new Date(inv.due_date).getTime();
@@ -207,7 +204,7 @@ export function useKPIData(period: KPIPeriod = "year", customFrom?: Date, custom
       const prevDso = prevDsoDays.length > 0 ? prevDsoDays.reduce((s, d) => s + d, 0) / prevDsoDays.length : 0;
       const dsoTrend = prevDso > 0 ? dso - prevDso : null;
 
-      // KPI 6: DPO (Days Payable Outstanding) - received invoices
+      // KPI 6: DPO
       const dpoDays = (ricevuteRes.data || []).map(inv => {
         if (!inv.due_date || !inv.invoice_date) return 0;
         const due = new Date(inv.due_date).getTime();

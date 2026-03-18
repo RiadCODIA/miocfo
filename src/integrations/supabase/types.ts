@@ -1388,6 +1388,43 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_cashflow_summary: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          incassi: number
+          month_key: string
+          pagamenti: number
+        }[]
+      }
+      get_cashflow_summary_by_account: {
+        Args: { p_account_id: string; p_from: string; p_to: string }
+        Returns: {
+          incassi: number
+          month_key: string
+          pagamenti: number
+        }[]
+      }
+      get_cashflow_totals: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          total_expenses: number
+          total_income: number
+        }[]
+      }
+      get_cashflow_totals_by_account: {
+        Args: { p_account_id: string; p_from: string; p_to: string }
+        Returns: {
+          total_expenses: number
+          total_income: number
+        }[]
+      }
+      get_daily_totals: {
+        Args: { p_from: string; p_to: string }
+        Returns: {
+          day: string
+          net_amount: number
+        }[]
+      }
       get_users_with_email: {
         Args: never
         Returns: {
