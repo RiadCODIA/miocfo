@@ -412,7 +412,7 @@ Genera il report completo in formato JSON.`;
       }
       if (status === 402) {
         return new Response(
-          JSON.stringify({ error: "Crediti Lovable AI esauriti. Aggiungi crediti nelle impostazioni workspace." }),
+          JSON.stringify({ error: "Crediti AI esauriti. Aggiungi crediti nelle impostazioni." }),
           { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }

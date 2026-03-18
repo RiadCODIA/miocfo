@@ -140,7 +140,7 @@ export function useSpendingAnalysis(): UseSpendingAnalysisResult {
         if (result.error.includes("Rate limit")) {
           toast.error("Limite di richieste raggiunto. Riprova tra qualche secondo.");
         } else if (result.error.includes("Crediti") || result.error.includes("Payment")) {
-          toast.error("Crediti Lovable AI esauriti. Aggiungi crediti nelle impostazioni.");
+          toast.error("Crediti AI esauriti. Aggiungi crediti nelle impostazioni.");
         } else {
           toast.error(result.error);
         }

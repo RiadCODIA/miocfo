@@ -295,7 +295,7 @@ async function processBatch(
     }
   }
 
-  // For transactions that need AI, call Lovable AI
+  // For transactions that need AI, call OpenAI
   if (needsAI.length > 0) {
     const categoryList = categories
       .map((c: CostCategory) => `- ${c.name} (ID: ${c.id}, Tipo: ${c.cost_type}, Flusso: ${c.cashflow_type})`)
@@ -324,14 +324,14 @@ Usa lo strumento categorize_transactions per restituire i risultati.`;
 ${transactionsList}`;
 
     try {
-      const aiResponse = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+      const aiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
         method: "POST",
         headers: {
           Authorization: `Bearer ${apiKey}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "google/gemini-3-flash-preview",
+          model: "gpt-4o-mini",
           messages: [
             { role: "system", content: systemPrompt },
             { role: "user", content: userPrompt },
