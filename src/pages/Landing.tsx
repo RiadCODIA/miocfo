@@ -456,7 +456,7 @@ export default function Landing() {
 
           {/* All plans include */}
           <div className="text-center mb-6">
-            <h3 className="text-lg font-semibold text-foreground mb-6">Tutti i piani includono:</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-6">Tutti i piani prevedono:</h3>
             <div className="flex flex-wrap justify-center gap-4">
               {allInclude.map((item) => (
                 <span key={item} className="flex items-center gap-2 text-sm text-muted-foreground bg-muted px-4 py-2 rounded-full">
