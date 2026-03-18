@@ -132,7 +132,7 @@ export default function KPIReport() {
       return;
     }
     if (isBlocked) {
-      toast.error("Limite AI raggiunto", { description: "Ricarica il credito AI per continuare." });
+      toast.error("Limite AI raggiunto", { description: "Hai raggiunto il limite mensile AI del tuo piano." });
       return;
     }
     setAiLoading(true);

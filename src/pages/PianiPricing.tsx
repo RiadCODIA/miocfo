@@ -33,14 +33,14 @@ const plans = [
     priceMonthly: 49,
     priceYearly: 41,
     popular: false,
-    aiLimit: "5€/mese inclusi",
+    aiLimit: "50 messaggi + 3 analisi / mese",
     features: [
       "Dashboard con KPI finanziari",
       "Flussi di Cassa",
       "Transazioni con categorizzazione",
       "Conti Correnti (upload + API)",
       "Collegamenti (solo Conti Bancari)",
-      "AI: max 5€/mese inclusi",
+      "AI: 50 messaggi Assistant + 3 analisi / mese",
     ],
     notIncluded: [
       "Conto Economico",
@@ -56,14 +56,14 @@ const plans = [
     priceMonthly: 79,
     priceYearly: 66,
     popular: true,
-    aiLimit: "8€/mese inclusi",
+    aiLimit: "60 messaggi + 3 analisi / mese",
     includes: "Tutto del piano Small",
     features: [
       "Conto Economico completo",
       "Gestione Fatture",
       "Scadenzario",
       "Collegamenti completi (Banche + Cassetto Fiscale)",
-      "AI: max 8€/mese inclusi",
+      "AI: 60 messaggi Assistant + 3 analisi / mese",
     ],
     notIncluded: [
       "Budget & Previsioni",
@@ -77,7 +77,7 @@ const plans = [
     priceMonthly: 199,
     priceYearly: 166,
     popular: false,
-    aiLimit: "20€/mese inclusi",
+    aiLimit: "100 messaggi + 5 analisi / mese",
     includes: "Tutto del piano Pro",
     features: [
       "Budget & Previsioni avanzate",
@@ -85,7 +85,7 @@ const plans = [
       "Analisi e report con AI",
       "Dati & Statistiche avanzate",
       "Notifiche intelligenti",
-      "AI: max 20€/mese inclusi",
+      "AI: 100 messaggi Assistant + 5 analisi / mese",
     ],
     notIncluded: [],
     cta: "Inizia con Full",
@@ -283,15 +283,13 @@ export default function PianiPricing() {
             ))}
           </div>
 
-          {/* AI Credits Info */}
           <div className="text-center mb-20 rounded-2xl border border-border/50 bg-muted/30 p-8">
             <div className="flex items-center justify-center gap-2 mb-4">
               <Sparkles className="h-5 w-5 text-primary" />
-              <h3 className="text-lg font-semibold text-foreground">Crediti AI inclusi in ogni piano</h3>
+              <h3 className="text-lg font-semibold text-foreground">Limiti AI inclusi in ogni piano</h3>
             </div>
             <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
-              Ogni piano include un budget mensile per le funzionalità AI (categorizzazione automatica, analisi, report).
-              Superato il limite, puoi ricaricare il credito AI direttamente dalla piattaforma per continuare a utilizzare le funzionalità avanzate.
+              Ogni piano include quote mensili chiare per AI Assistant e analisi AI. Al raggiungimento del limite puoi attendere il rinnovo mensile oppure passare a un piano superiore.
             </p>
           </div>
 

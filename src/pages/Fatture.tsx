@@ -250,7 +250,7 @@ export default function Fatture() {
     // Check AI block status before allowing upload
     if (isAIBlocked) {
       toast.error("Limite AI raggiunto", {
-        description: "Hai esaurito il credito AI del tuo piano. Ricarica per caricare nuove fatture.",
+        description: "Hai raggiunto il limite mensile AI del tuo piano. Fai upgrade o attendi il prossimo rinnovo.",
       });
       setRechargeModalOpen(true);
       return;

@@ -12,6 +12,7 @@ import { useNotificationPreferences, useUpdateNotificationPreferences } from "@/
 import { useUpdateProfile, useUpdatePassword } from "@/hooks/useProfile";
 import { useAuth } from "@/contexts/AuthContext";
 import { useUserSubscription } from "@/hooks/useUserSubscription";
+import { useAIUsage } from "@/hooks/useAIUsage";
 import { PaymentMethodModal } from "@/components/payment/PaymentMethodModal";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -24,6 +25,7 @@ export default function Impostazioni() {
   const updatePassword = useUpdatePassword();
   const { profile, user } = useAuth();
   const { subscription, isLoading: subLoading } = useUserSubscription();
+  const { usage: aiUsage } = useAIUsage();
 
   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
@@ -424,8 +426,16 @@ export default function Impostazioni() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Crediti AI rimanenti</p>
-                      <p className="font-medium text-foreground">€{subscription.aiCreditsRemaining.toFixed(2)}</p>
+                      <p className="text-muted-foreground">Messaggi AI usati</p>
+                      <p className="font-medium text-foreground">
+                        {aiUsage?.assistantMessagesUsed ?? 0} / {subscription.aiAssistantMessagesLimitMonthly}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Analisi AI usate</p>
+                      <p className="font-medium text-foreground">
+                        {aiUsage?.transactionAnalysesUsed ?? 0} / {subscription.aiTransactionAnalysesLimitMonthly}
+                      </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Funzionalità incluse</p>
