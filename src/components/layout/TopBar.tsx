@@ -11,30 +11,30 @@ import { it } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 
 const PERIOD_OPTIONS = [
-  { label: "Oggi", getValue: () => ({ from: new Date(), to: new Date() }) },
-  { label: "Ultimi 7 giorni", getValue: () => ({ from: subDays(new Date(), 7), to: new Date() }) },
-  { label: "Ultimi 30 giorni", getValue: () => ({ from: subDays(new Date(), 30), to: new Date() }) },
-  { label: "Mese corrente", getValue: () => ({ from: startOfMonth(new Date()), to: new Date() }) },
-  { label: "Ultimo trimestre", getValue: () => ({ from: subMonths(new Date(), 3), to: new Date() }) },
-  { label: "Anno corrente", getValue: () => ({ from: startOfYear(new Date()), to: new Date() }) },
-  { label: "Ultimo anno", getValue: () => ({ from: subDays(new Date(), 365), to: new Date() }) },
-  { label: "Tutto il periodo", getValue: () => ({ from: new Date("2020-01-01"), to: new Date() }) },
-] as const;
+{ label: "Oggi", getValue: () => ({ from: new Date(), to: new Date() }) },
+{ label: "Ultimi 7 giorni", getValue: () => ({ from: subDays(new Date(), 7), to: new Date() }) },
+{ label: "Ultimi 30 giorni", getValue: () => ({ from: subDays(new Date(), 30), to: new Date() }) },
+{ label: "Mese corrente", getValue: () => ({ from: startOfMonth(new Date()), to: new Date() }) },
+{ label: "Ultimo trimestre", getValue: () => ({ from: subMonths(new Date(), 3), to: new Date() }) },
+{ label: "Anno corrente", getValue: () => ({ from: startOfYear(new Date()), to: new Date() }) },
+{ label: "Ultimo anno", getValue: () => ({ from: subDays(new Date(), 365), to: new Date() }) },
+{ label: "Tutto il periodo", getValue: () => ({ from: new Date("2020-01-01"), to: new Date() }) }] as
+const;
 
 export function TopBar() {
   const { profile, user } = useAuth();
   const { dateRange, setDateRange, activeLabel, setActiveLabel } = useDateRange();
   const [open, setOpen] = useState(false);
-  const [customRange, setCustomRange] = useState<{ from?: Date; to?: Date }>({});
+  const [customRange, setCustomRange] = useState<{from?: Date;to?: Date;}>({});
 
   const hour = new Date().getHours();
   const greeting = hour < 13 ? "Buongiorno" : hour < 18 ? "Buon pomeriggio" : "Buonasera";
 
-  const displayName = profile?.first_name
-    ? profile.first_name
-    : user?.email?.split("@")[0] || "Utente";
+  const displayName = profile?.first_name ?
+  profile.first_name :
+  user?.email?.split("@")[0] || "Utente";
 
-  const handlePresetSelect = (label: string, range: { from: Date; to: Date }) => {
+  const handlePresetSelect = (label: string, range: {from: Date;to: Date;}) => {
     setActiveLabel(label);
     setCustomRange({});
     setDateRange(range);
@@ -75,32 +75,32 @@ export function TopBar() {
       <div className="flex items-center gap-3">
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
-            <Button
-              variant="outline"
-              className="gap-2 bg-card border-border hover:bg-secondary text-sm text-muted-foreground"
-            >
-              <Calendar className="h-4 w-4" />
-              <span>{activeLabel}</span>
-              <ChevronDown className="h-3.5 w-3.5 opacity-50" />
-            </Button>
+            
+
+
+
+
+
+
+            
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="end">
             <div className="flex">
               <div className="border-r border-border p-2 space-y-0.5 min-w-[160px]">
-                {PERIOD_OPTIONS.map((opt) => (
-                  <button
-                    key={opt.label}
-                    onClick={() => handlePresetSelect(opt.label, opt.getValue())}
-                    className={cn(
-                      "w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors",
-                      activeLabel === opt.label
-                        ? "bg-primary/10 text-primary font-medium"
-                        : "text-foreground hover:bg-muted"
-                    )}
-                  >
+                {PERIOD_OPTIONS.map((opt) =>
+                <button
+                  key={opt.label}
+                  onClick={() => handlePresetSelect(opt.label, opt.getValue())}
+                  className={cn(
+                    "w-full text-left px-3 py-1.5 rounded-md text-sm transition-colors",
+                    activeLabel === opt.label ?
+                    "bg-primary/10 text-primary font-medium" :
+                    "text-foreground hover:bg-muted"
+                  )}>
+                  
                     {opt.label}
                   </button>
-                ))}
+                )}
                 <div className="border-t border-border my-1" />
                 <p className="px-3 py-1 text-xs text-muted-foreground font-medium">
                   Personalizzato
@@ -113,13 +113,13 @@ export function TopBar() {
                   onSelect={handleCustomDateSelect}
                   locale={it}
                   className={cn("p-3 pointer-events-auto")}
-                  disabled={(date) => date > new Date()}
-                />
-                {customRange.from && !customRange.to && (
-                  <p className="text-xs text-muted-foreground text-center pb-2">
+                  disabled={(date) => date > new Date()} />
+                
+                {customRange.from && !customRange.to &&
+                <p className="text-xs text-muted-foreground text-center pb-2">
                     Seleziona la data di fine
                   </p>
-                )}
+                }
               </div>
             </div>
           </PopoverContent>
@@ -129,6 +129,6 @@ export function TopBar() {
           Trial
         </Badge>
       </div>
-    </div>
-  );
+    </div>);
+
 }
