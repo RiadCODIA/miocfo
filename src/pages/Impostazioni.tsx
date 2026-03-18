@@ -426,8 +426,16 @@ export default function Impostazioni() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-muted-foreground">Crediti AI rimanenti</p>
-                      <p className="font-medium text-foreground">€{subscription.aiCreditsRemaining.toFixed(2)}</p>
+                      <p className="text-muted-foreground">Messaggi AI usati</p>
+                      <p className="font-medium text-foreground">
+                        {aiUsage?.assistantMessagesUsed ?? 0} / {subscription.aiAssistantMessagesLimitMonthly}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground">Analisi AI usate</p>
+                      <p className="font-medium text-foreground">
+                        {aiUsage?.transactionAnalysesUsed ?? 0} / {subscription.aiTransactionAnalysesLimitMonthly}
+                      </p>
                     </div>
                     <div>
                       <p className="text-muted-foreground">Funzionalità incluse</p>

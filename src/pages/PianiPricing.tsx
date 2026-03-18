@@ -283,15 +283,13 @@ export default function PianiPricing() {
             ))}
           </div>
 
-          {/* AI Credits Info */}
           <div className="text-center mb-20 rounded-2xl border border-border/50 bg-muted/30 p-8">
             <div className="flex items-center justify-center gap-2 mb-4">
               <Sparkles className="h-5 w-5 text-primary" />
-              <h3 className="text-lg font-semibold text-foreground">Crediti AI inclusi in ogni piano</h3>
+              <h3 className="text-lg font-semibold text-foreground">Limiti AI inclusi in ogni piano</h3>
             </div>
             <p className="text-sm text-muted-foreground max-w-2xl mx-auto">
-              Ogni piano include un budget mensile per le funzionalità AI (categorizzazione automatica, analisi, report).
-              Superato il limite, puoi ricaricare il credito AI direttamente dalla piattaforma per continuare a utilizzare le funzionalità avanzate.
+              Ogni piano include quote mensili chiare per AI Assistant e analisi AI. Al raggiungimento del limite puoi attendere il rinnovo mensile oppure passare a un piano superiore.
             </p>
           </div>
 

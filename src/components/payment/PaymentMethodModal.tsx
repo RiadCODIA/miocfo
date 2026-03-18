@@ -174,9 +174,9 @@ export function PaymentMethodModal({
                           </div>
                         </div>
 
-                        {/* AI credits info */}
-                        <div className="flex items-center gap-3 mt-2 text-xs text-muted-foreground">
-                          <span>AI: €{plan.aiMonthlyLimitEur}/mese</span>
+                        <div className="flex flex-wrap items-center gap-3 mt-2 text-xs text-muted-foreground">
+                          <span>AI Assistant: {plan.aiAssistantMessagesLimitMonthly}/mese</span>
+                          <span>• Analisi AI: {plan.aiTransactionAnalysesLimitMonthly}/mese</span>
                           {plan.maxBankAccounts && <span>• {plan.maxBankAccounts} conti</span>}
                           {plan.maxInvoicesMonthly && <span>• {plan.maxInvoicesMonthly} fatture/mese</span>}
                         </div>
