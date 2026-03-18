@@ -12,6 +12,11 @@ import { cn } from "@/lib/utils";
 import { Brain, Loader2, AlertCircle, Users, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import {
+  CONTO_ECONOMICO_EXPENSE_ROWS,
+  CONTO_ECONOMICO_REVENUE_ROWS,
+  ROW_LABELS,
+} from "@/lib/conto-economico-schema";
 
 const fmt = (v: number) => v === 0 ? "" : v.toLocaleString("it-IT", { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 
@@ -38,12 +43,9 @@ function sumMonthly(data: MonthlyData): number {
   return Object.values(data).reduce((s, v) => s + v, 0);
 }
 
-/** Tooltip descriptions for specific rows */
 const ROW_TOOLTIPS: Record<string, string> = {
-  "Acquisto materie prime": "Comprende l'acquisto di materie prime, materiali di consumo, merci, semilavorati e prodotti simili",
-  "Energia e combustibili": "Comprende canoni di energia elettrica, gas e acqua",
-  "MARGINE PRIMA DEGLI STIPENDI": "È il margine di profitto generato prima di pagare eventuali compensi e costi del personale",
-  "EBITDA": "È il Margine Operativo Lordo (MOL) ossia il profitto generato dall'attività operativa e caratteristica, prima di considerare eventuali Ammortamenti, Accantonamenti, Svalutazioni, Interessi e Tasse",
+  [ROW_LABELS.marginBeforePersonnel]: "È il margine di profitto generato prima di pagare eventuali compensi e costi del personale",
+  [ROW_LABELS.ebitda]: "È il Margine Operativo Lordo (MOL) ossia il profitto generato dall'attività operativa e caratteristica, prima di considerare eventuali Ammortamenti, Accantonamenti, Svalutazioni, Interessi e Tasse",
 };
 
 function InfoTooltip({ label }: { label: string }) {
@@ -145,13 +147,10 @@ export function ContoEconomicoTab() {
   if (!data) return null;
 
   const {
-    ricaviPerCategoria,
+    ricavi,
     ricaviTotali,
-    revenueCategories,
     costi,
-    costiNonCategorizzati,
     costiTotali,
-    orderedCostCategories,
     ivaRicavi,
     ivaCosti,
     ivaRicaviPagate,
@@ -160,7 +159,6 @@ export function ContoEconomicoTab() {
     ivaCostiDaPagare,
   } = data;
 
-  // Derived rows
   const marginePrimaStipendi: MonthlyData = {};
   const personnelTotal: MonthlyData = {};
   const ebitda: MonthlyData = {};
@@ -172,7 +170,7 @@ export function ContoEconomicoTab() {
     ebitda[m] = marginePrimaStipendi[m] - personnelTotal[m];
   }
 
-  const hasUncategorized = sumMonthly(costiNonCategorizzati) > 0;
+  const hasFallbackRows = sumMonthly(ricavi.otherIncome) > 0 || sumMonthly(costi.otherExpenses) > 0;
 
   const renderValueCell = (value: number, isTotal = false, isNegative = false) => (
     <td className={cn(
@@ -272,7 +270,6 @@ export function ContoEconomicoTab() {
   return (
     <TooltipProvider delayDuration={200}>
       <div className="space-y-6">
-        {/* Year selector + AI button */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <p className="text-sm text-muted-foreground">
             Analisi economica mensile basata solo sulle fatture — Anno <strong>{year}</strong>
@@ -296,18 +293,16 @@ export function ContoEconomicoTab() {
           </div>
         </div>
 
-        {/* Alert for uncategorized */}
-        {hasUncategorized && (
+        {hasFallbackRows && (
           <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/40 p-3 text-sm text-foreground">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
             <span>
-              Alcune fatture ricevute non hanno una categoria abbinata e appaiono come <strong>Non categorizzato</strong>.
-              Vai su <strong>Fatture</strong> per assegnare la categoria corretta a ciascuna voce.
+              Alcune fatture con categoria assente o non riconosciuta sono state incluse in <strong>Altre entrate</strong> o <strong>Altre uscite</strong>.
+              Vai su <strong>Fatture</strong> per assegnare categorie più precise se necessario.
             </span>
           </div>
         )}
 
-        {/* Main P&L table */}
         <div className="glass rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[900px]">
@@ -321,25 +316,17 @@ export function ContoEconomicoTab() {
                 </tr>
               </thead>
               <tbody>
-                {/* ── RICAVI ── */}
-                {revenueCategories.map((cat) =>
-                  renderRow(cat.name, ricaviPerCategoria[cat.id] ?? {}, { indent: true, tooltip: false })
+                {CONTO_ECONOMICO_REVENUE_ROWS.map((row) =>
+                  renderRow(row.label, ricavi[row.key], { indent: true, tooltip: false, warn: row.key === "otherIncome" && hasFallbackRows })
                 )}
-                {renderSubtotal("TOTALE RICAVI", ricaviTotali)}
+                {renderSubtotal(ROW_LABELS.revenueTotal, ricaviTotali)}
 
-                {/* ── COSTI (flat) ── */}
-                {orderedCostCategories.map((cat) =>
-                  renderRow(cat.name, costi[cat.id] ?? {}, { indent: true })
+                {CONTO_ECONOMICO_EXPENSE_ROWS.map((row) =>
+                  renderRow(row.label, costi[row.key], { indent: true, warn: row.key === "otherExpenses" && hasFallbackRows })
                 )}
-                {hasUncategorized &&
-                  renderRow("Non categorizzato", costiNonCategorizzati, { indent: true, warn: true, tooltip: false })
-                }
-                {renderSubtotal("TOTALE COSTI", costiTotali)}
+                {renderSubtotal(ROW_LABELS.expenseTotal, costiTotali)}
+                {renderSubtotal(ROW_LABELS.marginBeforePersonnel, marginePrimaStipendi, { negative: true })}
 
-                {/* ── MARGINE PRIMA DEGLI STIPENDI ── */}
-                {renderSubtotal("MARGINE PRIMA DEGLI STIPENDI", marginePrimaStipendi, { negative: true })}
-
-                {/* ── PERSONALE (manual) ── */}
                 <tr>
                   <td colSpan={14} className="px-3 py-1 text-[10px] text-muted-foreground italic">
                     {defaultMonthlySalary > 0
@@ -348,20 +335,16 @@ export function ContoEconomicoTab() {
                     }
                   </td>
                 </tr>
-                {renderEditableRow("Salari, stipendi e oneri sociali", "salari")}
-                {renderEditableRow("Compenso soci/amministratori", "amministratore")}
-
-                {/* ── EBITDA ── */}
-                {renderSubtotal("EBITDA", ebitda, { negative: true })}
+                {renderEditableRow(ROW_LABELS.salaries, "salari")}
+                {renderEditableRow(ROW_LABELS.directors, "amministratore")}
+                {renderSubtotal(ROW_LABELS.ebitda, ebitda, { negative: true })}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* AI Report */}
         {aiReport && <div ref={aiReportRef}><AIReportSection report={aiReport} /></div>}
 
-        {/* IVA Section */}
         <IVASection
           year={year}
           ivaRicavi={ivaRicavi}
