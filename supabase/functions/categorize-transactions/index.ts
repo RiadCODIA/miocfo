@@ -155,7 +155,7 @@ serve(async (req) => {
         );
       }
 
-      const results = await processBatch(transactions, categories, rules || [], LOVABLE_API_KEY, supabase);
+      const results = await processBatch(transactions, categories, rules || [], OPENAI_API_KEY, supabase);
       return new Response(
         JSON.stringify({ success: true, message: `Categorized ${results.length} transactions`, results }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" } }
