@@ -52,6 +52,39 @@ export type Database = {
           },
         ]
       }
+      ai_analysis_documents: {
+        Row: {
+          analysis_type: string
+          created_at: string
+          id: string
+          month_year: string
+          payload: Json
+          title: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          analysis_type?: string
+          created_at?: string
+          id?: string
+          month_year: string
+          payload?: Json
+          title: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          analysis_type?: string
+          created_at?: string
+          id?: string
+          month_year?: string
+          payload?: Json
+          title?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       ai_credit_topups: {
         Row: {
           amount_eur: number
@@ -78,6 +111,7 @@ export type Database = {
       }
       ai_usage_monthly: {
         Row: {
+          assistant_messages_used: number
           cost_accumulated: number
           created_at: string
           credit_recharged: number
@@ -85,10 +119,12 @@ export type Database = {
           is_blocked: boolean
           month_year: string
           num_recharges: number
+          transaction_analyses_used: number
           updated_at: string
           user_id: string
         }
         Insert: {
+          assistant_messages_used?: number
           cost_accumulated?: number
           created_at?: string
           credit_recharged?: number
@@ -96,10 +132,12 @@ export type Database = {
           is_blocked?: boolean
           month_year: string
           num_recharges?: number
+          transaction_analyses_used?: number
           updated_at?: string
           user_id: string
         }
         Update: {
+          assistant_messages_used?: number
           cost_accumulated?: number
           created_at?: string
           credit_recharged?: number
@@ -107,6 +145,7 @@ export type Database = {
           is_blocked?: boolean
           month_year?: string
           num_recharges?: number
+          transaction_analyses_used?: number
           updated_at?: string
           user_id?: string
         }
@@ -1129,8 +1168,10 @@ export type Database = {
       }
       subscription_plans: {
         Row: {
+          ai_assistant_messages_limit_monthly: number
           ai_monthly_limit_eur: number | null
           ai_topup_min_eur: number | null
+          ai_transaction_analyses_limit_monthly: number
           ai_upgrade_suggestion_after: number | null
           created_at: string
           description: string | null
@@ -1147,8 +1188,10 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          ai_assistant_messages_limit_monthly?: number
           ai_monthly_limit_eur?: number | null
           ai_topup_min_eur?: number | null
+          ai_transaction_analyses_limit_monthly?: number
           ai_upgrade_suggestion_after?: number | null
           created_at?: string
           description?: string | null
@@ -1165,8 +1208,10 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          ai_assistant_messages_limit_monthly?: number
           ai_monthly_limit_eur?: number | null
           ai_topup_min_eur?: number | null
+          ai_transaction_analyses_limit_monthly?: number
           ai_upgrade_suggestion_after?: number | null
           created_at?: string
           description?: string | null
