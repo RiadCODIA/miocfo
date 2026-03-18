@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useContoEconomico, MONTHS, MonthlyData } from "@/hooks/useContoEconomico";
 import { IVASection } from "./IVASection";
