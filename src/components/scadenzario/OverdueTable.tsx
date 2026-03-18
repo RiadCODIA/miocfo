@@ -4,6 +4,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { useCompleteDeadline, Deadline } from "@/hooks/useDeadlines";
 import { toast } from "sonner";
 import { useState } from "react";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface OverdueEntry {
   id: string;
