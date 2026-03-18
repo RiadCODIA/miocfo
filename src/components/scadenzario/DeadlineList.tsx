@@ -118,6 +118,7 @@ export function DeadlineList({ deadlines, isLoading, onEdit }: DeadlineListProps
 
   return (
     <>
+      <ScrollArea className="max-h-[500px]">
       <div className="space-y-3">
         {deadlines.map((deadline, index) => {
           const dueDate = new Date(deadline.dueDate);

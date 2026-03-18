@@ -69,7 +69,8 @@ export function OverdueTable({ title, entries, type, emptyMessage, isLoading }: 
       ) : entries.length === 0 ? (
         <p className="text-sm text-muted-foreground py-4 text-center">{emptyMessage}</p>
       ) : (
-        <div className="space-y-1 max-h-[220px] overflow-y-auto">
+        <ScrollArea className="max-h-[220px]">
+        <div className="space-y-1">
           {entries.map((entry) => (
             <div
               key={entry.id}
