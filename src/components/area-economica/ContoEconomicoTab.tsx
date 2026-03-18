@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useContoEconomico, MONTHS, MonthlyData } from "@/hooks/useContoEconomico";
 import { IVASection } from "./IVASection";
@@ -71,6 +71,7 @@ export function ContoEconomicoTab() {
   const [aiLoading, setAiLoading] = useState(false);
   const [autoLoading, setAutoLoading] = useState(false);
   const queryClient = useQueryClient();
+  const aiReportRef = useRef<HTMLDivElement>(null);
 
   const { data: employeesData } = useQuery({
     queryKey: ["employees-active"],
@@ -161,6 +162,8 @@ export function ContoEconomicoTab() {
       if (!result) { toast.error("Errore AI", { description: "Nessuna risposta dall'analisi AI" }); return; }
       if (result?.error) { toast.error("Errore AI", { description: result.error }); return; }
       setAiReport(result);
+      toast.success("Analisi AI completata!");
+      setTimeout(() => aiReportRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Errore durante l'analisi AI";
       console.error("AI analysis error:", e);
@@ -380,7 +383,7 @@ export function ContoEconomicoTab() {
         </div>
 
         {/* AI Report */}
-        {aiReport && <AIReportSection report={aiReport} />}
+        {aiReport && <div ref={aiReportRef}><AIReportSection report={aiReport} /></div>}
 
         {/* IVA Section */}
         <IVASection year={year} ivaRicavi={ivaRicavi} ivaCosti={ivaCosti} />
