@@ -383,7 +383,7 @@ export function ContoEconomicoTab() {
         </div>
 
         {/* AI Report */}
-        {aiReport && <AIReportSection report={aiReport} />}
+        {aiReport && <div ref={aiReportRef}><AIReportSection report={aiReport} /></div>}
 
         {/* IVA Section */}
         <IVASection year={year} ivaRicavi={ivaRicavi} ivaCosti={ivaCosti} />
